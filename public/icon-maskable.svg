@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Дневник давления">
+  <rect width="512" height="512" fill="#2a78d6"/>
+  <path d="M118 288h62l32-80 42 138 36-92 26 34h78"
+        fill="none" stroke="#ffffff" stroke-width="26"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,29 @@
+{
+  "name": "omron-bp",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Дневник артериального давления с прямой выгрузкой из Omron RS7 Intelli IT (HEM-6232T) по Web Bluetooth",
+  "scripts": {
+    "dev": "vite",
+    "dev:lan": "LAN=1 vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "node tests/run.mjs"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@types/web-bluetooth": "^0.0.21",
+    "@vitejs/plugin-basic-ssl": "^2.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0"
+  }
+}

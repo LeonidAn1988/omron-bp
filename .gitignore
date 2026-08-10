@@ -1,0 +1,12 @@
+node_modules/
+dist/
+tests/build/
+
+# запасной путь на Python подтягивает это сам
+tools/omblepy/
+tools/.venv/
+tools/out/
+
+.DS_Store
+*.local
+.vite/
