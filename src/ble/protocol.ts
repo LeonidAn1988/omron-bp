@@ -48,6 +48,23 @@ export type Logger = (level: LogLevel, message: string) => void
 
 export class OmronProtocolError extends Error {}
 
+/**
+ * Прибор отказался открывать память: записанный в нём ключ не совпадает с нашим.
+ * Отдельный класс нужен интерфейсу — на эту ошибку он предлагает сопряжение
+ * прямо в сообщении, а не оставляет пользователя искать нужную кнопку.
+ *
+ * Наблюдался на живом приборе: ответ `81 04` при первом подключении к RS7,
+ * в котором ещё лежал ключ от Omron Connect.
+ */
+export class PairingRequiredError extends OmronProtocolError {
+  readonly statusCode: number
+  constructor(statusCode: number, message: string) {
+    super(message)
+    this.name = 'PairingRequiredError'
+    this.statusCode = statusCode
+  }
+}
+
 export function hex(bytes: ArrayLike<number>): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
@@ -263,12 +280,22 @@ export class OmronTransport {
   async unlock(key: Uint8Array) {
     await this.startUnlockNotifications()
     const response = await this.unlockTransceive(Uint8Array.from([0x01, ...key]))
-    if (response[0] !== 0x81 || response[1] !== 0x00) {
-      throw new OmronProtocolError(
-        'Прибор не принял ключ сопряжения. Скорее всего, это устройство ещё не сопряжено с этим приложением — ' +
-          'выполните сопряжение (режим «-P-» на приборе).',
+
+    // Ответ на команду 0x01 приходит как 0x81, второй байт — статус: 0 значит «открыто».
+    if (response[0] === 0x81 && response[1] !== 0x00) {
+      throw new PairingRequiredError(
+        response[1],
+        'Тонометр не принял ключ — значит, он ещё не сопряжён с этим приложением ' +
+          '(либо в нём остался ключ от Omron Connect).',
       )
     }
+    if (response[0] !== 0x81) {
+      throw new OmronProtocolError(
+        `Неожиданный ответ прибора на разблокировку: ${hex(response.subarray(0, 2))}. ` +
+          'Попробуйте переподключиться, включив Bluetooth на приборе заново.',
+      )
+    }
+
     await this.stopUnlockNotifications()
     this.log('info', 'ключ принят, доступ к памяти открыт')
   }

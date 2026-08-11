@@ -12,12 +12,14 @@ export function Settings({
   readings,
   onImport,
   onClearAll,
+  showUserPicker,
 }: {
   settings: SettingsData
   onChange: (next: SettingsData) => void
   readings: Reading[]
   onImport: (readings: Reading[]) => Promise<number>
   onClearAll: () => Promise<void>
+  showUserPicker: boolean
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [message, setMessage] = useState<{ tone: 'good' | 'critical'; text: string } | null>(null)
@@ -49,6 +51,29 @@ export function Settings({
         <div className="card__head">
           <h2>Пользователи и цели</h2>
         </div>
+
+        {/* Переключатель уехал из шапки сюда: прибор помнит двух человек, но
+            переключаются между ними от силы раз в жизни — в постоянной навигации
+            он занимал место каждый день ради этого одного случая. */}
+        {showUserPicker && (
+          <div style={{ marginBottom: 'var(--space-4)' }}>
+            <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
+              Чей дневник показывать
+            </div>
+            <div className="segmented" role="group" aria-label="Пользователь прибора">
+              {[1, 2].map((user) => (
+                <button
+                  key={user}
+                  aria-pressed={settings.activeUser === user}
+                  onClick={() => patch({ activeUser: user })}
+                >
+                  {settings.userNames[user] ?? `Пользователь ${user}`}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid--two">
           <Field label="Имя пользователя 1 на приборе">
             <input

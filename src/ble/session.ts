@@ -8,6 +8,7 @@ import {
   OmronProtocolError,
   OmronTransport,
   OMRON_SERVICE,
+  PairingRequiredError,
   RX_CHANNELS,
   TX_CHANNELS,
   UNLOCK_CHAR,
@@ -17,7 +18,7 @@ import {
 import { readAllRecords, type DeviceRecord, type ReadProgress } from './hem6232t'
 
 export type { DeviceRecord, ReadProgress }
-export { DEFAULT_PAIRING_KEY, OmronProtocolError }
+export { DEFAULT_PAIRING_KEY, OmronProtocolError, PairingRequiredError }
 
 /** Приборы Omron рекламируются под такими именами. */
 const NAME_PREFIXES = ['BLESmart_', 'BLEsmart_', 'OMRON', 'Omron', 'omron']

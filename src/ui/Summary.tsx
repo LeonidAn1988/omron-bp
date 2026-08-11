@@ -1,7 +1,7 @@
 import type { Reading } from '../types'
 import type { Summary as SummaryData } from '../logic/stats'
 import { alertFor, classify } from '../logic/classify'
-import { Banner, CategoryBadge, Tile } from './bits'
+import { Banner, CategoryBadge } from './bits'
 
 const FULL_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
 
@@ -24,56 +24,83 @@ export function LatestAlert({ latest }: { latest: Reading | null }) {
   )
 }
 
+function Stat({ label, value, unit, note }: { label: string; value: string | number; unit?: string; note?: string }) {
+  return (
+    <div>
+      <div className="tile__label">{label}</div>
+      <div className="tile__value">
+        {value}
+        {unit && <span className="tile__unit">{unit}</span>}
+      </div>
+      {note && <div className="tile__note">{note}</div>}
+    </div>
+  )
+}
+
 export function SummaryTiles({ summary, targetSys, targetDia }: { summary: SummaryData; targetSys: number; targetDia: number }) {
   const avgSys = Math.round(summary.avgSys)
   const avgDia = Math.round(summary.avgDia)
   const inTarget = Math.round(summary.withinTarget * 100)
-  const delta = summary.morningEveningDelta
+  const delta = summary.morningEveningDelta === null ? null : Math.round(summary.morningEveningDelta)
+  const hasMarks = summary.ihbCount > 0 || summary.movCount > 0
 
   return (
-    <div className="grid grid--cards">
-      <Tile label="Среднее давление" value={`${avgSys}/${avgDia}`} unit="мм рт. ст.">
-        <div style={{ marginTop: 8 }}>
-          <CategoryBadge sys={avgSys} dia={avgDia} solid />
+    <>
+      {/* Одна главная цифра на экране — среднее давление за период. */}
+      <div className="lead">
+        <div className="card">
+          <div className="tile__label">Среднее давление за период</div>
+          <div className="lead__value">
+            {avgSys}/{avgDia}
+            <span className="tile__unit">мм рт. ст.</span>
+          </div>
+          <div style={{ marginTop: 'var(--space-3)' }}>
+            <CategoryBadge sys={avgSys} dia={avgDia} solid />
+          </div>
         </div>
-      </Tile>
 
-      <Tile
-        label="В целевом диапазоне"
-        value={`${inTarget}%`}
-        note={`цель ниже ${targetSys}/${targetDia} · измерений ${summary.count}`}
-      />
+        <div className="card">
+          <div className="tile__label">Уложились в цель</div>
+          <div className="lead__value" style={{ fontSize: 'var(--fs-5)' }}>
+            {inTarget}%
+          </div>
+          <div className="tile__note">
+            измерений ниже {targetSys}/{targetDia} — всего измерений {summary.count}
+          </div>
+        </div>
+      </div>
 
-      <Tile
-        label="Средний пульс"
-        value={summary.avgBpm ? Math.round(summary.avgBpm) : '—'}
-        unit={summary.avgBpm ? 'уд/мин' : undefined}
-        note={summary.avgBpm ? undefined : 'нет данных'}
-      />
-
-      <Tile
-        label="Разброс систолического"
-        value={`±${summary.sdSys.toFixed(1)}`}
-        note={`от ${summary.minSys} до ${summary.maxSys} мм рт. ст.`}
-      />
-
-      <Tile
-        label="Утро минус вечер"
-        value={delta === null ? '—' : `${delta > 0 ? '+' : ''}${Math.round(delta)}`}
-        unit={delta === null ? undefined : 'мм рт. ст.'}
-        note={delta === null ? 'нужны измерения утром и вечером' : 'по систолическому давлению'}
-      />
-
-      <Tile
-        label="Отметки прибора"
-        value={summary.ihbCount}
-        note={
-          <>
-            раз нерегулярное сердцебиение
-            {summary.movCount > 0 && <> · движение: {summary.movCount}</>}
-          </>
-        }
-      />
-    </div>
+      <div className="stats-strip">
+        <Stat
+          label="Средний пульс"
+          value={summary.avgBpm ? Math.round(summary.avgBpm) : '—'}
+          unit={summary.avgBpm ? 'уд/мин' : undefined}
+        />
+        <Stat
+          label="Разброс верхнего"
+          value={`±${summary.sdSys.toFixed(1)}`}
+          note={`от ${summary.minSys} до ${summary.maxSys} — чем меньше, тем ровнее`}
+        />
+        <Stat
+          label="Утром против вечера"
+          value={delta === null ? '—' : `${delta > 0 ? '+' : ''}${delta}`}
+          unit={delta === null ? undefined : 'мм рт. ст.'}
+          note={
+            delta === null
+              ? 'нужны измерения и утром, и вечером'
+              : delta > 0
+                ? 'по утрам давление выше'
+                : 'по утрам давление ниже'
+          }
+        />
+        {hasMarks && (
+          <Stat
+            label="Прибор отметил"
+            value={summary.ihbCount}
+            note={`раз нерегулярное сердцебиение${summary.movCount > 0 ? ` · движение: ${summary.movCount}` : ''}`}
+          />
+        )}
+      </div>
+    </>
   )
 }

@@ -65,8 +65,10 @@ export function TrendChart({
   const [ref, width] = useWidth<HTMLDivElement>()
   const [hover, setHover] = useState<Hover | null>(null)
 
-  const height = 260
-  const pad = { top: 14, right: 52, bottom: 26, left: 38 }
+  const height = 268
+  // right держит только подпись конца тренда: целевые линии подписаны внутри
+  // плоскости слева, иначе на 13px они сталкиваются с этой же подписью.
+  const pad = { top: 16, right: 42, bottom: 30, left: 40 }
   const plotW = width - pad.left - pad.right
   const plotH = height - pad.top - pad.bottom
 
@@ -126,7 +128,7 @@ export function TrendChart({
         {yTicks(model.yMin, model.yMax).map((tick) => (
           <g key={tick}>
             <line x1={pad.left} x2={pad.left + plotW} y1={y(tick)} y2={y(tick)} stroke="var(--grid)" strokeWidth="1" />
-            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="10" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="12" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {tick}
             </text>
           </g>
@@ -138,7 +140,7 @@ export function TrendChart({
             x={x(ts)}
             y={height - 8}
             textAnchor={i === 0 ? 'start' : i === dateTicks.length - 1 ? 'end' : 'middle'}
-            fontSize="10"
+            fontSize="12"
             fill="var(--text-muted)"
           >
             {SHORT_DATE.format(ts)}
@@ -157,7 +159,7 @@ export function TrendChart({
               strokeWidth="1"
               opacity="0.45"
             />
-            <text x={pad.left + plotW + 6} y={y(s.target) + 3} fontSize="9" fill="var(--text-muted)">
+            <text x={pad.left + 4} y={y(s.target) - 5} fontSize="11" fill="var(--text-muted)">
               цель {s.target}
             </text>
           </g>
@@ -181,8 +183,8 @@ export function TrendChart({
                 <circle cx={x(last.ts)} cy={y(last[s.key])} r="4.5" fill={s.color} stroke="var(--surface)" strokeWidth="2" />
                 <text
                   x={x(last.ts) + 9}
-                  y={y(last[s.key]) + 4}
-                  fontSize="11"
+                  y={y(last[s.key]) + 5}
+                  fontSize="13"
                   fontWeight="600"
                   fill="var(--text-primary)"
                   style={{ fontVariantNumeric: 'tabular-nums' }}
@@ -227,8 +229,8 @@ export function TrendChart({
 
 export function PulseChart({ readings }: { readings: Reading[] }) {
   const [ref, width] = useWidth<HTMLDivElement>()
-  const height = 150
-  const pad = { top: 12, right: 40, bottom: 24, left: 38 }
+  const height = 160
+  const pad = { top: 12, right: 42, bottom: 28, left: 40 }
   const plotW = width - pad.left - pad.right
   const plotH = height - pad.top - pad.bottom
 
@@ -259,7 +261,7 @@ export function PulseChart({ readings }: { readings: Reading[] }) {
         {yTicks(model.yMin, model.yMax).map((tick) => (
           <g key={tick}>
             <line x1={pad.left} x2={pad.left + plotW} y1={y(tick)} y2={y(tick)} stroke="var(--grid)" strokeWidth="1" />
-            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="10" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="12" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {tick}
             </text>
           </g>
@@ -269,9 +271,9 @@ export function PulseChart({ readings }: { readings: Reading[] }) {
           <text
             key={i}
             x={x(model.tMin + f * model.span)}
-            y={height - 6}
+            y={height - 8}
             textAnchor={i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}
-            fontSize="10"
+            fontSize="12"
             fill="var(--text-muted)"
           >
             {SHORT_DATE.format(model.tMin + f * model.span)}
@@ -290,8 +292,8 @@ export function PulseChart({ readings }: { readings: Reading[] }) {
             <circle cx={x(last.ts)} cy={y(last.bpm!)} r="4.5" fill="var(--series-bpm)" stroke="var(--surface)" strokeWidth="2" />
             <text
               x={x(last.ts) + 9}
-              y={y(last.bpm!) + 4}
-              fontSize="11"
+              y={y(last.bpm!) + 5}
+              fontSize="13"
               fontWeight="600"
               fill="var(--text-primary)"
               style={{ fontVariantNumeric: 'tabular-nums' }}
@@ -324,8 +326,9 @@ function columnPath(cx: number, top: number, bottom: number, w: number, r = 4) {
 
 export function DayPartChart({ readings }: { readings: Reading[] }) {
   const [ref, width] = useWidth<HTMLDivElement>()
-  const height = 200
-  const pad = { top: 20, right: 8, bottom: 34, left: 34 }
+  // bottom вырос под две строки подписей: название части суток и часы с числом измерений.
+  const height = 214
+  const pad = { top: 22, right: 8, bottom: 46, left: 40 }
   const plotW = width - pad.left - pad.right
   const plotH = height - pad.top - pad.bottom
 
@@ -366,7 +369,7 @@ export function DayPartChart({ readings }: { readings: Reading[] }) {
         {yTicks(0, yMax).map((tick) => (
           <g key={tick}>
             <line x1={pad.left} x2={pad.left + plotW} y1={y(tick)} y2={y(tick)} stroke="var(--grid)" strokeWidth="1" />
-            <text x={pad.left - 7} y={y(tick) + 4} textAnchor="end" fontSize="10" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="12" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {tick}
             </text>
           </g>
@@ -383,11 +386,13 @@ export function DayPartChart({ readings }: { readings: Reading[] }) {
               {bars.map((bar, j) => (
                 <g key={j}>
                   <path d={columnPath(bar.cx, y(bar.value), pad.top + plotH, barW)} fill={bar.color} />
+                  {/* Столбики шириной 24px с зазором 2px: на 13px соседние числа
+                      сливаются, поэтому здесь потолок кегля — 12px. */}
                   <text
                     x={bar.cx}
-                    y={y(bar.value) - 6}
+                    y={y(bar.value) - 7}
                     textAnchor="middle"
-                    fontSize="10"
+                    fontSize="12"
                     fontWeight="600"
                     fill="var(--text-primary)"
                     style={{ fontVariantNumeric: 'tabular-nums' }}
@@ -396,10 +401,10 @@ export function DayPartChart({ readings }: { readings: Reading[] }) {
                   </text>
                 </g>
               ))}
-              <text x={center} y={height - 18} textAnchor="middle" fontSize="11" fill="var(--text-secondary)">
+              <text x={center} y={height - 26} textAnchor="middle" fontSize="13" fill="var(--text-secondary)">
                 {group.label}
               </text>
-              <text x={center} y={height - 5} textAnchor="middle" fontSize="9" fill="var(--text-muted)">
+              <text x={center} y={height - 8} textAnchor="middle" fontSize="11" fill="var(--text-muted)">
                 {group.hours} · {group.count}
               </text>
             </g>

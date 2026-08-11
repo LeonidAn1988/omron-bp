@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Reading, Settings as SettingsData } from './types'
 import {
   DEFAULT_SETTINGS,
@@ -18,17 +18,31 @@ import { Entry } from './ui/Entry'
 import { Sync } from './ui/Sync'
 import { Settings } from './ui/Settings'
 import { Report } from './ui/Report'
-import { Banner } from './ui/bits'
+import { Banner, Reveal } from './ui/bits'
 
+/** Короткая подпись — для нижней навигации на телефоне, где на пункт приходится ~70px. */
 const TABS = [
-  { key: 'overview', label: 'Обзор' },
-  { key: 'readings', label: 'Измерения' },
-  { key: 'sync', label: 'Синхронизация' },
-  { key: 'report', label: 'Отчёт для врача' },
-  { key: 'settings', label: 'Настройки' },
+  { key: 'overview', label: 'Обзор', short: 'Обзор' },
+  { key: 'readings', label: 'Измерения', short: 'Записи' },
+  { key: 'sync', label: 'Синхронизация', short: 'Прибор' },
+  { key: 'report', label: 'Отчёт для врача', short: 'Отчёт' },
+  { key: 'settings', label: 'Настройки', short: 'Настройки' },
 ] as const
 
 type TabKey = (typeof TABS)[number]['key']
+
+/** Период фильтрует данные, поэтому живёт рядом с ними, а не в общей шапке. */
+function PeriodPicker({ value, onChange }: { value: PeriodKey; onChange: (next: PeriodKey) => void }) {
+  return (
+    <div className="segmented" role="group" aria-label="Период">
+      {PERIODS.map((item) => (
+        <button key={item.key} aria-pressed={value === item.key} onClick={() => onChange(item.key)}>
+          {item.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export default function App() {
   const [readings, setReadings] = useState<Reading[]>([])
@@ -36,6 +50,9 @@ export default function App() {
   const [period, setPeriod] = useState<PeriodKey>('30d')
   const [tab, setTab] = useState<TabKey>('overview')
   const [ready, setReady] = useState(false)
+  /** Последняя удалённая запись — чтобы удаление можно было отменить. */
+  const [undo, setUndo] = useState<Reading | null>(null)
+  const undoTimer = useRef<number | undefined>(undefined)
 
   useEffect(() => {
     Promise.all([getAllReadings(), loadSettings()]).then(([stored, loaded]) => {
@@ -43,6 +60,7 @@ export default function App() {
       setSettings(loaded)
       setReady(true)
     })
+    return () => window.clearTimeout(undoTimer.current)
   }, [])
 
   const refresh = useCallback(async () => setReadings(await getAllReadings()), [])
@@ -66,15 +84,28 @@ export default function App() {
 
   const handleDelete = useCallback(
     async (id: string) => {
+      const victim = readings.find((r) => r.id === id) ?? null
       await deleteReading(id)
       await refresh()
+      setUndo(victim)
+      window.clearTimeout(undoTimer.current)
+      undoTimer.current = window.setTimeout(() => setUndo(null), 8000)
     },
-    [refresh],
+    [readings, refresh],
   )
+
+  const handleUndo = useCallback(async () => {
+    if (!undo) return
+    // Идентификатор детерминирован, поэтому возврат не создаёт дубля.
+    await putReadings([undo])
+    await refresh()
+    setUndo(null)
+  }, [undo, refresh])
 
   const handleClearAll = useCallback(async () => {
     await clearReadings()
     await refresh()
+    setUndo(null)
   }, [refresh])
 
   const updateSettings = useCallback((next: SettingsData) => {
@@ -90,12 +121,17 @@ export default function App() {
   )
   const latest = userReadings.length ? userReadings[userReadings.length - 1] : null
 
-  // Второго пользователя показываем, только если он реально есть в данных.
   const hasSecondUser = useMemo(() => readings.some((r) => r.user !== 1), [readings])
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? ''
   const patientName = settings.userNames[settings.activeUser] ?? `Пользователь ${settings.activeUser}`
 
-  if (!ready) return <div className="app" style={{ padding: 40, color: 'var(--text-muted)' }}>Загрузка…</div>
+  if (!ready) {
+    return (
+      <div className="app" style={{ padding: 40, color: 'var(--text-muted)' }}>
+        Загрузка…
+      </div>
+    )
+  }
 
   return (
     <div className="app">
@@ -104,34 +140,22 @@ export default function App() {
           <h1>Дневник давления</h1>
           <span className="topbar__sub">Omron RS7 Intelli IT</span>
         </div>
-
-        {hasSecondUser && (
-          <div className="segmented" role="group" aria-label="Пользователь прибора">
-            {[1, 2].map((user) => (
-              <button
-                key={user}
-                aria-pressed={settings.activeUser === user}
-                onClick={() => updateSettings({ ...settings, activeUser: user })}
-              >
-                {settings.userNames[user] ?? `Пользователь ${user}`}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="segmented" role="group" aria-label="Период">
-          {PERIODS.map((item) => (
-            <button key={item.key} aria-pressed={period === item.key} onClick={() => setPeriod(item.key)}>
-              {item.label}
-            </button>
-          ))}
-        </div>
       </header>
 
-      <nav className="tabs" role="tablist">
+      {/* Обычная навигация, а не ARIA-паттерн вкладок: полный tablist требует
+          tabpanel, aria-controls и управления стрелками — недостроенный он
+          путает скринридер сильнее, чем его отсутствие. */}
+      <nav className="tabs" aria-label="Разделы дневника">
         {TABS.map((item) => (
-          <button key={item.key} className="tab" role="tab" aria-selected={tab === item.key} onClick={() => setTab(item.key)}>
-            {item.label}
+          <button
+            key={item.key}
+            className="tab"
+            aria-current={tab === item.key ? 'page' : undefined}
+            aria-label={item.label}
+            onClick={() => setTab(item.key)}
+          >
+            <span className="tab__full">{item.label}</span>
+            <span className="tab__short">{item.short}</span>
           </button>
         ))}
       </nav>
@@ -144,41 +168,49 @@ export default function App() {
             <Banner tone="info">
               <b>Дневник пока пуст.</b>
               <div style={{ marginTop: 4 }}>
-                Откройте «Синхронизацию», чтобы выгрузить историю прямо из тонометра, либо внесите измерения вручную во
-                вкладке «Измерения».
+                Откройте «Прибор», чтобы выгрузить историю прямо из тонометра, либо внесите измерение вручную во
+                вкладке «Записи».
               </div>
-            </Banner>
-          ) : !summary ? (
-            <Banner tone="info">
-              За выбранный период измерений нет. Попробуйте период пошире — например, «Всё время».
             </Banner>
           ) : (
             <>
-              <SummaryTiles summary={summary} targetSys={settings.targetSys} targetDia={settings.targetDia} />
-
-              <div className="card">
-                <div className="card__head">
-                  <h2>Динамика давления</h2>
-                  <span className="muted">точки — измерения, линия — среднее за 7 дней</span>
-                </div>
-                <TrendChart readings={scoped} targetSys={settings.targetSys} targetDia={settings.targetDia} />
+              <div className="row no-print">
+                <PeriodPicker value={period} onChange={setPeriod} />
               </div>
 
-              <div className="grid grid--two">
-                <div className="card">
-                  <div className="card__head">
-                    <h2>По времени суток</h2>
+              {!summary ? (
+                <Banner tone="info">
+                  За выбранный период измерений нет. Возьмите период пошире — например, «Всё время».
+                </Banner>
+              ) : (
+                <>
+                  <SummaryTiles summary={summary} targetSys={settings.targetSys} targetDia={settings.targetDia} />
+
+                  <div className="card">
+                    <div className="card__head">
+                      <h2>Динамика давления</h2>
+                      <span className="muted">точки — измерения, линия — среднее за 7 дней</span>
+                    </div>
+                    <TrendChart readings={scoped} targetSys={settings.targetSys} targetDia={settings.targetDia} />
                   </div>
-                  <DayPartChart readings={scoped} />
-                </div>
-                <div className="card">
-                  <div className="card__head">
-                    <h2>Пульс</h2>
-                    <span className="muted">уд/мин</span>
+
+                  <div className="grid grid--two">
+                    <div className="card">
+                      <div className="card__head">
+                        <h2>По времени суток</h2>
+                      </div>
+                      <DayPartChart readings={scoped} />
+                    </div>
+                    <div className="card">
+                      <div className="card__head">
+                        <h2>Пульс</h2>
+                        <span className="muted">ударов в минуту</span>
+                      </div>
+                      <PulseChart readings={scoped} />
+                    </div>
                   </div>
-                  <PulseChart readings={scoped} />
-                </div>
-              </div>
+                </>
+              )}
             </>
           )}
         </div>
@@ -187,19 +219,36 @@ export default function App() {
       {tab === 'readings' && (
         <div className="stack">
           <Entry user={settings.activeUser} onAdd={handleAdd} />
+
+          <Reveal open={undo !== null}>
+            <div className="no-print" style={{ paddingBottom: 'var(--space-3)' }}>
+              <Banner tone="info">
+                <div className="row" style={{ justifyContent: 'space-between', width: '100%' }}>
+                  <span>Измерение удалено.</span>
+                  <button className="btn" onClick={handleUndo}>
+                    Вернуть
+                  </button>
+                </div>
+              </Banner>
+            </div>
+          </Reveal>
+
           <div className="card">
             <div className="card__head">
               <h2>История</h2>
               <span className="muted">
-                {periodLabel.toLowerCase()} · {scoped.length} из {userReadings.length}
+                {scoped.length} из {userReadings.length}
               </span>
+            </div>
+            <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }}>
+              <PeriodPicker value={period} onChange={setPeriod} />
             </div>
             <Readings readings={scoped} onDelete={handleDelete} />
           </div>
         </div>
       )}
 
-      {tab === 'sync' && <Sync pairingKey={settings.pairingKey} onImport={handleImport} />}
+      {tab === 'sync' && <Sync pairingKey={settings.pairingKey} onImport={handleImport} onGoManual={() => setTab('readings')} />}
 
       {tab === 'report' && (
         <Report
@@ -209,6 +258,8 @@ export default function App() {
           periodLabel={periodLabel}
           targetSys={settings.targetSys}
           targetDia={settings.targetDia}
+          period={period}
+          onPeriodChange={setPeriod}
         />
       )}
 
@@ -219,6 +270,7 @@ export default function App() {
           readings={readings}
           onImport={handleImport}
           onClearAll={handleClearAll}
+          showUserPicker={hasSecondUser}
         />
       )}
     </div>

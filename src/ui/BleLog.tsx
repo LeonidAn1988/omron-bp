@@ -34,7 +34,9 @@ export function BleLog({ lines, showDebug }: { lines: LogLine[]; showDebug: bool
   }
 
   return (
-    <div className="log">
+    // tabIndex делает область прокручиваемой с клавиатуры: фокусируемых потомков
+    // внутри нет, и без этого до содержимого журнала не добраться без мыши.
+    <div className="log" tabIndex={0} role="region" aria-label="Журнал обмена с прибором">
       {visible.map((line) => (
         <div className={`log__line log__line--${line.level}`} key={line.id}>
           <span className="log__time">{line.time}</span>

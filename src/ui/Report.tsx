@@ -1,5 +1,5 @@
 import type { Reading } from '../types'
-import type { Summary } from '../logic/stats'
+import { PERIODS, type PeriodKey, type Summary } from '../logic/stats'
 import { DAY_PART_LABELS, classify, type DayPart } from '../logic/classify'
 import { Readings } from './Readings'
 import { CategoryBadge } from './bits'
@@ -15,6 +15,8 @@ export function Report({
   periodLabel,
   targetSys,
   targetDia,
+  period,
+  onPeriodChange,
 }: {
   readings: Reading[]
   summary: Summary | null
@@ -22,9 +24,28 @@ export function Report({
   periodLabel: string
   targetSys: number
   targetDia: number
+  period: PeriodKey
+  onPeriodChange: (next: PeriodKey) => void
 }) {
+  // Период — орган управления отчётом, поэтому стоит рядом с кнопкой печати,
+  // а не в общей шапке приложения.
+  const picker = (
+    <div className="segmented no-print" role="group" aria-label="Период отчёта">
+      {PERIODS.map((item) => (
+        <button key={item.key} aria-pressed={period === item.key} onClick={() => onPeriodChange(item.key)}>
+          {item.label}
+        </button>
+      ))}
+    </div>
+  )
+
   if (!summary) {
-    return <div className="chart__empty">За выбранный период нет измерений — отчёт формировать не из чего.</div>
+    return (
+      <div className="stack">
+        <div className="row no-print">{picker}</div>
+        <div className="chart__empty">За выбранный период нет измерений — отчёт формировать не из чего.</div>
+      </div>
+    )
   }
 
   const avgSys = Math.round(summary.avgSys)
@@ -36,9 +57,10 @@ export function Report({
         <button className="btn btn--primary" onClick={() => window.print()}>
           Печать или сохранение в PDF
         </button>
-        <span className="muted">
-          В диалоге печати выберите «Сохранить как PDF», чтобы отправить отчёт врачу файлом.
-        </span>
+        {picker}
+      </div>
+      <div className="muted no-print" style={{ marginTop: 'calc(var(--space-3) * -1)' }}>
+        В диалоге печати выберите «Сохранить как PDF», чтобы отправить отчёт врачу файлом.
       </div>
 
       <div className="card">

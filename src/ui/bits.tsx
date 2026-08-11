@@ -71,3 +71,16 @@ export function Field({ label, children }: { label: string; children: ReactNode 
     </label>
   )
 }
+
+/**
+ * Плавное раскрытие вместо мгновенного появления.
+ * Анимируется grid-template-rows, а не height — содержимое не прыгает и
+ * не нужно знать его высоту заранее.
+ */
+export function Reveal({ open, children }: { open: boolean; children: ReactNode }) {
+  return (
+    <div className="reveal" data-open={open}>
+      <div>{children}</div>
+    </div>
+  )
+}
