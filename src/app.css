@@ -359,10 +359,12 @@ a {
   background: transparent;
   font-size: var(--fs-2);
 }
+/* 28px видимых + по 10px с каждой стороны = 48px зоны касания.
+   Замер: elementFromPoint попадает в кнопку на 22px от центра во все стороны. */
 .btn--icon::after {
   content: '';
   position: absolute;
-  inset: -8px;
+  inset: -10px;
 }
 .btn--icon:hover:not(:disabled) {
   color: var(--critical-text);
