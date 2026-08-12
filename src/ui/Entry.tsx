@@ -105,18 +105,19 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
         )}
       </div>
 
-      {/* Барабаны узкие — три в ряд, как в системном выборе времени.
-          Поля с клавиатуры шире из-за кнопок шага, им нужен больший минимум. */}
-      <div
-        className="grid"
-        style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${coarse ? '92px' : '150px'}, 1fr))` }}
-      >
+      {/* Пара давления читается вместе, поэтому стоит рядом. Пульс вторичен и на
+          узком экране третьим колесом уже не помещается — кладём его широким
+          горизонтальным барабаном под парой. */}
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
         <ValueField label="Верхнее" value={sys} onChange={setSys} placeholder="120" min={40} max={300} start={120}
           ariaSuffix="мм рт. ст." inputRef={sysRef} required />
         <ValueField label="Нижнее" value={dia} onChange={setDia} placeholder="80" min={20} max={250} start={80}
           ariaSuffix="мм рт. ст." inputRef={diaRef} required />
+      </div>
+
+      <div style={{ marginTop: 'var(--space-3)' }}>
         <ValueField label="Пульс" value={bpm} onChange={setBpm} placeholder="70" min={20} max={250} start={70}
-          ariaSuffix="ударов в минуту" />
+          ariaSuffix="ударов в минуту" axis="x" />
       </div>
 
       <div className="field" style={{ marginTop: 'var(--space-3)' }}>

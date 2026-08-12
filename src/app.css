@@ -86,32 +86,79 @@
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Тёмная тема.
+
+   Веток две: системная настройка и принудительный выбор пользователя. Раньше
+   была только первая, поэтому включить тёмную на светлой системе было нельзя.
+   Значения объявлены один раз в --dark-*, обе ветки только подставляют их —
+   иначе при правке цвета ветки разъезжаются.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --dark--surface: #1a1a19;
+  --dark--page: #0d0d0d;
+  --dark--hover: rgba(255, 255, 255, 0.07);
+  --dark--text-primary: #ffffff; /* 17.4 / 19.4 */
+  --dark--text-secondary: #c3c2b7; /*  9.7 / 10.9 */
+  --dark--text-muted: #898781; /*  4.9 /  5.4 */
+  --dark--critical-text: #ef7d7d; /*  6.6 /  7.3 */
+  --dark--border: #33322f;
+  --dark--border-strong: #45443f;
+  --dark--grid: #2c2c2a;
+  --dark--accent: #7cb1f0;
+  --dark--accent-hover: #a3c9f5;
+  --dark--accent-ink: #0b0b0b;
+  --dark--accent-quiet: rgba(124, 177, 240, 0.2);
+  --dark--series-sys: #3987e5;
+  --dark--series-dia: #d95926;
+  --dark--series-bpm: #199e70;
+}
+
+/* Системная настройка; принудительно светлая тема её перебивает. */
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme='light'])) {
     color-scheme: dark;
-    --surface: #1a1a19;
-    --page: #0d0d0d;
-    --hover: rgba(255, 255, 255, 0.07);
-
-    --text-primary: #ffffff;   /* 17.4 / 19.4 */
-    --text-secondary: #c3c2b7; /*  9.7 / 10.9 */
-    --text-muted: #898781;     /*  4.9 /  5.4 */
-    --critical-text: #ef7d7d;  /*  6.6 /  7.3 */
-
-    --border: #33322f;
-    --border-strong: #45443f;
-    --grid: #2c2c2a;
-
-    /* В тёмной теме акцент светлый, а текст на нём тёмный: 8.8:1 */
-    --accent: #7cb1f0;
-    --accent-hover: #a3c9f5;
-    --accent-ink: #0b0b0b;
-    --accent-quiet: rgba(124, 177, 240, 0.2);
-
-    --series-sys: #3987e5;
-    --series-dia: #d95926;
-    --series-bpm: #199e70;
+    --surface: var(--dark--surface);
+    --page: var(--dark--page);
+    --hover: var(--dark--hover);
+    --text-primary: var(--dark--text-primary);
+    --text-secondary: var(--dark--text-secondary);
+    --text-muted: var(--dark--text-muted);
+    --critical-text: var(--dark--critical-text);
+    --border: var(--dark--border);
+    --border-strong: var(--dark--border-strong);
+    --grid: var(--dark--grid);
+    --accent: var(--dark--accent);
+    --accent-hover: var(--dark--accent-hover);
+    --accent-ink: var(--dark--accent-ink);
+    --accent-quiet: var(--dark--accent-quiet);
+    --series-sys: var(--dark--series-sys);
+    --series-dia: var(--dark--series-dia);
+    --series-bpm: var(--dark--series-bpm);
   }
+}
+
+/* Выбор пользователя — сильнее системной настройки в обе стороны. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface: var(--dark--surface);
+  --page: var(--dark--page);
+  --hover: var(--dark--hover);
+  --text-primary: var(--dark--text-primary);
+  --text-secondary: var(--dark--text-secondary);
+  --text-muted: var(--dark--text-muted);
+  --critical-text: var(--dark--critical-text);
+  --border: var(--dark--border);
+  --border-strong: var(--dark--border-strong);
+  --grid: var(--dark--grid);
+  --accent: var(--dark--accent);
+  --accent-hover: var(--dark--accent-hover);
+  --accent-ink: var(--dark--accent-ink);
+  --accent-quiet: var(--dark--accent-quiet);
+  --series-sys: var(--dark--series-sys);
+  --series-dia: var(--dark--series-dia);
+  --series-bpm: var(--dark--series-bpm);
 }
 
 *,
@@ -605,23 +652,43 @@ input[type='radio'] {
 /* Полоса выделения по центру: показывает, какое значение будет выбрано. */
 .wheel__marker {
   position: absolute;
+  background: var(--accent-quiet);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+.wheel--y .wheel__marker {
   left: 0;
   right: 0;
   top: 50%;
   height: 40px;
   transform: translateY(-50%);
-  background: var(--accent-quiet);
-  border-radius: var(--radius-sm);
-  pointer-events: none;
+}
+.wheel--x .wheel__marker {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 68px;
+  transform: translateX(-50%);
 }
 .wheel__list {
   position: relative;
+  scrollbar-width: none;
+  /* Жест принадлежит барабану, а не странице. */
+  overscroll-behavior: contain;
+}
+.wheel--y .wheel__list {
   overflow-y: auto;
   scroll-snap-type: y mandatory;
-  scrollbar-width: none;
-  /* Вертикальный жест принадлежит барабану, а не странице. */
-  overscroll-behavior: contain;
   touch-action: pan-y;
+}
+/* Горизонтальный барабан: значения в строку, страница при этом не уезжает вбок. */
+.wheel--x .wheel__list {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  touch-action: pan-x;
 }
 .wheel__list::-webkit-scrollbar {
   display: none;
@@ -634,11 +701,14 @@ input[type='radio'] {
 }
 .wheel__item {
   cursor: pointer;
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   scroll-snap-align: center;
-  scroll-snap-stop: always;
+  /* scroll-snap-stop: always намеренно НЕ ставим: это правило запрещает
+     пролетать мимо соседнего деления, то есть убивает инерцию — барабан
+     останавливается на первом же значении и крутится «по одному». */
   font-size: var(--fs-3);
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);

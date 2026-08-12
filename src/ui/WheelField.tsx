@@ -7,13 +7,17 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
  * прокрутка начинается от текущего значения, а не с нуля, и набирать ничего не
  * нужно. Клавиатура на телефоне при этом ещё и закрывает пол-экрана.
  *
+ * Ось выбирается по месту. Вертикальные колёса встают парой «верхнее и нижнее»,
+ * но третье к ним на узком экране уже не помещается: при 360px внутри карточки
+ * остаётся 296px, а три колонки по 92px с зазорами требуют 300. Пульс поэтому
+ * кладётся горизонтальным барабаном под ними — он и по смыслу вторичен.
+ *
  * Управляется тремя способами: прокруткой, колесом мыши и стрелками с
  * клавиатуры. Для скринридера это spinbutton с текущим значением.
  */
 
-const ITEM = 40
-const VISIBLE = 5
-const HEIGHT = ITEM * VISIBLE
+const SIZE = { y: 40, x: 68 } as const
+const VISIBLE_Y = 5
 
 export function WheelField({
   label,
@@ -26,6 +30,7 @@ export function WheelField({
   step = 1,
   decimals = 0,
   ariaSuffix,
+  axis = 'y',
 }: {
   label: string
   unit?: string
@@ -41,20 +46,31 @@ export function WheelField({
   decimals?: number
   /** Что дочитывать скринридеру после числа, например «мм рт. ст.». */
   ariaSuffix?: string
+  axis?: 'x' | 'y'
 }) {
   const listRef = useRef<HTMLDivElement>(null)
+  /**
+   * Таймеров два, и это принципиально. Раньше был один на две задачи — снять
+   * флаг «прокручиваю сам» и зафиксировать значение после остановки. Пробный
+   * размонтаж в StrictMode гасил таймер сброса флага, флаг оставался поднятым
+   * навсегда, и барабан крутился, не меняя значения.
+   */
   const settleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const flagTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   /** Пока идёт наша собственная прокрутка, события scroll игнорируются. */
   const scrolling = useRef(false)
   const [focused, setFocused] = useState(false)
 
+  const item = SIZE[axis]
+  const horizontal = axis === 'x'
   const count = Math.round((max - min) / step) + 1
+
   const format = useCallback(
     (n: number) => (decimals > 0 ? n.toFixed(decimals).replace('.', ',') : String(Math.round(n))),
     [decimals],
   )
   const parse = (raw: string) => Number(raw.replace(',', '.'))
-  const valueAt = useCallback((index: number) => min + index * step, [min, step])
+  const valueAt = useCallback((i: number) => min + i * step, [min, step])
 
   const current = parse(value)
   const chosen = Number.isFinite(current) && value !== ''
@@ -68,58 +84,87 @@ export function WheelField({
    */
   const emitted = useRef<string | null>(null)
 
-  const scrollTo = useCallback((target: number, smooth: boolean) => {
-    const node = listRef.current
-    if (!node) return
-    scrolling.current = true
-    node.scrollTo({
-      top: target * ITEM,
-      behavior: smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'auto',
-    })
-    clearTimeout(settleTimer.current)
-    settleTimer.current = setTimeout(() => {
-      scrolling.current = false
-    }, 260)
-  }, [])
+  const offsetOf = useCallback(
+    (node: HTMLDivElement) => (horizontal ? node.scrollLeft : node.scrollTop),
+    [horizontal],
+  )
 
-  // Ставим барабан на текущее значение при появлении и когда его меняют снаружи.
+  const scrollTo = useCallback(
+    (target: number, smooth: boolean) => {
+      const node = listRef.current
+      if (!node) return
+      scrolling.current = true
+      const behavior = smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'auto'
+      node.scrollTo(horizontal ? { left: target * item, behavior } : { top: target * item, behavior })
+      clearTimeout(flagTimer.current)
+      flagTimer.current = setTimeout(() => {
+        scrolling.current = false
+      }, 260)
+    },
+    [horizontal, item],
+  )
+
   useLayoutEffect(() => {
     const node = listRef.current
     if (!node || scrolling.current) return
     // Значение пришло от нашей же прокрутки — трогать позицию нельзя.
     if (value === emitted.current) return
-    const shown = Math.round(node.scrollTop / ITEM)
-    if (shown !== safeIndex) scrollTo(safeIndex, false)
-  }, [value, safeIndex, scrollTo])
+    if (Math.round(offsetOf(node) / item) !== safeIndex) scrollTo(safeIndex, false)
+  }, [value, safeIndex, item, offsetOf, scrollTo])
 
-  useEffect(() => () => clearTimeout(settleTimer.current), [])
+  useEffect(
+    () => () => {
+      clearTimeout(settleTimer.current)
+      clearTimeout(flagTimer.current)
+      // Флаг сбрасывается вручную: иначе после пробного размонтажа он остался бы
+      // поднятым вместе с погашенным таймером.
+      scrolling.current = false
+    },
+    [],
+  )
 
-  const onScroll = () => {
+  /**
+   * Слушатель вешается вручную, а не через onScroll у React: событие прокрутки
+   * не всплывает, и делегирование его не ловит — обработчик просто не
+   * вызывался, барабан крутился, но значение не менялось.
+   */
+  const handleScroll = useRef<() => void>(() => {})
+  handleScroll.current = () => {
     if (scrolling.current) return
     clearTimeout(settleTimer.current)
     // Значение фиксируем после остановки: иначе оно дёргается на каждом кадре.
     settleTimer.current = setTimeout(() => {
       const node = listRef.current
       if (!node) return
-      const landed = Math.min(count - 1, Math.max(0, Math.round(node.scrollTop / ITEM)))
+      const landed = Math.min(count - 1, Math.max(0, Math.round(offsetOf(node) / item)))
       const next = format(valueAt(landed))
       emitted.current = next
       onChange((prev) => (prev === next ? prev : next))
     }, 120)
   }
 
-  const nudge = (delta: number) => {
-    const target = Math.min(count - 1, Math.max(0, safeIndex + delta))
-    const next = format(valueAt(target))
+  useEffect(() => {
+    const node = listRef.current
+    if (!node) return
+    const listener = () => handleScroll.current()
+    node.addEventListener('scroll', listener, { passive: true })
+    return () => node.removeEventListener('scroll', listener)
+  }, [])
+
+  const commit = (target: number, smooth: boolean) => {
+    const clamped = Math.min(count - 1, Math.max(0, target))
+    const next = format(valueAt(clamped))
     emitted.current = next
     onChange(next)
-    scrollTo(target, true)
+    scrollTo(clamped, smooth)
   }
 
   const onKeyDown = (event: React.KeyboardEvent) => {
+    const back = horizontal ? 'ArrowLeft' : 'ArrowUp'
+    const forward = horizontal ? 'ArrowRight' : 'ArrowDown'
     const moves: Record<string, number> = {
-      ArrowUp: -1,
-      ArrowDown: 1,
+      [back]: -1,
+      [forward]: 1,
       PageUp: -10,
       PageDown: 10,
       Home: -count,
@@ -128,22 +173,15 @@ export function WheelField({
     const delta = moves[event.key]
     if (delta === undefined) return
     event.preventDefault()
-    nudge(delta)
-  }
-
-  /** Тап по значению подтверждает его. Нужен для случая, когда подсказка уже
-   *  верна: без этого пришлось бы «покрутить туда-обратно», чтобы её принять. */
-  const pick = (i: number) => {
-    const next = format(valueAt(i))
-    emitted.current = next
-    onChange(next)
-    if (i !== safeIndex) scrollTo(i, true)
+    commit(safeIndex + delta, true)
   }
 
   const items = Array.from({ length: count }, (_, i) => valueAt(i))
+  /** По краям нужен отступ в половину видимой области, иначе крайние значения не встанут в центр. */
+  const pad = horizontal ? `calc(50% - ${item / 2}px)` : `${(SIZE.y * VISIBLE_Y - item) / 2}px`
 
   return (
-    <div className="wheel">
+    <div className={`wheel wheel--${axis}`}>
       <div className="wheel__label">
         {label}
         {unit && <span className="wheel__unit">{unit}</span>}
@@ -159,31 +197,28 @@ export function WheelField({
           aria-label={label}
           aria-valuemin={min}
           aria-valuemax={max}
-          aria-valuenow={Number.isFinite(current) && value !== '' ? current : undefined}
-          aria-valuetext={
-            value === '' ? 'не выбрано' : `${format(current)}${ariaSuffix ? ` ${ariaSuffix}` : ''}`
-          }
-          onScroll={onScroll}
+          aria-valuenow={chosen ? current : undefined}
+          aria-valuetext={chosen ? `${format(current)}${ariaSuffix ? ` ${ariaSuffix}` : ''}` : 'не выбрано'}
           onKeyDown={onKeyDown}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          style={{ height: HEIGHT }}
+          style={horizontal ? { height: item } : { height: SIZE.y * VISIBLE_Y }}
         >
-          <div className="wheel__pad" style={{ height: (HEIGHT - ITEM) / 2 }} />
-          {items.map((item, i) => (
+          <div className="wheel__pad" style={horizontal ? { width: pad } : { height: pad }} />
+          {items.map((entry, i) => (
             <div
-              key={item}
+              key={entry}
               className="wheel__item"
-              style={{ height: ITEM }}
+              style={horizontal ? { width: item } : { height: item }}
               aria-hidden="true"
-              onClick={() => pick(i)}
+              onClick={() => commit(i, true)}
               data-selected={i === safeIndex ? 'true' : undefined}
               data-pending={i === safeIndex && !chosen ? 'true' : undefined}
             >
-              {format(item)}
+              {format(entry)}
             </div>
           ))}
-          <div className="wheel__pad" style={{ height: (HEIGHT - ITEM) / 2 }} />
+          <div className="wheel__pad" style={horizontal ? { width: pad } : { height: pad }} />
         </div>
       </div>
     </div>

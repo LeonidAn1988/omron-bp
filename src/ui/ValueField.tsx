@@ -40,6 +40,7 @@ export function ValueField({
   ariaSuffix,
   inputRef,
   required,
+  axis,
 }: {
   label: string
   unit?: string
@@ -54,6 +55,8 @@ export function ValueField({
   ariaSuffix?: string
   inputRef?: React.Ref<HTMLInputElement>
   required?: boolean
+  /** Ось барабана. На мыши не используется. */
+  axis?: 'x' | 'y'
 }) {
   const coarse = useCoarsePointer()
 
@@ -70,6 +73,7 @@ export function ValueField({
         step={step}
         decimals={decimals}
         ariaSuffix={ariaSuffix}
+        axis={axis}
       />
     )
   }
