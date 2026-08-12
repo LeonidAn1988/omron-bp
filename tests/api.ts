@@ -34,7 +34,9 @@ export {
   describeBackupAge,
   backupFilename,
   STALE_DAYS,
+  BEHIND_COUNT,
   NO_BACKUP,
+  recordsBehind,
 } from '../src/logic/backup'
 
 export { installWebPlatform, useIndexedDbFactory } from '../src/platform/web'

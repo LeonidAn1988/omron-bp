@@ -32,6 +32,16 @@ const DAY = 24 * 60 * 60 * 1000
 export const STALE_DAYS = 7
 
 /**
+ * Сколько записей вне копии терпим молча.
+ *
+ * Ждать неделю нельзя: одна выгрузка с прибора приносит десятки измерений
+ * разом, и семь дней тишины после неё — это семь дней, когда потерять можно
+ * уже много. Порог маленький: два-три измерения человек внесёт заново по
+ * памяти, а сорок — нет.
+ */
+export const BEHIND_COUNT = 5
+
+/**
  * Нужна ли автоматическая копия прямо сейчас.
  *
  * Условие простое — дневник разошёлся с копией. Копия весит десятки килобайт
@@ -45,6 +55,8 @@ export function shouldAutoBackup(state: BackupState, count: number): boolean {
 export type BackupWarning =
   /** Копий нет вовсе, а данные уже есть. */
   | 'never'
+  /** Вне копии накопилось заметное число записей — обычно после выгрузки с прибора. */
+  | 'behind'
   /** Копия есть, но устарела: с тех пор прошло много дней и записи изменились. */
   | 'stale'
   | null
@@ -52,10 +64,15 @@ export type BackupWarning =
 export function backupWarning(state: BackupState, count: number, now: number): BackupWarning {
   if (count === 0) return null
   if (state.lastAt === null) return 'never'
-  // Устаревшей считаем только разошедшуюся копию: если новых записей не было,
-  // старая копия полна, и дёргать человека не за что.
+  // Полная копия — молчим, сколько бы времени ни прошло: терять нечего.
   if (state.lastCount === count) return null
+  if (count - state.lastCount >= BEHIND_COUNT) return 'behind'
   return now - state.lastAt >= STALE_DAYS * DAY ? 'stale' : null
+}
+
+/** Сколько записей ещё не попало в копию. Отрицательным не бывает: удаления не потеря. */
+export function recordsBehind(state: BackupState, count: number): number {
+  return Math.max(0, count - state.lastCount)
 }
 
 /** «3 дня назад» — для подписи под кнопкой. Без библиотек: случаев всего несколько. */

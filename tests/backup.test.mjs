@@ -1,5 +1,14 @@
 /** Когда дневник считается незащищённым и когда пора делать копию. */
-import { shouldAutoBackup, backupWarning, describeBackupAge, backupFilename, STALE_DAYS, NO_BACKUP } from './build/api.mjs'
+import {
+  shouldAutoBackup,
+  backupWarning,
+  describeBackupAge,
+  backupFilename,
+  recordsBehind,
+  STALE_DAYS,
+  BEHIND_COUNT,
+  NO_BACKUP,
+} from './build/api.mjs'
 
 export function run() {
   let failures = 0
@@ -29,8 +38,17 @@ export function run() {
   check('без записей не пугаем', backupWarning(NO_BACKUP, 0, now) === null)
   check('есть записи, копий нет — предупреждаем', backupWarning(NO_BACKUP, 5, now) === 'never')
   check(
-    'свежая копия — молчим',
+    'свежая копия и одна новая запись — молчим',
     backupWarning({ lastAt: now - 2 * DAY, lastCount: 5 }, 6, now) === null,
+  )
+  check(
+    'выгрузка с прибора не ждёт неделю',
+    backupWarning({ lastAt: now - 1000, lastCount: 5 }, 5 + BEHIND_COUNT, now) === 'behind',
+    'десятки записей разом — предупреждаем сразу',
+  )
+  check(
+    'на одну меньше порога ещё молчим',
+    backupWarning({ lastAt: now - 1000, lastCount: 5 }, 5 + BEHIND_COUNT - 1, now) === null,
   )
   check(
     'копия совпадает с дневником — молчим даже через год',
@@ -54,6 +72,13 @@ export function run() {
   check('10 дней назад', describeBackupAge(now - 10 * DAY, now) === '10 дней назад')
   check('месяц назад', describeBackupAge(now - 35 * DAY, now) === 'месяц назад')
   check('несколько месяцев', describeBackupAge(now - 95 * DAY, now) === '3 мес. назад')
+
+  check('счётчик записей вне копии', recordsBehind({ lastAt: now, lastCount: 5 }, 12) === 7)
+  check(
+    'удаление не считается отставанием',
+    recordsBehind({ lastAt: now, lastCount: 5 }, 3) === 0,
+    'иначе кнопка обещала бы спасти несуществующие записи',
+  )
 
   const name = backupFilename(new Date(2026, 0, 5, 9, 0, 0).getTime())
   check('имя файла с датой в начале', name === 'дневник-здоровья-2026-01-05.json', name)

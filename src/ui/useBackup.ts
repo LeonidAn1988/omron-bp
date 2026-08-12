@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Measurement, Settings } from '../types'
 import { backupTarget, requestDurability } from '../db/store'
 import { canShareFile, download, shareFile, toJson } from '../logic/io'
-import { backupFilename, backupWarning, shouldAutoBackup, type BackupWarning } from '../logic/backup'
+import {
+  backupFilename,
+  backupWarning,
+  recordsBehind,
+  shouldAutoBackup,
+  type BackupWarning,
+} from '../logic/backup'
 
 /**
  * Состояние сохранности дневника и всё, что с ним можно сделать.
@@ -21,6 +27,8 @@ export interface BackupStatus {
   /** Защищено ли хранилище от вытеснения браузером. null — вопрос неприменим. */
   durable: boolean | null
   warning: BackupWarning
+  /** Сколько записей ещё не в копии — их и потеряем. */
+  behind: number
   lastAt: number | null
   count: number
   busy: boolean
@@ -148,6 +156,7 @@ export function useBackup(
       count,
       Date.now(),
     ),
+    behind: recordsBehind({ lastAt: settings.backupLastAt, lastCount: settings.backupLastCount }, count),
     lastAt: settings.backupLastAt,
     count,
     busy,

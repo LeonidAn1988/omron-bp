@@ -10,6 +10,16 @@ import type { BackupStatus } from './useBackup'
  * — ему нужно знать одно: копия есть или копии нет.
  */
 
+/** Русские окончания для счётного существительного. Библиотеку ради одного слова не тянем. */
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod100 = n % 100
+  if (mod100 >= 11 && mod100 <= 14) return many
+  const mod10 = n % 10
+  if (mod10 === 1) return one
+  if (mod10 >= 2 && mod10 <= 4) return few
+  return many
+}
+
 export function DataSafety({ status }: { status: BackupStatus }) {
   const { supported, target, durable, lastAt, count, busy, failed } = status
 
@@ -100,26 +110,34 @@ export function DataSafety({ status }: { status: BackupStatus }) {
         <b>Копия — это обычный файл с вашими записями.</b>
         <div style={{ marginTop: 4 }}>
           Приложение никуда его не отправляет само. Чтобы данные пережили потерю телефона, копия должна оказаться за
-          его пределами: «Отправить копию» открывает выбор — облако, мессенджер, почта себе. Восстановить дневник из
-          файла можно ниже, в разделе «Данные».
+          его пределами: «Отправить копию» открывает системный выбор — Облако Mail.ru, Google Диск, мессенджер, письмо
+          себе. Восстановить дневник из файла можно ниже, в разделе «Данные».
         </div>
       </Banner>
     </div>
   )
 }
 
+const NUDGE_TITLE = {
+  never: 'Дневник существует в одном экземпляре',
+  behind: 'Новые записи ещё не в копии',
+  stale: 'Резервная копия устарела',
+} as const
+
 /** Предупреждение на главном экране — там, где его увидят, а не в настройках. */
 export function BackupNudge({ status, onOpenSettings }: { status: BackupStatus; onOpenSettings: () => void }) {
   if (status.warning === null) return null
 
+  const explain = {
+    never: 'Записи есть только в этом браузере. Если очистить его данные или потерять устройство, дневник пропадёт.',
+    behind: `Вне копии ${status.behind} ${plural(status.behind, 'запись', 'записи', 'записей')}. Отправьте копию — это одно касание.`,
+    stale: `С последней копии прошло больше ${STALE_DAYS} дней, и за это время появились новые записи.`,
+  }[status.warning]
+
   return (
     <Banner tone="warning">
-      <b>{status.warning === 'never' ? 'Дневник существует в одном экземпляре' : 'Резервная копия устарела'}</b>
-      <div style={{ marginTop: 4 }}>
-        {status.warning === 'never'
-          ? 'Записи есть только в этом браузере. Если очистить его данные или потерять устройство, дневник пропадёт.'
-          : `С последней копии прошло больше ${STALE_DAYS} дней, и за это время появились новые записи.`}
-      </div>
+      <b>{NUDGE_TITLE[status.warning]}</b>
+      <div style={{ marginTop: 4 }}>{explain}</div>
       <div className="row" style={{ marginTop: 'var(--space-3)' }}>
         <button
           className="btn btn--primary"
