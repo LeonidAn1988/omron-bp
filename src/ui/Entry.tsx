@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { Reading } from '../types'
+import type { BpReading } from '../types'
 import { alertFor, classify } from '../logic/classify'
 import { Banner, Field, Reveal } from './bits'
 
@@ -20,7 +20,7 @@ function describeWhen(value: string): string {
   return `${sameDay ? 'сегодня' : DATE_FMT.format(date)}, ${TIME_FMT.format(date)}`
 }
 
-export function Entry({ user, onAdd }: { user: number; onAdd: (reading: Reading) => Promise<void> }) {
+export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReading) => Promise<void> }) {
   const [sys, setSys] = useState('')
   const [dia, setDia] = useState('')
   const [bpm, setBpm] = useState('')
@@ -64,6 +64,7 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: Reading)
 
     const pulse = Number(bpm)
     await onAdd({
+      kind: 'bp',
       id: `m-${crypto.randomUUID()}`,
       ts,
       sys: Math.round(sysValue),

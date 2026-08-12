@@ -17,10 +17,20 @@ mkdirSync(buildDir, { recursive: true })
 for (const [entry, out] of [
   ['src/ble/hem6232t.ts', 'hem6232t.mjs'],
   ['src/logic/io.ts', 'io.mjs'],
+  ['src/db/store.ts', 'store.mjs'],
 ]) {
   execFileSync(
     'npx',
-    ['esbuild', entry, '--bundle', '--format=esm', `--outfile=${join(buildDir, out)}`, '--log-level=error'],
+    [
+      'esbuild',
+      entry,
+      '--bundle',
+      '--format=esm',
+      // fake-indexeddb остаётся внешним: тест подсовывает его через useIndexedDbFactory
+      '--external:fake-indexeddb',
+      `--outfile=${join(buildDir, out)}`,
+      '--log-level=error',
+    ],
     { cwd: root, stdio: 'inherit' },
   )
 }
@@ -28,12 +38,13 @@ for (const [entry, out] of [
 const suites = [
   ['Разбор записи прибора (сверка с omblepy)', await import('./parse-record.test.mjs')],
   ['Экспорт и импорт файлов', await import('./io.test.mjs')],
+  ['Миграция хранилища с версии 1 на версию 2', await import('./migration.test.mjs')],
 ]
 
 let failures = 0
 for (const [name, suite] of suites) {
   console.log(`\n${name}`)
-  failures += suite.run()
+  failures += await suite.run()
 }
 
 rmSync(buildDir, { recursive: true, force: true })

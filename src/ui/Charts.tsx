@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { Reading } from '../types'
-import { dailyAverages, movingAverage } from '../logic/stats'
-import { DAY_PART_LABELS, dayPart, type DayPart } from '../logic/classify'
+import { GLUCOSE_CONTEXT_LABELS, type BpReading, type GlucoseReading } from '../types'
+import { dailyAverages, dailyGlucose, glucoseMovingAverage, movingAverage } from '../logic/stats'
+import { DAY_PART_LABELS, dayPart, type DayPart, type GlucoseTargets } from '../logic/classify'
 
 const SHORT_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short' })
 const FULL_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
@@ -38,17 +38,17 @@ function Empty({ text }: { text: string }) {
   return <div className="chart__empty">{text}</div>
 }
 
-/** Шкала подписей оси Y: круглые числа с шагом 20. */
-function yTicks(min: number, max: number): number[] {
+/** Шкала подписей оси Y круглыми числами. Шаг разный: давление в десятках, сахар в единицах. */
+function yTicks(min: number, max: number, step = 20): number[] {
   const ticks: number[] = []
-  for (let value = Math.ceil(min / 20) * 20; value <= max; value += 20) ticks.push(value)
+  for (let value = Math.ceil(min / step) * step; value <= max; value += step) ticks.push(value)
   return ticks
 }
 
 interface Hover {
   x: number
   y: number
-  reading: Reading
+  reading: BpReading
 }
 
 // ── Тренд давления ─────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ export function TrendChart({
   targetSys,
   targetDia,
 }: {
-  readings: Reading[]
+  readings: BpReading[]
   targetSys: number
   targetDia: number
 }) {
@@ -227,7 +227,7 @@ export function TrendChart({
 
 // ── Пульс ──────────────────────────────────────────────────────────────────
 
-export function PulseChart({ readings }: { readings: Reading[] }) {
+export function PulseChart({ readings }: { readings: BpReading[] }) {
   const [ref, width] = useWidth<HTMLDivElement>()
   const height = 160
   const pad = { top: 12, right: 42, bottom: 28, left: 40 }
@@ -324,7 +324,7 @@ function columnPath(cx: number, top: number, bottom: number, w: number, r = 4) {
   ].join(' ')
 }
 
-export function DayPartChart({ readings }: { readings: Reading[] }) {
+export function DayPartChart({ readings }: { readings: BpReading[] }) {
   const [ref, width] = useWidth<HTMLDivElement>()
   // bottom вырос под две строки подписей: название части суток и часы с числом измерений.
   const height = 214
@@ -413,6 +413,166 @@ export function DayPartChart({ readings }: { readings: Reading[] }) {
 
         <line x1={pad.left} x2={pad.left + plotW} y1={pad.top + plotH} y2={pad.top + plotH} stroke="var(--axis)" strokeWidth="1" />
       </svg>
+    </div>
+  )
+}
+
+// ── Тренд сахара ───────────────────────────────────────────────────────────
+
+/**
+ * Точки замеров и скользящее среднее за 7 дней. Две целевые линии вместо одной:
+ * норма натощак и норма через два часа после еды — это разные пороги, и без обеих
+ * график вводил бы в заблуждение.
+ */
+export function GlucoseChart({
+  readings,
+  targets,
+}: {
+  readings: GlucoseReading[]
+  targets: GlucoseTargets
+}) {
+  const [ref, width] = useWidth<HTMLDivElement>()
+  const [hover, setHover] = useState<{ x: number; y: number; reading: GlucoseReading } | null>(null)
+
+  const height = 250
+  const pad = { top: 16, right: 42, bottom: 30, left: 40 }
+  const plotW = width - pad.left - pad.right
+  const plotH = height - pad.top - pad.bottom
+
+  const model = useMemo(() => {
+    if (readings.length === 0) return null
+    const daily = dailyGlucose(readings)
+    const trend = glucoseMovingAverage(daily, 7)
+    const times = readings.map((r) => r.ts)
+    const tMin = Math.min(...times)
+    const span = Math.max(...times) - tMin || 86_400_000
+    const values = [...readings.map((r) => r.mmol), targets.low, targets.postMealMax]
+    const yMin = Math.max(0, Math.floor(Math.min(...values) - 1))
+    const yMax = Math.ceil(Math.max(...values) + 1)
+    return { daily, trend, tMin, span, yMin, yMax }
+  }, [readings, targets])
+
+  if (!model) return <Empty text="Нет замеров сахара за выбранный период" />
+
+  const x = (ts: number) => pad.left + ((ts - model.tMin) / model.span) * plotW
+  const y = (value: number) => pad.top + plotH - ((value - model.yMin) / (model.yMax - model.yMin)) * plotH
+
+  const onMove = (event: React.PointerEvent<SVGRectElement>) => {
+    const box = event.currentTarget.getBoundingClientRect()
+    const px = event.clientX - box.left + pad.left
+    let nearest = readings[0]
+    let best = Infinity
+    for (const reading of readings) {
+      const distance = Math.abs(x(reading.ts) - px)
+      if (distance < best) {
+        best = distance
+        nearest = reading
+      }
+    }
+    setHover({ x: x(nearest.ts), y: y(nearest.mmol), reading: nearest })
+  }
+
+  const path = model.trend.map((p, i) => `${i ? 'L' : 'M'}${x(p.ts).toFixed(1)},${y(p.mmol).toFixed(1)}`).join(' ')
+  const last = model.trend[model.trend.length - 1]
+  const dateTicks = (width < 520 ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1]).map((f) => model.tMin + f * model.span)
+
+  const guides = [
+    { value: targets.postMealMax, label: `после еды ниже ${targets.postMealMax.toFixed(1)}` },
+    { value: targets.fastingMax, label: `натощак ниже ${targets.fastingMax.toFixed(1)}` },
+    { value: targets.low, label: `низкий ниже ${targets.low.toFixed(1)}` },
+  ]
+
+  return (
+    <div className="chart" ref={ref}>
+      <svg height={height} role="img" aria-label="График уровня сахара по времени">
+        {yTicks(model.yMin, model.yMax, model.yMax - model.yMin > 14 ? 5 : 2).map((tick) => (
+          <g key={tick}>
+            <line x1={pad.left} x2={pad.left + plotW} y1={y(tick)} y2={y(tick)} stroke="var(--grid)" strokeWidth="1" />
+            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="12" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {tick}
+            </text>
+          </g>
+        ))}
+
+        {dateTicks.map((ts, i) => (
+          <text
+            key={i}
+            x={x(ts)}
+            y={height - 8}
+            textAnchor={i === 0 ? 'start' : i === dateTicks.length - 1 ? 'end' : 'middle'}
+            fontSize="12"
+            fill="var(--text-muted)"
+          >
+            {SHORT_DATE.format(ts)}
+          </text>
+        ))}
+
+        {guides.map((guide) => (
+          <g key={guide.label}>
+            <line
+              x1={pad.left}
+              x2={pad.left + plotW}
+              y1={y(guide.value)}
+              y2={y(guide.value)}
+              stroke="var(--series-bpm)"
+              strokeWidth="1"
+              opacity="0.4"
+            />
+            <text x={pad.left + 4} y={y(guide.value) - 5} fontSize="11" fill="var(--text-muted)">
+              {guide.label}
+            </text>
+          </g>
+        ))}
+
+        {readings.map((reading) => (
+          <circle key={reading.id} cx={x(reading.ts)} cy={y(reading.mmol)} r="3" fill="var(--series-bpm)" opacity="0.45" />
+        ))}
+
+        {model.trend.length > 1 && (
+          <path d={path} fill="none" stroke="var(--series-bpm)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        )}
+        {last && (
+          <>
+            <circle cx={x(last.ts)} cy={y(last.mmol)} r="4.5" fill="var(--series-bpm)" stroke="var(--surface)" strokeWidth="2" />
+            <text
+              x={x(last.ts) + 9}
+              y={y(last.mmol) + 5}
+              fontSize="13"
+              fontWeight="600"
+              fill="var(--text-primary)"
+              style={{ fontVariantNumeric: 'tabular-nums' }}
+            >
+              {last.mmol.toFixed(1)}
+            </text>
+          </>
+        )}
+
+        {hover && <line x1={hover.x} x2={hover.x} y1={pad.top} y2={pad.top + plotH} stroke="var(--axis)" strokeWidth="1" />}
+
+        <rect
+          x={pad.left}
+          y={pad.top}
+          width={Math.max(plotW, 0)}
+          height={plotH}
+          fill="transparent"
+          onPointerMove={onMove}
+          onPointerLeave={() => setHover(null)}
+          style={{ touchAction: 'pan-y' }}
+        />
+      </svg>
+
+      {hover && (
+        <div
+          className="chart__tooltip"
+          style={{ left: Math.min(Math.max(hover.x - 60, 0), Math.max(width - 170, 0)), top: Math.max(hover.y - 76, 0) }}
+        >
+          <div className="muted">{FULL_DATE.format(hover.reading.ts)}</div>
+          <div>
+            <b>{hover.reading.mmol.toFixed(1)}</b> ммоль/л
+          </div>
+          <div className="muted">{GLUCOSE_CONTEXT_LABELS[hover.reading.context]}</div>
+        </div>
+      )}
     </div>
   )
 }

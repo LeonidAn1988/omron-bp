@@ -1,4 +1,4 @@
-import type { Reading } from '../types'
+import type { BpReading } from '../types'
 import type { Summary as SummaryData } from '../logic/stats'
 import { alertFor, classify } from '../logic/classify'
 import { Banner, CategoryBadge } from './bits'
@@ -6,7 +6,7 @@ import { Banner, CategoryBadge } from './bits'
 const FULL_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
 
 /** Предупреждение по последнему измерению — самое срочное, что приложение может сказать. */
-export function LatestAlert({ latest }: { latest: Reading | null }) {
+export function LatestAlert({ latest }: { latest: BpReading | null }) {
   if (!latest) return null
   const alert = alertFor(latest.sys, latest.dia)
   if (!alert) return null

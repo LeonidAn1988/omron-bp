@@ -76,10 +76,14 @@ export function Field({ label, children }: { label: string; children: ReactNode 
  * Плавное раскрытие вместо мгновенного появления.
  * Анимируется grid-template-rows, а не height — содержимое не прыгает и
  * не нужно знать его высоту заранее.
+ *
+ * inert обязателен: нулевая высота с overflow: hidden прячет содержимое только
+ * визуально, а скринридер продолжал бы зачитывать свёрнутые баннеры, и в них же
+ * оставались бы досягаемые с клавиатуры кнопки.
  */
 export function Reveal({ open, children }: { open: boolean; children: ReactNode }) {
   return (
-    <div className="reveal" data-open={open}>
+    <div className="reveal" data-open={open} inert={!open}>
       <div>{children}</div>
     </div>
   )

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Reading } from '../types'
+import type { BpReading } from '../types'
 import { readingId } from '../db/store'
 import {
   downloadRecords,
@@ -19,9 +19,10 @@ import { download } from '../logic/io'
 const FULL_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const DAY = 86_400_000
 
-function toReading(record: DeviceRecord): Reading {
+function toReading(record: DeviceRecord): BpReading {
   const ts = record.date.getTime()
   return {
+    kind: 'bp',
     id: readingId(record.user, ts),
     ts,
     sys: record.sys,
@@ -49,7 +50,7 @@ export function Sync({
   onGoManual,
 }: {
   pairingKey: string
-  onImport: (readings: Reading[]) => Promise<number>
+  onImport: (readings: BpReading[]) => Promise<number>
   onGoManual: () => void
 }) {
   const { lines, log, clear } = useBleLog()

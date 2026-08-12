@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { Reading, Settings as SettingsData } from '../types'
+import type { Measurement, Settings as SettingsData } from '../types'
 import { DEFAULT_PAIRING_KEY } from '../ble/session'
 import { download, parseImportFile, toCsv, toJson } from '../logic/io'
 import { Banner, Field } from './bits'
@@ -9,15 +9,15 @@ const today = () => new Date().toISOString().slice(0, 10)
 export function Settings({
   settings,
   onChange,
-  readings,
+  measurements,
   onImport,
   onClearAll,
   showUserPicker,
 }: {
   settings: SettingsData
   onChange: (next: SettingsData) => void
-  readings: Reading[]
-  onImport: (readings: Reading[]) => Promise<number>
+  measurements: Measurement[]
+  onImport: (measurements: Measurement[]) => Promise<number>
   onClearAll: () => Promise<void>
   showUserPicker: boolean
 }) {
@@ -32,7 +32,7 @@ export function Settings({
     event.target.value = ''
     if (!file) return
     try {
-      const { readings: parsed, skipped } = parseImportFile(file.name, await file.text())
+      const { measurements: parsed, skipped } = parseImportFile(file.name, await file.text())
       const added = await onImport(parsed)
       setMessage({
         tone: 'good',
@@ -110,15 +110,66 @@ export function Settings({
 
       <div className="card">
         <div className="card__head">
+          <h2>Дневник сахара</h2>
+          <label className="badge">
+            <input
+              type="checkbox"
+              checked={settings.trackGlucose}
+              onChange={(e) => patch({ trackGlucose: e.target.checked })}
+            />
+            вести
+          </label>
+        </div>
+
+        {settings.trackGlucose ? (
+          <>
+            <div className="grid grid--two">
+              <Field label="Норма натощак и до еды, ммоль/л">
+                <input
+                  inputMode="decimal"
+                  value={settings.glucoseFastingMax}
+                  onChange={(e) => patch({ glucoseFastingMax: Number(e.target.value.replace(',', '.')) || 7 })}
+                />
+              </Field>
+              <Field label="Норма через 2 часа после еды, ммоль/л">
+                <input
+                  inputMode="decimal"
+                  value={settings.glucosePostMealMax}
+                  onChange={(e) => patch({ glucosePostMealMax: Number(e.target.value.replace(',', '.')) || 10 })}
+                />
+              </Field>
+              <Field label="Порог низкого сахара, ммоль/л">
+                <input
+                  inputMode="decimal"
+                  value={settings.glucoseLow}
+                  onChange={(e) => patch({ glucoseLow: Number(e.target.value.replace(',', '.')) || 3.9 })}
+                />
+              </Field>
+            </div>
+            <div className="muted" style={{ marginTop: 10 }}>
+              Значения по умолчанию — общие ориентиры. Цели при диабете назначает врач индивидуально, и они могут
+              отличаться; поставьте те, что назвал ваш.
+            </div>
+          </>
+        ) : (
+          <div className="muted">
+            Выключен. Включите, если ведёте ещё и уровень глюкозы — он появится рядом с давлением и попадёт в отчёт для
+            врача. Уже внесённые замеры при выключении не удаляются.
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="card__head">
           <h2>Данные</h2>
-          <span className="muted">всего измерений: {readings.length}</span>
+          <span className="muted">всего записей: {measurements.length}</span>
         </div>
 
         <div className="row">
-          <button className="btn" onClick={() => download(`davlenie-${today()}.csv`, toCsv(readings), 'text/csv')} disabled={!readings.length}>
+          <button className="btn" onClick={() => download(`davlenie-${today()}.csv`, toCsv(measurements), 'text/csv')} disabled={!measurements.length}>
             Экспорт CSV
           </button>
-          <button className="btn" onClick={() => download(`davlenie-${today()}.json`, toJson(readings), 'application/json')} disabled={!readings.length}>
+          <button className="btn" onClick={() => download(`davlenie-${today()}.json`, toJson(measurements), 'application/json')} disabled={!measurements.length}>
             Резервная копия JSON
           </button>
           <button className="btn" onClick={() => fileRef.current?.click()}>
@@ -158,7 +209,7 @@ export function Settings({
             </button>
           </div>
         ) : (
-          <button className="btn btn--danger btn--sm" onClick={() => setConfirmClear(true)} disabled={!readings.length}>
+          <button className="btn btn--danger btn--sm" onClick={() => setConfirmClear(true)} disabled={!measurements.length}>
             Очистить базу
           </button>
         )}

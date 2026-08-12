@@ -1,16 +1,29 @@
-import type { Reading } from '../types'
-import { PERIODS, type PeriodKey, type Summary } from '../logic/stats'
-import { DAY_PART_LABELS, classify, type DayPart } from '../logic/classify'
+import { GLUCOSE_CONTEXT_LABELS, type BpReading, type GlucoseContext, type GlucoseReading } from '../types'
+import { PERIODS, type GlucoseSummary, type PeriodKey, type Summary } from '../logic/stats'
+import { DAY_PART_LABELS, classify, classifyGlucose, glucoseCeiling, type DayPart, type GlucoseTargets } from '../logic/classify'
 import { Readings } from './Readings'
+import { GlucoseList } from './Glucose'
 import { CategoryBadge } from './bits'
 
 const DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
-
 const DAY_PART_ORDER: DayPart[] = ['morning', 'day', 'evening', 'night']
+const GLUCOSE_ORDER: GlucoseContext[] = ['fasting', 'before-meal', 'after-meal', 'bedtime', 'night']
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <tr>
+      <td style={{ color: 'var(--text-muted)' }}>{label}</td>
+      <td className="wrap">{children}</td>
+    </tr>
+  )
+}
 
 export function Report({
   readings,
   summary,
+  glucoseReadings,
+  glucoseSummary,
+  glucoseTargets,
   patient,
   periodLabel,
   targetSys,
@@ -18,8 +31,11 @@ export function Report({
   period,
   onPeriodChange,
 }: {
-  readings: Reading[]
+  readings: BpReading[]
   summary: Summary | null
+  glucoseReadings: GlucoseReading[]
+  glucoseSummary: GlucoseSummary | null
+  glucoseTargets: GlucoseTargets
   patient: string
   periodLabel: string
   targetSys: number
@@ -28,7 +44,8 @@ export function Report({
   onPeriodChange: (next: PeriodKey) => void
 }) {
   // Период — орган управления отчётом, поэтому стоит рядом с кнопкой печати,
-  // а не в общей шапке приложения.
+  // а не в общей шапке приложения. Ограничений по периоду нет: «Всё время»
+  // доступно всегда и бесплатно.
   const picker = (
     <div className="segmented no-print" role="group" aria-label="Период отчёта">
       {PERIODS.map((item) => (
@@ -39,17 +56,16 @@ export function Report({
     </div>
   )
 
-  if (!summary) {
+  if (!summary && !glucoseSummary) {
     return (
       <div className="stack">
         <div className="row no-print">{picker}</div>
-        <div className="chart__empty">За выбранный период нет измерений — отчёт формировать не из чего.</div>
+        <div className="chart__empty">За выбранный период нет записей — отчёт формировать не из чего.</div>
       </div>
     )
   }
 
-  const avgSys = Math.round(summary.avgSys)
-  const avgDia = Math.round(summary.avgDia)
+  const span = summary ?? glucoseSummary!
 
   return (
     <div className="stack">
@@ -65,111 +81,180 @@ export function Report({
 
       <div className="card">
         <div className="card__head">
-          <h2>Дневник артериального давления</h2>
+          <h2>Дневник самоконтроля</h2>
           <span className="muted">составлен {DATE.format(Date.now())}</span>
         </div>
-
         <table style={{ maxWidth: 560 }}>
           <tbody>
-            <tr>
-              <td style={{ color: 'var(--text-muted)' }}>Кого касается</td>
-              <td className="wrap">{patient}</td>
-            </tr>
-            <tr>
-              <td style={{ color: 'var(--text-muted)' }}>Период</td>
-              <td className="wrap">
-                {periodLabel.toLowerCase()} — с {DATE.format(summary.firstTs)} по {DATE.format(summary.lastTs)}
-              </td>
-            </tr>
-            <tr>
-              <td style={{ color: 'var(--text-muted)' }}>Измерений</td>
-              <td className="wrap">{summary.count}</td>
-            </tr>
-            <tr>
-              <td style={{ color: 'var(--text-muted)' }}>Среднее давление</td>
-              <td className="wrap">
-                <b>
-                  {avgSys}/{avgDia}
-                </b>{' '}
-                мм рт. ст. · <CategoryBadge sys={avgSys} dia={avgDia} />
-              </td>
-            </tr>
-            <tr>
-              <td style={{ color: 'var(--text-muted)' }}>Средний пульс</td>
-              <td className="wrap">{summary.avgBpm ? `${Math.round(summary.avgBpm)} уд/мин` : 'нет данных'}</td>
-            </tr>
-            <tr>
-              <td style={{ color: 'var(--text-muted)' }}>Разброс</td>
-              <td className="wrap">
-                систолическое ±{summary.sdSys.toFixed(1)} (от {summary.minSys} до {summary.maxSys}), диастолическое ±
-                {summary.sdDia.toFixed(1)} (от {summary.minDia} до {summary.maxDia})
-              </td>
-            </tr>
-            <tr>
-              <td style={{ color: 'var(--text-muted)' }}>В целевом диапазоне</td>
-              <td className="wrap">
-                {Math.round(summary.withinTarget * 100)}% измерений ниже {targetSys}/{targetDia}
-              </td>
-            </tr>
-            <tr>
-              <td style={{ color: 'var(--text-muted)' }}>Отметки прибора</td>
-              <td className="wrap">
-                нерегулярное сердцебиение — {summary.ihbCount}, движение при измерении — {summary.movCount}
-              </td>
-            </tr>
+            <Row label="Кого касается">{patient}</Row>
+            <Row label="Период">
+              {periodLabel.toLowerCase()} — с {DATE.format(span.firstTs)} по {DATE.format(span.lastTs)}
+            </Row>
           </tbody>
         </table>
       </div>
 
-      <div className="card">
-        <div className="card__head">
-          <h2>Средние по времени суток</h2>
-        </div>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Время суток</th>
-                <th>Измерений</th>
-                <th>САД/ДАД</th>
-                <th>Категория</th>
-                <th>Пульс</th>
-              </tr>
-            </thead>
-            <tbody>
-              {DAY_PART_ORDER.filter((part) => summary.byDayPart[part]).map((part) => {
-                const agg = summary.byDayPart[part]!
-                const sys = Math.round(agg.sys)
-                const dia = Math.round(agg.dia)
-                return (
-                  <tr key={part}>
-                    <td>{DAY_PART_LABELS[part]}</td>
-                    <td>{agg.count}</td>
-                    <td className="num">
-                      {sys}/{dia}
-                    </td>
-                    <td className="wrap">{classify(sys, dia).label}</td>
-                    <td>{agg.bpm ? Math.round(agg.bpm) : '—'}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {summary && (
+        <>
+          <div className="card">
+            <div className="card__head">
+              <h2>Артериальное давление</h2>
+            </div>
+            <table style={{ maxWidth: 560 }}>
+              <tbody>
+                <Row label="Измерений">{summary.count}</Row>
+                <Row label="Среднее давление">
+                  <b>
+                    {Math.round(summary.avgSys)}/{Math.round(summary.avgDia)}
+                  </b>{' '}
+                  мм рт. ст. · <CategoryBadge sys={Math.round(summary.avgSys)} dia={Math.round(summary.avgDia)} />
+                </Row>
+                <Row label="Средний пульс">
+                  {summary.avgBpm ? `${Math.round(summary.avgBpm)} уд/мин` : 'нет данных'}
+                </Row>
+                <Row label="Разброс">
+                  систолическое ±{summary.sdSys.toFixed(1)} (от {summary.minSys} до {summary.maxSys}), диастолическое ±
+                  {summary.sdDia.toFixed(1)} (от {summary.minDia} до {summary.maxDia})
+                </Row>
+                <Row label="В целевом диапазоне">
+                  {Math.round(summary.withinTarget * 100)}% измерений ниже {targetSys}/{targetDia}
+                </Row>
+                <Row label="Отметки прибора">
+                  нерегулярное сердцебиение — {summary.ihbCount}, движение при измерении — {summary.movCount}
+                </Row>
+              </tbody>
+            </table>
+          </div>
 
-      <div className="card">
-        <div className="card__head">
-          <h2>Все измерения за период</h2>
+          <div className="card">
+            <div className="card__head">
+              <h2>Давление по времени суток</h2>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Время суток</th>
+                    <th>Измерений</th>
+                    <th>САД/ДАД</th>
+                    <th>Категория</th>
+                    <th>Пульс</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {DAY_PART_ORDER.filter((part) => summary.byDayPart[part]).map((part) => {
+                    const agg = summary.byDayPart[part]!
+                    const sys = Math.round(agg.sys)
+                    const dia = Math.round(agg.dia)
+                    return (
+                      <tr key={part}>
+                        <td>{DAY_PART_LABELS[part]}</td>
+                        <td>{agg.count}</td>
+                        <td className="num">
+                          {sys}/{dia}
+                        </td>
+                        <td className="wrap">{classify(sys, dia).label}</td>
+                        <td>{agg.bpm ? Math.round(agg.bpm) : '—'}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {glucoseSummary && (
+        <>
+          <div className="card">
+            <div className="card__head">
+              <h2>Уровень глюкозы крови</h2>
+            </div>
+            <table style={{ maxWidth: 560 }}>
+              <tbody>
+                <Row label="Замеров">{glucoseSummary.count}</Row>
+                <Row label="Средний сахар">
+                  <b>{glucoseSummary.avg.toFixed(1)}</b> ммоль/л (от {glucoseSummary.min.toFixed(1)} до{' '}
+                  {glucoseSummary.max.toFixed(1)})
+                </Row>
+                <Row label="Разброс">±{glucoseSummary.sd.toFixed(1)} ммоль/л</Row>
+                <Row label="В целевом диапазоне">
+                  {Math.round(glucoseSummary.withinTarget * 100)}% замеров — с учётом момента замера: ниже{' '}
+                  {glucoseTargets.fastingMax.toFixed(1)} натощак и {glucoseTargets.postMealMax.toFixed(1)} через два часа
+                  после еды
+                </Row>
+                <Row label="Ниже порога">
+                  {glucoseSummary.lowCount} раз ниже {glucoseTargets.low.toFixed(1)} ммоль/л
+                </Row>
+                <Row label="Выше цели">{glucoseSummary.highCount} раз</Row>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="card">
+            <div className="card__head">
+              <h2>Сахар по моменту замера</h2>
+            </div>
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Момент замера</th>
+                    <th>Замеров</th>
+                    <th>Средний</th>
+                    <th>Разброс</th>
+                    <th>Оценка среднего</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {GLUCOSE_ORDER.filter((context) => glucoseSummary.byContext[context]).map((context) => {
+                    const stats = glucoseSummary.byContext[context]!
+                    return (
+                      <tr key={context}>
+                        <td className="wrap">{GLUCOSE_CONTEXT_LABELS[context]}</td>
+                        <td>{stats.count}</td>
+                        <td className="num">{stats.avg.toFixed(1)}</td>
+                        <td>±{stats.sd.toFixed(1)}</td>
+                        <td className="wrap">
+                          {classifyGlucose(stats.avg, context, glucoseTargets).label} при норме ниже{' '}
+                          {glucoseCeiling(context, glucoseTargets).toFixed(1)}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {summary && (
+        <div className="card">
+          <div className="card__head">
+            <h2>Все измерения давления за период</h2>
+          </div>
+          <Readings readings={readings} />
         </div>
-        <Readings readings={readings} />
-      </div>
+      )}
+
+      {glucoseSummary && (
+        <div className="card">
+          <div className="card__head">
+            <h2>Все замеры сахара за период</h2>
+          </div>
+          <GlucoseList readings={glucoseReadings} targets={glucoseTargets} />
+        </div>
+      )}
 
       <div className="muted" style={{ lineHeight: 1.6 }}>
-        Данные выгружены из тонометра Omron RS7 Intelli IT (HEM-6232T) и дополнены записями, внесёнными вручную. Даты и
-        время соответствуют часам прибора. Категории приведены по классификации ESC/ESH для измерений в кабинете;
-        порогом нормы для домашних измерений считается {targetSys}/{targetDia} мм рт. ст. Документ подготовлен
-        неаттестованным приложением, не является медицинским заключением и не заменяет осмотр врача.
+        Данные давления выгружены из тонометра Omron RS7 Intelli IT (HEM-6232T) и дополнены записями, внесёнными
+        вручную; даты и время соответствуют часам прибора. Категории давления приведены по классификации ESC/ESH для
+        измерений в кабинете, порогом нормы для домашних измерений принято {targetSys}/{targetDia} мм рт. ст. Оценка
+        сахара дана относительно целевых значений {glucoseTargets.fastingMax.toFixed(1)} ммоль/л натощак и{' '}
+        {glucoseTargets.postMealMax.toFixed(1)} ммоль/л через два часа после еды. Документ подготовлен неаттестованным
+        приложением, не является медицинским заключением и не заменяет осмотр врача.
       </div>
     </div>
   )

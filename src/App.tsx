@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Reading, Settings as SettingsData } from './types'
+import { isBp, isGlucose, type Measurement, type Settings as SettingsData } from './types'
 import {
   DEFAULT_SETTINGS,
-  addNewReadings,
-  clearReadings,
-  deleteReading,
-  getAllReadings,
+  addNewMeasurements,
+  clearMeasurements,
+  deleteMeasurement,
+  getAllMeasurements,
   loadSettings,
-  putReadings,
+  putMeasurements,
   saveSettings,
 } from './db/store'
-import { PERIODS, filterByPeriod, summarize, type PeriodKey } from './logic/stats'
-import { DayPartChart, PulseChart, TrendChart } from './ui/Charts'
+import { PERIODS, filterByPeriod, summarize, summarizeGlucose, type PeriodKey } from './logic/stats'
+import type { GlucoseTargets } from './logic/classify'
+import { DayPartChart, GlucoseChart, PulseChart, TrendChart } from './ui/Charts'
 import { LatestAlert, SummaryTiles } from './ui/Summary'
+import { GlucoseEntry, GlucoseList, GlucoseTiles } from './ui/Glucose'
 import { Readings } from './ui/Readings'
 import { Entry } from './ui/Entry'
 import { Sync } from './ui/Sync'
@@ -30,8 +32,8 @@ const TABS = [
 ] as const
 
 type TabKey = (typeof TABS)[number]['key']
+type DiaryKey = 'bp' | 'glucose'
 
-/** Период фильтрует данные, поэтому живёт рядом с ними, а не в общей шапке. */
 function PeriodPicker({ value, onChange }: { value: PeriodKey; onChange: (next: PeriodKey) => void }) {
   return (
     <div className="segmented" role="group" aria-label="Период">
@@ -45,37 +47,38 @@ function PeriodPicker({ value, onChange }: { value: PeriodKey; onChange: (next: 
 }
 
 export default function App() {
-  const [readings, setReadings] = useState<Reading[]>([])
+  const [measurements, setMeasurements] = useState<Measurement[]>([])
   const [settings, setSettings] = useState<SettingsData>(DEFAULT_SETTINGS)
   const [period, setPeriod] = useState<PeriodKey>('30d')
   const [tab, setTab] = useState<TabKey>('overview')
+  const [diary, setDiary] = useState<DiaryKey>('bp')
   const [ready, setReady] = useState(false)
-  /** Последняя удалённая запись — чтобы удаление можно было отменить. */
-  const [undo, setUndo] = useState<Reading | null>(null)
+  const [undo, setUndo] = useState<Measurement | null>(null)
   const undoTimer = useRef<number | undefined>(undefined)
 
   useEffect(() => {
-    Promise.all([getAllReadings(), loadSettings()]).then(([stored, loaded]) => {
-      setReadings(stored)
-      setSettings(loaded)
+    Promise.all([getAllMeasurements(), loadSettings()]).then(([stored, loaded]) => {
+      setMeasurements(stored)
+      // Дневник сахара включается сам, если данные по нему уже есть.
+      setSettings(loaded.trackGlucose || stored.some(isGlucose) ? { ...loaded, trackGlucose: true } : loaded)
       setReady(true)
     })
     return () => window.clearTimeout(undoTimer.current)
   }, [])
 
-  const refresh = useCallback(async () => setReadings(await getAllReadings()), [])
+  const refresh = useCallback(async () => setMeasurements(await getAllMeasurements()), [])
 
   const handleAdd = useCallback(
-    async (reading: Reading) => {
-      await putReadings([reading])
+    async (item: Measurement) => {
+      await putMeasurements([item])
       await refresh()
     },
     [refresh],
   )
 
   const handleImport = useCallback(
-    async (incoming: Reading[]) => {
-      const added = await addNewReadings(incoming)
+    async (incoming: Measurement[]) => {
+      const added = await addNewMeasurements(incoming)
       await refresh()
       return added.length
     },
@@ -84,26 +87,25 @@ export default function App() {
 
   const handleDelete = useCallback(
     async (id: string) => {
-      const victim = readings.find((r) => r.id === id) ?? null
-      await deleteReading(id)
+      const victim = measurements.find((m) => m.id === id) ?? null
+      await deleteMeasurement(id)
       await refresh()
       setUndo(victim)
       window.clearTimeout(undoTimer.current)
       undoTimer.current = window.setTimeout(() => setUndo(null), 8000)
     },
-    [readings, refresh],
+    [measurements, refresh],
   )
 
   const handleUndo = useCallback(async () => {
     if (!undo) return
-    // Идентификатор детерминирован, поэтому возврат не создаёт дубля.
-    await putReadings([undo])
+    await putMeasurements([undo])
     await refresh()
     setUndo(null)
   }, [undo, refresh])
 
   const handleClearAll = useCallback(async () => {
-    await clearReadings()
+    await clearMeasurements()
     await refresh()
     setUndo(null)
   }, [refresh])
@@ -113,15 +115,31 @@ export default function App() {
     void saveSettings(next)
   }, [])
 
-  const userReadings = useMemo(() => readings.filter((r) => r.user === settings.activeUser), [readings, settings.activeUser])
-  const scoped = useMemo(() => filterByPeriod(userReadings, period), [userReadings, period])
-  const summary = useMemo(
-    () => summarize(scoped, settings.targetSys, settings.targetDia),
-    [scoped, settings.targetSys, settings.targetDia],
+  const glucoseTargets: GlucoseTargets = useMemo(
+    () => ({
+      fastingMax: settings.glucoseFastingMax,
+      postMealMax: settings.glucosePostMealMax,
+      low: settings.glucoseLow,
+    }),
+    [settings.glucoseFastingMax, settings.glucosePostMealMax, settings.glucoseLow],
   )
-  const latest = userReadings.length ? userReadings[userReadings.length - 1] : null
 
-  const hasSecondUser = useMemo(() => readings.some((r) => r.user !== 1), [readings])
+  const mine = useMemo(() => measurements.filter((m) => m.user === settings.activeUser), [measurements, settings.activeUser])
+  const bpAll = useMemo(() => mine.filter(isBp), [mine])
+  const glucoseAll = useMemo(() => mine.filter(isGlucose), [mine])
+
+  const bpScoped = useMemo(() => filterByPeriod(bpAll, period), [bpAll, period])
+  const glucoseScoped = useMemo(() => filterByPeriod(glucoseAll, period), [glucoseAll, period])
+
+  const summary = useMemo(
+    () => summarize(bpScoped, settings.targetSys, settings.targetDia),
+    [bpScoped, settings.targetSys, settings.targetDia],
+  )
+  const glucoseSummary = useMemo(() => summarizeGlucose(glucoseScoped, glucoseTargets), [glucoseScoped, glucoseTargets])
+
+  const latestBp = bpAll.length ? bpAll[bpAll.length - 1] : null
+  const hasSecondUser = useMemo(() => measurements.some((m) => m.user !== 1), [measurements])
+  const showGlucose = settings.trackGlucose || glucoseAll.length > 0
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? ''
   const patientName = settings.userNames[settings.activeUser] ?? `Пользователь ${settings.activeUser}`
 
@@ -133,18 +151,41 @@ export default function App() {
     )
   }
 
+  const undoBanner = (
+    <Reveal open={undo !== null}>
+      <div className="no-print" style={{ paddingBottom: 'var(--space-3)' }}>
+        <Banner tone="info">
+          <div className="row" style={{ justifyContent: 'space-between', width: '100%' }}>
+            <span>Запись удалена.</span>
+            <button className="btn" onClick={handleUndo}>
+              Вернуть
+            </button>
+          </div>
+        </Banner>
+      </div>
+    </Reveal>
+  )
+
+  const diaryPicker = showGlucose && (
+    <div className="segmented no-print" role="group" aria-label="Дневник">
+      <button aria-pressed={diary === 'bp'} onClick={() => setDiary('bp')}>
+        Давление
+      </button>
+      <button aria-pressed={diary === 'glucose'} onClick={() => setDiary('glucose')}>
+        Сахар
+      </button>
+    </div>
+  )
+
   return (
     <div className="app">
       <header className="topbar">
         <div className="topbar__title">
-          <h1>Дневник давления</h1>
-          <span className="topbar__sub">Omron RS7 Intelli IT</span>
+          <h1>Дневник здоровья</h1>
+          <span className="topbar__sub">давление и сахар</span>
         </div>
       </header>
 
-      {/* Обычная навигация, а не ARIA-паттерн вкладок: полный tablist требует
-          tabpanel, aria-controls и управления стрелками — недостроенный он
-          путает скринридер сильнее, чем его отсутствие. */}
       <nav className="tabs" aria-label="Разделы дневника">
         {TABS.map((item) => (
           <button
@@ -162,9 +203,9 @@ export default function App() {
 
       {tab === 'overview' && (
         <div className="stack">
-          <LatestAlert latest={latest} />
+          <LatestAlert latest={latestBp} />
 
-          {readings.length === 0 ? (
+          {measurements.length === 0 ? (
             <Banner tone="info">
               <b>Дневник пока пуст.</b>
               <div style={{ marginTop: 4 }}>
@@ -178,11 +219,7 @@ export default function App() {
                 <PeriodPicker value={period} onChange={setPeriod} />
               </div>
 
-              {!summary ? (
-                <Banner tone="info">
-                  За выбранный период измерений нет. Возьмите период пошире — например, «Всё время».
-                </Banner>
-              ) : (
+              {summary && (
                 <>
                   <SummaryTiles summary={summary} targetSys={settings.targetSys} targetDia={settings.targetDia} />
 
@@ -191,7 +228,7 @@ export default function App() {
                       <h2>Динамика давления</h2>
                       <span className="muted">точки — измерения, линия — среднее за 7 дней</span>
                     </div>
-                    <TrendChart readings={scoped} targetSys={settings.targetSys} targetDia={settings.targetDia} />
+                    <TrendChart readings={bpScoped} targetSys={settings.targetSys} targetDia={settings.targetDia} />
                   </div>
 
                   <div className="grid grid--two">
@@ -199,17 +236,36 @@ export default function App() {
                       <div className="card__head">
                         <h2>По времени суток</h2>
                       </div>
-                      <DayPartChart readings={scoped} />
+                      <DayPartChart readings={bpScoped} />
                     </div>
                     <div className="card">
                       <div className="card__head">
                         <h2>Пульс</h2>
                         <span className="muted">ударов в минуту</span>
                       </div>
-                      <PulseChart readings={scoped} />
+                      <PulseChart readings={bpScoped} />
                     </div>
                   </div>
                 </>
+              )}
+
+              {glucoseSummary && (
+                <>
+                  <GlucoseTiles summary={glucoseSummary} targets={glucoseTargets} />
+                  <div className="card">
+                    <div className="card__head">
+                      <h2>Динамика сахара</h2>
+                      <span className="muted">ммоль/л, линия — среднее за 7 дней</span>
+                    </div>
+                    <GlucoseChart readings={glucoseScoped} targets={glucoseTargets} />
+                  </div>
+                </>
+              )}
+
+              {!summary && !glucoseSummary && (
+                <Banner tone="info">
+                  За выбранный период записей нет. Возьмите период пошире — например, «Всё время».
+                </Banner>
               )}
             </>
           )}
@@ -218,33 +274,64 @@ export default function App() {
 
       {tab === 'readings' && (
         <div className="stack">
-          <Entry user={settings.activeUser} onAdd={handleAdd} />
+          {diaryPicker && <div className="row">{diaryPicker}</div>}
 
-          <Reveal open={undo !== null}>
-            <div className="no-print" style={{ paddingBottom: 'var(--space-3)' }}>
-              <Banner tone="info">
-                <div className="row" style={{ justifyContent: 'space-between', width: '100%' }}>
-                  <span>Измерение удалено.</span>
-                  <button className="btn" onClick={handleUndo}>
-                    Вернуть
-                  </button>
+          {diary === 'bp' || !showGlucose ? (
+            <>
+              <Entry user={settings.activeUser} onAdd={handleAdd} />
+              {undoBanner}
+              <div className="card">
+                <div className="card__head">
+                  <h2>История давления</h2>
+                  <span className="muted">
+                    {bpScoped.length} из {bpAll.length}
+                  </span>
                 </div>
-              </Banner>
-            </div>
-          </Reveal>
+                <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }}>
+                  <PeriodPicker value={period} onChange={setPeriod} />
+                </div>
+                <Readings readings={bpScoped} onDelete={handleDelete} />
+              </div>
+            </>
+          ) : (
+            <>
+              <GlucoseEntry user={settings.activeUser} targets={glucoseTargets} onAdd={handleAdd} />
+              {undoBanner}
+              <div className="card">
+                <div className="card__head">
+                  <h2>История сахара</h2>
+                  <span className="muted">
+                    {glucoseScoped.length} из {glucoseAll.length}
+                  </span>
+                </div>
+                <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }}>
+                  <PeriodPicker value={period} onChange={setPeriod} />
+                </div>
+                <GlucoseList readings={glucoseScoped} targets={glucoseTargets} onDelete={handleDelete} />
+              </div>
+            </>
+          )}
 
-          <div className="card">
-            <div className="card__head">
-              <h2>История</h2>
-              <span className="muted">
-                {scoped.length} из {userReadings.length}
-              </span>
+          {!showGlucose && (
+            <div className="card no-print">
+              <div className="card__head">
+                <h2>Ведёте ещё и сахар?</h2>
+              </div>
+              <p style={{ margin: '0 0 var(--space-4)', color: 'var(--text-secondary)' }}>
+                Дневник глюкозы живёт рядом с дневником давления: те же графики, тот же отчёт для врача, общая шкала
+                времени. Включается одной кнопкой и так же выключается.
+              </p>
+              <button
+                className="btn btn--primary"
+                onClick={() => {
+                  updateSettings({ ...settings, trackGlucose: true })
+                  setDiary('glucose')
+                }}
+              >
+                Включить дневник сахара
+              </button>
             </div>
-            <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }}>
-              <PeriodPicker value={period} onChange={setPeriod} />
-            </div>
-            <Readings readings={scoped} onDelete={handleDelete} />
-          </div>
+          )}
         </div>
       )}
 
@@ -252,8 +339,11 @@ export default function App() {
 
       {tab === 'report' && (
         <Report
-          readings={scoped}
+          readings={bpScoped}
           summary={summary}
+          glucoseReadings={glucoseScoped}
+          glucoseSummary={glucoseSummary}
+          glucoseTargets={glucoseTargets}
           patient={patientName}
           periodLabel={periodLabel}
           targetSys={settings.targetSys}
@@ -267,7 +357,7 @@ export default function App() {
         <Settings
           settings={settings}
           onChange={updateSettings}
-          readings={readings}
+          measurements={measurements}
           onImport={handleImport}
           onClearAll={handleClearAll}
           showUserPicker={hasSecondUser}

@@ -1,5 +1,61 @@
-import type { Reading } from '../types'
-import { dayPart, isWithinTarget, type DayPart } from './classify'
+import type { BpReading, GlucoseContext, GlucoseReading } from '../types'
+import { dayPart, glucoseCeiling, isWithinTarget, type DayPart, type GlucoseTargets } from './classify'
+
+// ── общее ядро ─────────────────────────────────────────────────────────────
+
+const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length
+
+function sd(values: number[]): number {
+  if (values.length < 2) return 0
+  const m = mean(values)
+  return Math.sqrt(values.reduce((acc, v) => acc + (v - m) ** 2, 0) / (values.length - 1))
+}
+
+/** Описательная статистика одного числового ряда — общая для давления и сахара. */
+export interface Series {
+  count: number
+  avg: number
+  min: number
+  max: number
+  sd: number
+}
+
+export function describe(values: number[]): Series | null {
+  if (values.length === 0) return null
+  return { count: values.length, avg: mean(values), min: Math.min(...values), max: Math.max(...values), sd: sd(values) }
+}
+
+/** Группировка по календарным дням — база для линий тренда в обоих дневниках. */
+function byDay<T extends { ts: number }>(items: T[]): Map<number, T[]> {
+  const buckets = new Map<number, T[]>()
+  for (const item of items) {
+    const date = new Date(item.ts)
+    const key = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+    const bucket = buckets.get(key)
+    if (bucket) bucket.push(item)
+    else buckets.set(key, [item])
+  }
+  return buckets
+}
+
+export type PeriodKey = '7d' | '30d' | '90d' | 'all'
+
+export const PERIODS: { key: PeriodKey; label: string; days: number | null }[] = [
+  { key: '7d', label: '7 дней', days: 7 },
+  { key: '30d', label: '30 дней', days: 30 },
+  { key: '90d', label: '90 дней', days: 90 },
+  { key: 'all', label: 'Всё время', days: null },
+]
+
+/** Отчёт врачу период не ограничивает — «Всё время» всегда доступно. */
+export function filterByPeriod<T extends { ts: number }>(items: T[], period: PeriodKey): T[] {
+  const config = PERIODS.find((p) => p.key === period)
+  if (!config?.days) return items
+  const cutoff = Date.now() - config.days * 86_400_000
+  return items.filter((item) => item.ts >= cutoff)
+}
+
+// ── давление ───────────────────────────────────────────────────────────────
 
 export interface Aggregate {
   count: number
@@ -31,15 +87,7 @@ export interface Summary {
   lastTs: number
 }
 
-const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length
-
-function sd(values: number[]): number {
-  if (values.length < 2) return 0
-  const m = mean(values)
-  return Math.sqrt(values.reduce((acc, v) => acc + (v - m) ** 2, 0) / (values.length - 1))
-}
-
-function aggregate(readings: Reading[]): Aggregate {
+function aggregate(readings: BpReading[]): Aggregate {
   const pulses = readings.map((r) => r.bpm).filter((b): b is number => typeof b === 'number' && b > 0)
   return {
     count: readings.length,
@@ -49,11 +97,11 @@ function aggregate(readings: Reading[]): Aggregate {
   }
 }
 
-export function summarize(readings: Reading[], targetSys: number, targetDia: number): Summary | null {
+export function summarize(readings: BpReading[], targetSys: number, targetDia: number): Summary | null {
   if (readings.length === 0) return null
 
-  const sysValues = readings.map((r) => r.sys)
-  const diaValues = readings.map((r) => r.dia)
+  const sysStats = describe(readings.map((r) => r.sys))!
+  const diaStats = describe(readings.map((r) => r.dia))!
   const base = aggregate(readings)
 
   const byDayPart: Partial<Record<DayPart, Aggregate>> = {}
@@ -70,12 +118,12 @@ export function summarize(readings: Reading[], targetSys: number, targetDia: num
     avgSys: base.sys,
     avgDia: base.dia,
     avgBpm: base.bpm,
-    minSys: Math.min(...sysValues),
-    maxSys: Math.max(...sysValues),
-    minDia: Math.min(...diaValues),
-    maxDia: Math.max(...diaValues),
-    sdSys: sd(sysValues),
-    sdDia: sd(diaValues),
+    minSys: sysStats.min,
+    maxSys: sysStats.max,
+    minDia: diaStats.min,
+    maxDia: diaStats.max,
+    sdSys: sysStats.sd,
+    sdDia: diaStats.sd,
     withinTarget: readings.filter((r) => isWithinTarget(r.sys, r.dia, targetSys, targetDia)).length / readings.length,
     ihbCount: readings.filter((r) => r.ihb).length,
     movCount: readings.filter((r) => r.mov).length,
@@ -95,17 +143,8 @@ export interface DailyPoint {
   count: number
 }
 
-/** Средние по календарным дням — база для линии тренда. */
-export function dailyAverages(readings: Reading[]): DailyPoint[] {
-  const buckets = new Map<number, Reading[]>()
-  for (const reading of readings) {
-    const date = new Date(reading.ts)
-    const key = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
-    const bucket = buckets.get(key)
-    if (bucket) bucket.push(reading)
-    else buckets.set(key, [reading])
-  }
-  return [...buckets.entries()]
+export function dailyAverages(readings: BpReading[]): DailyPoint[] {
+  return [...byDay(readings).entries()]
     .map(([ts, group]) => {
       const agg = aggregate(group)
       return { ts, sys: agg.sys, dia: agg.dia, bpm: agg.bpm, count: agg.count }
@@ -118,26 +157,75 @@ export function movingAverage(points: DailyPoint[], windowDays = 7): { ts: numbe
   const span = windowDays * 86_400_000
   return points.map((point) => {
     const window = points.filter((p) => p.ts <= point.ts && p.ts > point.ts - span)
-    return {
-      ts: point.ts,
-      sys: mean(window.map((p) => p.sys)),
-      dia: mean(window.map((p) => p.dia)),
-    }
+    return { ts: point.ts, sys: mean(window.map((p) => p.sys)), dia: mean(window.map((p) => p.dia)) }
   })
 }
 
-export type PeriodKey = '7d' | '30d' | '90d' | 'all'
+// ── сахар ──────────────────────────────────────────────────────────────────
 
-export const PERIODS: { key: PeriodKey; label: string; days: number | null }[] = [
-  { key: '7d', label: '7 дней', days: 7 },
-  { key: '30d', label: '30 дней', days: 30 },
-  { key: '90d', label: '90 дней', days: 90 },
-  { key: 'all', label: 'Всё время', days: null },
-]
+export interface GlucoseSummary {
+  count: number
+  avg: number
+  min: number
+  max: number
+  sd: number
+  /** Доля замеров в целевом диапазоне с учётом момента замера, 0..1. */
+  withinTarget: number
+  /** Сколько раз сахар был ниже порога — самое важное число в диабетическом дневнике. */
+  lowCount: number
+  highCount: number
+  /** Средние по моменту замера: натощак, после еды и так далее. */
+  byContext: Partial<Record<GlucoseContext, Series>>
+  firstTs: number
+  lastTs: number
+}
 
-export function filterByPeriod(readings: Reading[], period: PeriodKey): Reading[] {
-  const config = PERIODS.find((p) => p.key === period)
-  if (!config?.days) return readings
-  const cutoff = Date.now() - config.days * 86_400_000
-  return readings.filter((r) => r.ts >= cutoff)
+export function summarizeGlucose(readings: GlucoseReading[], targets: GlucoseTargets): GlucoseSummary | null {
+  if (readings.length === 0) return null
+  const stats = describe(readings.map((r) => r.mmol))!
+
+  const byContext: Partial<Record<GlucoseContext, Series>> = {}
+  for (const context of ['fasting', 'before-meal', 'after-meal', 'bedtime', 'night'] as GlucoseContext[]) {
+    const subset = readings.filter((r) => r.context === context)
+    const described = describe(subset.map((r) => r.mmol))
+    if (described) byContext[context] = described
+  }
+
+  const withinTarget = readings.filter(
+    (r) => r.mmol >= targets.low && r.mmol < glucoseCeiling(r.context, targets),
+  ).length
+
+  return {
+    count: readings.length,
+    avg: stats.avg,
+    min: stats.min,
+    max: stats.max,
+    sd: stats.sd,
+    withinTarget: withinTarget / readings.length,
+    lowCount: readings.filter((r) => r.mmol < targets.low).length,
+    highCount: readings.filter((r) => r.mmol >= glucoseCeiling(r.context, targets)).length,
+    byContext,
+    firstTs: readings[0].ts,
+    lastTs: readings[readings.length - 1].ts,
+  }
+}
+
+export interface DailyGlucosePoint {
+  ts: number
+  mmol: number
+  count: number
+}
+
+export function dailyGlucose(readings: GlucoseReading[]): DailyGlucosePoint[] {
+  return [...byDay(readings).entries()]
+    .map(([ts, group]) => ({ ts, mmol: mean(group.map((r) => r.mmol)), count: group.length }))
+    .sort((a, b) => a.ts - b.ts)
+}
+
+export function glucoseMovingAverage(points: DailyGlucosePoint[], windowDays = 7): { ts: number; mmol: number }[] {
+  const span = windowDays * 86_400_000
+  return points.map((point) => {
+    const window = points.filter((p) => p.ts <= point.ts && p.ts > point.ts - span)
+    return { ts: point.ts, mmol: mean(window.map((p) => p.mmol)) }
+  })
 }

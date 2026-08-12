@@ -1,4 +1,4 @@
-import type { Reading } from '../types'
+import type { BpReading } from '../types'
 import { CategoryBadge } from './bits'
 
 const DATE_TIME = new Intl.DateTimeFormat('ru-RU', {
@@ -9,7 +9,7 @@ const DATE_TIME = new Intl.DateTimeFormat('ru-RU', {
   minute: '2-digit',
 })
 
-const SOURCE_LABELS: Record<Reading['source'], string> = {
+const SOURCE_LABELS: Record<BpReading['source'], string> = {
   device: 'с прибора',
   manual: 'вручную',
   import: 'из файла',
@@ -22,7 +22,7 @@ const ARM_LABELS: Record<string, string> = { left: 'левая рука', right:
  * Раскладку целиком берёт на себя CSS через data-col: разметка одна и та же,
  * поэтому печатный отчёт использует этот же компонент без оговорок.
  */
-export function Readings({ readings, onDelete }: { readings: Reading[]; onDelete?: (id: string) => void }) {
+export function Readings({ readings, onDelete }: { readings: BpReading[]; onDelete?: (id: string) => void }) {
   if (readings.length === 0) {
     return <div className="chart__empty">За выбранный период измерений нет</div>
   }

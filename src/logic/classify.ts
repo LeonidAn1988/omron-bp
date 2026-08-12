@@ -1,3 +1,5 @@
+import type { GlucoseContext } from '../types'
+
 /**
  * Классификация уровня артериального давления.
  *
@@ -70,6 +72,80 @@ export function alertFor(sys: number, dia: number): Alert | null {
   }
   if (sys < 90 || dia < 60) {
     return { kind: 'hypotension', text: 'Пониженное давление. При слабости и головокружении обратитесь к врачу.' }
+  }
+  return null
+}
+
+// ── Глюкоза ────────────────────────────────────────────────────────────────
+
+/**
+ * Оценка уровня сахара.
+ *
+ * Отличие от давления принципиальное: норма зависит от того, когда сделан замер
+ * (натощак или через два часа после еды), а низкий сахар — это жёсткий порог, а не
+ * нижний край плавной шкалы. Поэтому отдельная функция, а не расширение classify().
+ */
+export type GlucoseLevel = 'low' | 'normal' | 'elevated' | 'high'
+
+export interface GlucoseCategory {
+  level: GlucoseLevel
+  label: string
+  color: string
+}
+
+const GLUCOSE_CATEGORIES: Record<GlucoseLevel, GlucoseCategory> = {
+  low: { level: 'low', label: 'Низкий', color: 'var(--c-low)' },
+  normal: { level: 'normal', label: 'В норме', color: 'var(--c-optimal)' },
+  elevated: { level: 'elevated', label: 'Повышенный', color: 'var(--c-high-normal)' },
+  high: { level: 'high', label: 'Высокий', color: 'var(--c-ht2)' },
+}
+
+export interface GlucoseTargets {
+  /** Верхняя граница нормы натощак, до еды, перед сном и ночью, ммоль/л. */
+  fastingMax: number
+  /** Верхняя граница нормы через 2 часа после еды, ммоль/л. */
+  postMealMax: number
+  /** Порог низкого сахара, ммоль/л. */
+  low: number
+}
+
+/** Верхняя граница нормы для конкретного момента замера. */
+export function glucoseCeiling(context: GlucoseContext, targets: GlucoseTargets): number {
+  return context === 'after-meal' ? targets.postMealMax : targets.fastingMax
+}
+
+export function classifyGlucose(mmol: number, context: GlucoseContext, targets: GlucoseTargets): GlucoseCategory {
+  if (mmol < targets.low) return GLUCOSE_CATEGORIES.low
+  const ceiling = glucoseCeiling(context, targets)
+  if (mmol < ceiling) return GLUCOSE_CATEGORIES.normal
+  // «Повышенный» — умеренный выход за цель; дальше идёт уже «высокий».
+  if (mmol < ceiling + 3) return GLUCOSE_CATEGORIES.elevated
+  return GLUCOSE_CATEGORIES.high
+}
+
+export function isGlucoseWithinTarget(mmol: number, context: GlucoseContext, targets: GlucoseTargets): boolean {
+  return mmol >= targets.low && mmol < glucoseCeiling(context, targets)
+}
+
+/**
+ * Значения, при которых стоит действовать, а не просто отметить в дневнике.
+ * Формулировки намеренно осторожны: приложение не ставит диагноз и не назначает лечение.
+ */
+export function glucoseAlertFor(mmol: number, targets: GlucoseTargets): Alert | null {
+  if (mmol < 3.0) {
+    return {
+      kind: 'crisis',
+      text: 'Очень низкий сахар. Примите быстрые углеводы и перемерьте. При спутанности сознания или потере сознания — вызывайте скорую.',
+    }
+  }
+  if (mmol < targets.low) {
+    return { kind: 'hypotension', text: 'Низкий сахар. Примите быстрые углеводы и перемерьте через 15 минут.' }
+  }
+  if (mmol >= 16.7) {
+    return { kind: 'crisis', text: 'Очень высокий сахар. Свяжитесь с врачом; при тошноте, рвоте или одышке — со скорой.' }
+  }
+  if (mmol >= 13.9) {
+    return { kind: 'severe', text: 'Высокий сахар — обсудите с врачом.' }
   }
   return null
 }

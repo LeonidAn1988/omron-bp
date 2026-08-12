@@ -1,0 +1,111 @@
+/**
+ * Миграция хранилища с версии 1 на версию 2.
+ *
+ * Версия 1 знала только давление и не хранила вид измерения. Версия 2 добавила
+ * сахар, поэтому старым записям проставляется `kind: 'bp'`.
+ *
+ * Потеря данных при обновлении — одна из самых частых жалоб на приложения этого
+ * класса, поэтому проверка отдельная и подробная: сверяются не только количество,
+ * но и значения каждой записи.
+ */
+import { IDBFactory } from 'fake-indexeddb'
+import { useIndexedDbFactory, getAllMeasurements, putMeasurements, loadSettings } from './build/store.mjs'
+
+const DB_NAME = 'omron-bp'
+
+/** Создаёт базу в том виде, в каком её оставляла версия 1 приложения. */
+function seedVersion1(factory, records) {
+  return new Promise((resolve, reject) => {
+    const request = factory.open(DB_NAME, 1)
+    request.onupgradeneeded = () => {
+      const db = request.result
+      const store = db.createObjectStore('readings', { keyPath: 'id' })
+      store.createIndex('ts', 'ts')
+      store.createIndex('user', 'user')
+      db.createObjectStore('meta')
+    }
+    request.onsuccess = () => {
+      const db = request.result
+      const tx = db.transaction('readings', 'readwrite')
+      const store = tx.objectStore('readings')
+      for (const record of records) store.put(record)
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => reject(tx.error)
+    }
+    request.onerror = () => reject(request.error)
+  })
+}
+
+export async function run() {
+  let failures = 0
+  const check = (name, condition, detail = '') => {
+    if (condition) console.log(`  ok   ${name}`)
+    else {
+      console.log(`  FAIL ${name}${detail ? ' — ' + detail : ''}`)
+      failures++
+    }
+  }
+
+  // Записи в точности того вида, в каком их писала версия 1: без поля kind.
+  const legacy = [
+    { id: 'd1-1754899200', ts: 1754899200000, sys: 128, dia: 82, bpm: 71, ihb: true, mov: false, user: 1, source: 'device' },
+    { id: 'd1-1754942400', ts: 1754942400000, sys: 119, dia: 74, bpm: null, ihb: false, mov: true, user: 1, source: 'device' },
+    { id: 'd2-1754899800', ts: 1754899800000, sys: 145, dia: 95, bpm: 88, ihb: false, mov: false, user: 2, source: 'device' },
+    { id: 'm-manual-1', ts: 1754985600000, sys: 132, dia: 80, bpm: 66, ihb: false, mov: false, user: 1, source: 'manual', note: 'после прогулки' },
+  ]
+
+  const factory = new IDBFactory()
+  await seedVersion1(factory, legacy)
+
+  useIndexedDbFactory(factory)
+  const migrated = await getAllMeasurements()
+
+  check('ни одна запись не потеряна', migrated.length === legacy.length, `было ${legacy.length}, стало ${migrated.length}`)
+  check('всем записям проставлен вид «давление»', migrated.every((m) => m.kind === 'bp'))
+
+  for (const original of legacy) {
+    const restored = migrated.find((m) => m.id === original.id)
+    if (!restored) {
+      check(`запись ${original.id} на месте`, false)
+      continue
+    }
+    check(
+      `запись ${original.id} не изменилась`,
+      restored.ts === original.ts &&
+        restored.sys === original.sys &&
+        restored.dia === original.dia &&
+        restored.bpm === original.bpm &&
+        restored.ihb === original.ihb &&
+        restored.mov === original.mov &&
+        restored.user === original.user &&
+        restored.source === original.source &&
+        (restored.note ?? undefined) === (original.note ?? undefined),
+      JSON.stringify(restored),
+    )
+  }
+
+  // После миграции база обязана принимать записи обоих видов.
+  await putMeasurements([
+    { kind: 'glucose', id: 'g1-1754985700', ts: 1754985700000, mmol: 6.2, context: 'fasting', user: 1, source: 'manual' },
+  ])
+  const mixed = await getAllMeasurements()
+  check('сахар добавляется рядом с давлением', mixed.length === legacy.length + 1)
+  check('давление и сахар различимы по виду', mixed.filter((m) => m.kind === 'glucose').length === 1)
+
+  // Идентификаторы разных видов не должны сталкиваться в одну и ту же секунду.
+  const sameSecond = 1755000000000
+  await putMeasurements([
+    { kind: 'bp', id: 'd1-1755000000', ts: sameSecond, sys: 120, dia: 80, bpm: 70, ihb: false, mov: false, user: 1, source: 'device' },
+    { kind: 'glucose', id: 'g1-1755000000', ts: sameSecond, mmol: 5.5, context: 'before-meal', user: 1, source: 'device' },
+  ])
+  const collision = (await getAllMeasurements()).filter((m) => m.ts === sameSecond)
+  check('давление и сахар одной секунды не затирают друг друга', collision.length === 2, `найдено ${collision.length}`)
+
+  const settings = await loadSettings()
+  check('настройки получили значения по умолчанию для сахара', settings.glucoseFastingMax === 7 && settings.glucoseLow === 3.9)
+
+  return failures
+}
