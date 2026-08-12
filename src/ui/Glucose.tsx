@@ -3,7 +3,7 @@ import { GLUCOSE_CONTEXT_LABELS, type GlucoseContext, type GlucoseReading } from
 import { classifyGlucose, glucoseAlertFor, glucoseCeiling, type GlucoseTargets } from '../logic/classify'
 import type { GlucoseSummary } from '../logic/stats'
 import { Banner, Reveal } from './bits'
-import { NumberField } from './NumberField'
+import { ValueField } from './ValueField'
 import { GlucoseEditor } from './EditRow'
 import { PencilIcon, TrashIcon } from './icons'
 
@@ -122,7 +122,7 @@ export function GlucoseEntry({
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)' }}>
-        <NumberField
+        <ValueField
           label="Сахар"
           unit="ммоль/л"
           value={value}
@@ -133,6 +133,7 @@ export function GlucoseEntry({
           start={5.5}
           step={0.1}
           decimals={1}
+          ariaSuffix="ммоль на литр"
           inputRef={valueRef}
           required
         />

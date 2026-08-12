@@ -572,6 +572,90 @@ input[type='radio'] {
   font-size: var(--fs-3);
 }
 
+/* Барабан выбора значения. Прокрутка со снапом даёт ощущение физического
+   колеса без единой строчки анимации. */
+.wheel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.wheel__label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--fs-1);
+  color: var(--text-secondary);
+}
+.wheel__unit {
+  color: var(--text-muted);
+}
+.wheel__box {
+  position: relative;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--page);
+  overflow: hidden;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.wheel__box--focused {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-quiet);
+}
+/* Полоса выделения по центру: показывает, какое значение будет выбрано. */
+.wheel__marker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 40px;
+  transform: translateY(-50%);
+  background: var(--accent-quiet);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+.wheel__list {
+  position: relative;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  /* Вертикальный жест принадлежит барабану, а не странице. */
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+.wheel__list::-webkit-scrollbar {
+  display: none;
+}
+.wheel__list:focus {
+  outline: none;
+}
+.wheel__pad {
+  flex: 0 0 auto;
+}
+.wheel__item {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  font-size: var(--fs-3);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  transition: color var(--dur-fast) var(--ease);
+}
+.wheel__item[data-selected='true'] {
+  font-size: var(--fs-5);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+/* Значение по умолчанию, которого пользователь ещё не подтвердил прокруткой:
+   размер тот же, цвет приглушён — видно, что это подсказка, а не выбор. */
+.wheel__item[data-pending='true'] {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
 /* Плейсхолдер обязан читаться так же, как обычный текст: серый по умолчанию
    у браузера не добирает до 4.5:1. */
 ::placeholder {
@@ -983,7 +1067,13 @@ kbd {
 
 /* ── телефон ────────────────────────────────────────────────────────────── */
 
-@media (max-width: 640px) {
+/* ── сенсорная раскладка ────────────────────────────────────────────────────
+   Порог не только по ширине. Складной телефон в разложенном виде — это ~740px
+   при пальце вместо мыши: по одной ширине он получал десктопную раскладку с
+   таблицей в семь колонок и навигацией вне зоны большого пальца.
+   pointer: coarse отделяет «широко, но пальцем» от «широко и мышью».
+   ─────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 640px), (pointer: coarse) and (max-width: 900px) {
   /* Шапка перестаёт быть липкой: на 600px высоты 89px под заголовок — непозволительно.
      Липкой становится навигация, и она уезжает вниз, в зону большого пальца. */
   .topbar {

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import type { BpReading } from '../types'
 import { alertFor, classify } from '../logic/classify'
 import { Banner, Field, Reveal } from './bits'
-import { NumberField } from './NumberField'
+import { ValueField, useCoarsePointer } from './ValueField'
 
 /** Значение для input[type=datetime-local] — он работает в локальном времени без зоны. */
 function toLocalInput(date: Date): string {
@@ -32,6 +32,7 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
+  const coarse = useCoarsePointer()
   const sysRef = useRef<HTMLInputElement>(null)
   const diaRef = useRef<HTMLInputElement>(null)
 
@@ -50,11 +51,11 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
 
     if (!Number.isFinite(sysValue) || sysValue < 40 || sysValue > 300) {
       sysRef.current?.focus()
-      return setError('Верхнее давление должно быть от 40 до 300')
+      return setError(coarse ? 'Выберите верхнее давление — прокрутите колесо или коснитесь значения' : 'Верхнее давление должно быть от 40 до 300')
     }
     if (!Number.isFinite(diaValue) || diaValue < 20 || diaValue > 250) {
       diaRef.current?.focus()
-      return setError('Нижнее давление должно быть от 20 до 250')
+      return setError(coarse ? 'Выберите нижнее давление — прокрутите колесо или коснитесь значения' : 'Нижнее давление должно быть от 20 до 250')
     }
     if (diaValue >= sysValue) {
       diaRef.current?.focus()
@@ -104,23 +105,29 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
         )}
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-        <NumberField label="Верхнее" value={sys} onChange={setSys} placeholder="120" min={40} max={300} start={120} inputRef={sysRef} required />
-        <NumberField label="Нижнее" value={dia} onChange={setDia} placeholder="80" min={20} max={250} start={80} inputRef={diaRef} required />
+      {/* Барабаны узкие — три в ряд, как в системном выборе времени.
+          Поля с клавиатуры шире из-за кнопок шага, им нужен больший минимум. */}
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${coarse ? '92px' : '150px'}, 1fr))` }}
+      >
+        <ValueField label="Верхнее" value={sys} onChange={setSys} placeholder="120" min={40} max={300} start={120}
+          ariaSuffix="мм рт. ст." inputRef={sysRef} required />
+        <ValueField label="Нижнее" value={dia} onChange={setDia} placeholder="80" min={20} max={250} start={80}
+          ariaSuffix="мм рт. ст." inputRef={diaRef} required />
+        <ValueField label="Пульс" value={bpm} onChange={setBpm} placeholder="70" min={20} max={250} start={70}
+          ariaSuffix="ударов в минуту" />
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', marginTop: 'var(--space-3)' }}>
-        <NumberField label="Пульс" value={bpm} onChange={setBpm} placeholder="70" min={20} max={250} start={70} size="compact" />
-        <div className="field">
-          <span>Когда</span>
-          {editingWhen ? (
-            <input type="datetime-local" value={when} autoFocus onChange={(e) => setWhen(e.target.value)} />
-          ) : (
-            <button type="button" className="btn" onClick={() => setEditingWhen(true)}>
-              {describeWhen(when)}
-            </button>
-          )}
-        </div>
+      <div className="field" style={{ marginTop: 'var(--space-3)' }}>
+        <span>Когда</span>
+        {editingWhen ? (
+          <input type="datetime-local" value={when} autoFocus onChange={(e) => setWhen(e.target.value)} />
+        ) : (
+          <button type="button" className="btn" onClick={() => setEditingWhen(true)}>
+            {describeWhen(when)}
+          </button>
+        )}
       </div>
 
       <details style={{ marginTop: 'var(--space-3)' }}>
