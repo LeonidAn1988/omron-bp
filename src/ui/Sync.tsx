@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { BpReading } from '../types'
+import type { BpReading, GlucoseReading } from '../types'
 import { readingId } from '../db/store'
 import {
   downloadRecords,
@@ -16,6 +16,7 @@ import {
 } from '../ble/session'
 import { BleLog, logToText, useBleLog } from './BleLog'
 import { Banner, Reveal } from './bits'
+import { GlucoseSync } from './GlucoseSync'
 import { download } from '../logic/io'
 
 const FULL_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -49,11 +50,15 @@ type Busy = null | 'download' | 'pair' | 'inspect'
 export function Sync({
   pairingKey,
   onImport,
+  onImportGlucose,
   onGoManual,
+  showGlucose,
 }: {
   pairingKey: string
   onImport: (readings: BpReading[]) => Promise<number>
+  onImportGlucose: (readings: GlucoseReading[]) => Promise<number>
   onGoManual: () => void
+  showGlucose: boolean
 }) {
   const { lines, log, clear } = useBleLog()
   const [device, setDevice] = useState<GattDevice | null>(null)
@@ -308,6 +313,8 @@ export function Sync({
           </div>
         </Banner>
       )}
+
+      {showGlucose && <GlucoseSync onImport={onImportGlucose} log={log} />}
 
       <div className="card">
         <div className="card__head">

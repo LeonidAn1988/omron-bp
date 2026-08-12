@@ -18,9 +18,15 @@ import {
   type Logger,
 } from './protocol'
 import { readAllRecords, type DeviceRecord, type ReadProgress } from './hem6232t'
+import {
+  GLUCOSE_NAME_PREFIXES,
+  GLUCOSE_SERVICE,
+  readAllGlucoseRecords,
+  type GlucoseRecord,
+} from './glucose'
 import { platform, type GattDevice } from '../platform/ports'
 
-export type { DeviceRecord, ReadProgress, GattDevice }
+export type { DeviceRecord, ReadProgress, GattDevice, GlucoseRecord }
 export { DEFAULT_PAIRING_KEY, OmronProtocolError, PairingRequiredError }
 
 /** Приборы Omron рекламируются под такими именами. */
@@ -122,6 +128,41 @@ export async function downloadRecords(
     return { records, deviceName: device.name ?? 'Omron' }
   } finally {
     await transport.dispose()
+    device.disconnect()
+  }
+}
+
+// ── глюкометр по стандартному профилю ──────────────────────────────────────
+
+/**
+ * Выбор и выгрузка глюкометра. Отдельный сценарий, а не ветка внутри выгрузки
+ * тонометра: там проприетарный протокол Omron, здесь открытый профиль
+ * Bluetooth SIG, и общего между ними только слово «Bluetooth».
+ */
+export function pickGlucoseMeter(showAll = false): Promise<GattDevice> {
+  return platform().bluetooth.pickDevice({
+    serviceUuid: GLUCOSE_SERVICE,
+    namePrefixes: GLUCOSE_NAME_PREFIXES,
+    showAll,
+  })
+}
+
+export interface GlucoseSyncResult {
+  records: GlucoseRecord[]
+  deviceName: string
+}
+
+export async function downloadGlucoseRecords(
+  device: GattDevice,
+  log: Logger,
+  onProgress?: (count: number) => void,
+): Promise<GlucoseSyncResult> {
+  log('info', `подключение к глюкометру «${device.name ?? 'без имени'}»`)
+  const service = await device.connect(GLUCOSE_SERVICE)
+  try {
+    const records = await readAllGlucoseRecords(service, log, onProgress)
+    return { records, deviceName: device.name ?? 'Глюкометр' }
+  } finally {
     device.disconnect()
   }
 }

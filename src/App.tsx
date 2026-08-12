@@ -349,7 +349,15 @@ export default function App() {
         </div>
       )}
 
-      {tab === 'sync' && <Sync pairingKey={settings.pairingKey} onImport={handleImport} onGoManual={() => setTab('readings')} />}
+      {tab === 'sync' && (
+        <Sync
+          pairingKey={settings.pairingKey}
+          onImport={handleImport}
+          onImportGlucose={handleImport}
+          onGoManual={() => setTab('readings')}
+          showGlucose={showGlucose}
+        />
+      )}
 
       {tab === 'report' && (
         <Report

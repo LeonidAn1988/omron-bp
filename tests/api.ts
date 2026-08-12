@@ -8,6 +8,13 @@
 
 export { parseRecord } from '../src/ble/hem6232t'
 
+export {
+  parseSFloat,
+  parseGlucoseMeasurement,
+  parseGlucoseContext,
+  parseRacpResponse,
+} from '../src/ble/glucose'
+
 export { toCsv, toJson, parseCsv, parseJson, parseImportFile } from '../src/logic/io'
 
 export {
