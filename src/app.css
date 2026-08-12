@@ -347,24 +347,19 @@ a {
   font-size: var(--fs-1);
 }
 
-/* Крестик удаления: видимый размер оставляем мелким, зону касания расширяем
-   псевдоэлементом — иначе строки таблицы разъедутся, а она же идёт в печать. */
+/* Кнопки-иконки в строке списка.
+   Расширять зону псевдоэлементом нельзя: у двух соседних кнопок области
+   перекрывались, и по замеру карандашу доставалось 16px по горизонтали вместо
+   44. Размер задаётся честно; в печать эти кнопки не идут (.no-print), поэтому
+   высота строк отчёта не страдает. */
 .btn--icon {
-  position: relative;
-  min-height: 28px;
-  min-width: 28px;
+  min-height: var(--tap);
+  min-width: var(--tap);
   padding: 0;
   color: var(--text-secondary);
   border-color: transparent;
   background: transparent;
   font-size: var(--fs-2);
-}
-/* 28px видимых + по 10px с каждой стороны = 48px зоны касания.
-   Замер: elementFromPoint попадает в кнопку на 22px от центра во все стороны. */
-.btn--icon::after {
-  content: '';
-  position: absolute;
-  inset: -10px;
 }
 .btn--icon:hover:not(:disabled) {
   color: var(--critical-text);
@@ -843,8 +838,8 @@ tbody tr:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  min-height: 28px;
+  min-width: var(--tap);
+  min-height: var(--tap);
   padding: 0;
   border: 0;
   border-radius: var(--radius-sm);
@@ -853,17 +848,11 @@ tbody tr:hover {
   color: var(--text-secondary);
   font: inherit;
   cursor: pointer;
-  position: relative;
   transition: color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
 }
 .row-edit[aria-expanded='true'] {
   color: var(--accent);
   background: var(--accent-quiet);
-}
-.row-edit::after {
-  content: '';
-  position: absolute;
-  inset: -10px;
 }
 .row-edit:hover {
   color: var(--accent);
@@ -1123,10 +1112,6 @@ kbd {
     right: 0;
     top: 50%;
     transform: translateY(-50%);
-  }
-  .readings-table td[data-col='del'] .btn {
-    min-width: var(--tap);
-    min-height: var(--tap);
   }
   .readings-table .badge {
     white-space: normal;
