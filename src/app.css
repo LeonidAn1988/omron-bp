@@ -553,8 +553,10 @@ input[type='radio'] {
 .numfield__input:focus {
   outline: none;
 }
+/* Компактный вариант отличается только высотой поля: ширина кнопок шага
+   остаётся 44px, иначе цель для пальца уходит ниже минимума. */
 .numfield--compact .numfield__control {
-  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  grid-template-columns: var(--tap) minmax(0, 1fr) var(--tap);
 }
 .numfield--compact .numfield__input {
   min-height: 40px;
