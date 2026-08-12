@@ -539,6 +539,21 @@ input[type='radio'] {
 .segmented button:hover:not([aria-pressed='true']) {
   background: var(--hover);
 }
+/* Точка «есть на что посмотреть» на кнопке переключателя. Не цифра: считать
+   там нечего, важен сам факт. */
+.segmented button {
+  position: relative;
+}
+.segmented__mark {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: var(--space-2);
+  border-radius: 50%;
+  background: var(--warning);
+  vertical-align: middle;
+}
+
 .segmented button[aria-pressed='true'] {
   background: var(--accent);
   color: var(--accent-ink);
@@ -1034,6 +1049,105 @@ tbody tr:hover {
 .row-edit:hover {
   color: var(--accent);
   background: var(--hover);
+}
+
+/* ── аптечка ────────────────────────────────────────────────────────────── */
+
+/* Список, а не сетка карточек: пятнадцать одинаковых прямоугольников внутри
+   карточки раздела — вложенные карточки, то есть всегда ошибка. Разделители
+   вместо рамок дают тот же порядок дешевле. */
+.pills {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pill {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+}
+.pill:first-child {
+  border-top: 0;
+  padding-top: var(--space-2);
+}
+.pill__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pill__title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.pill__name {
+  font-weight: 600;
+}
+.pill__dose {
+  font-size: var(--fs-1);
+  color: var(--text-secondary);
+}
+.pill__facts,
+.pill__note {
+  margin-top: var(--space-1);
+  font-size: var(--fs-1);
+  color: var(--text-muted);
+}
+.pill__note {
+  font-style: italic;
+}
+
+/* Цвет несёт точка, а не текст: жёлтый предупреждения на светлой поверхности
+   даёт около 1,7:1 и читаться не может ни при каком размере. */
+.pill__alert {
+  display: inline-flex;
+  /* Не center: на двух строках точка уезжала в середину блока и повисала в
+     воздухе. Она относится к первой строке, там и должна стоять. */
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--fs-1);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.pill__alert::before {
+  content: '';
+  margin-top: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot);
+  flex: 0 0 auto;
+}
+.pill__alert--critical {
+  --dot: var(--critical-text);
+}
+.pill__alert--warning {
+  --dot: var(--warning);
+}
+
+.pill__actions {
+  display: flex;
+  gap: var(--space-1);
+  flex: 0 0 auto;
+  /* Подтверждение занимает больше места, чем две иконки: на узком экране ему
+     разрешено перенестись, иначе оно вытолкнет название препарата. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Форма правки подсвечена: на длинном списке иначе непонятно, к чему она. */
+.pills__edit {
+  padding: var(--space-4);
+  margin-top: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  border: 1px solid var(--border);
+}
+.pills__edit--new {
+  margin-top: var(--space-4);
 }
 
 /* ── журнал BLE ─────────────────────────────────────────────────────────── */

@@ -26,7 +26,24 @@ export {
   loadSettings,
   saveSettings,
   deviceMeasurementId,
+  getAllMedicines,
+  putMedicine,
+  deleteMedicine,
 } from '../src/db/store'
+
+export { plural } from '../src/logic/plural'
+
+export {
+  medicineAlert,
+  supplyDays,
+  daysToExpiry,
+  sortMedicines,
+  countAlerts,
+  EXPIRY_SOON_DAYS,
+  SUPPLY_SOON_DAYS,
+  monthToExpiry,
+  expiryToMonth,
+} from '../src/logic/medicines'
 
 export {
   shouldAutoBackup,

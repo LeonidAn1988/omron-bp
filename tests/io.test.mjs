@@ -125,5 +125,45 @@ export function run() {
   check('запятая как десятичный разделитель понята', fromSugar.measurements[0].mmol === 6.2)
   check('момент замера по-русски распознан', fromSugar.measurements[1].context === 'after-meal')
 
+  // ── полный снимок: копия обязана содержать всё, что вводили руками ────────
+  const snapshot = {
+    measurements: mixed,
+    medicines: [
+      { id: 'med-1', name: 'Лозартан', dose: '50 мг', left: 12, perDay: 1, expires: Date.UTC(2027, 4, 1), note: 'утром' },
+      { id: 'med-2', name: 'Метформин', dose: '850 мг', left: null, perDay: null, expires: null },
+    ],
+    settings: { targetSys: 135, targetDia: 85, activeUser: 1, trackGlucose: true },
+  }
+  const restored = parseJson(toJson(snapshot))
+  check('в копии есть измерения', restored.measurements.length === 5)
+  check('в копии есть аптечка', restored.medicines.length === 2, JSON.stringify(restored.medicines))
+  check('препарат восстановлен полностью', restored.medicines[0].name === 'Лозартан' && restored.medicines[0].left === 12)
+  check('пустые поля препарата остались пустыми', restored.medicines[1].left === null && restored.medicines[1].expires === null)
+  check('в копии есть настройки', restored.settings?.targetSys === 135)
+
+  // Служебные поля описывают устройство, где копия делалась, и переезжать не должны.
+  const withBookkeeping = parseJson(
+    toJson({ ...snapshot, settings: { ...snapshot.settings, backupLastAt: 123, backupLastCount: 7 } }),
+  )
+  check(
+    'отметки о копировании не переносятся',
+    withBookkeeping.settings?.backupLastAt === undefined && withBookkeeping.settings?.backupLastCount === undefined,
+    JSON.stringify(withBookkeeping.settings),
+  )
+
+  // Испорченный или чужой файл не должен протащить пустую запись в аптечку.
+  const junk = parseJson(
+    JSON.stringify({
+      format: 'omron-bp/v3',
+      measurements: [],
+      medicines: [{ id: 'ok', name: 'Аспирин' }, { id: 'no-name', name: '  ' }, { name: 'без id' }, null, 'строка'],
+    }),
+  )
+  check('мусор в аптечке отброшен', junk.medicines.length === 1 && junk.medicines[0].name === 'Аспирин', JSON.stringify(junk.medicines))
+  check('недостающие поля препарата заполнены пустыми', junk.medicines[0].left === null && junk.medicines[0].dose === '')
+
+  // Старые копии аптечки не содержат — это не ошибка.
+  check('копия без аптечки читается', fromLegacy.medicines.length === 0 && fromLegacy.settings === null)
+
   return failures
 }

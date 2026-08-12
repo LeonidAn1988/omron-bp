@@ -1,4 +1,5 @@
 import { describeBackupAge, STALE_DAYS } from '../logic/backup'
+import { plural } from '../logic/plural'
 import { Banner } from './bits'
 import type { BackupStatus } from './useBackup'
 
@@ -9,16 +10,6 @@ import type { BackupStatus } from './useBackup'
  * который ведёт дневник давления, не обязан разбираться в вытеснении хранилища
  * — ему нужно знать одно: копия есть или копии нет.
  */
-
-/** Русские окончания для счётного существительного. Библиотеку ради одного слова не тянем. */
-function plural(n: number, one: string, few: string, many: string): string {
-  const mod100 = n % 100
-  if (mod100 >= 11 && mod100 <= 14) return many
-  const mod10 = n % 10
-  if (mod10 === 1) return one
-  if (mod10 >= 2 && mod10 <= 4) return few
-  return many
-}
 
 export function DataSafety({ status }: { status: BackupStatus }) {
   const { supported, target, durable, lastAt, count, busy, failed } = status

@@ -6,7 +6,7 @@
  * `src/platform/`, поэтому этот файл переезжает на нативные платформы без правок.
  */
 
-import type { BpReading, GlucoseReading, Measurement, Settings } from '../types'
+import type { BpReading, GlucoseReading, Measurement, Medicine, Settings } from '../types'
 import { platform } from '../platform/ports'
 import { DEFAULT_PAIRING_KEY } from '../ble/protocol'
 
@@ -80,6 +80,29 @@ export async function loadSettings(): Promise<Settings> {
 
 export function saveSettings(settings: Settings): Promise<void> {
   return platform().storage.saveSettings(settings)
+}
+
+// ── аптечка ────────────────────────────────────────────────────────────────
+
+export function getAllMedicines(): Promise<Medicine[]> {
+  return platform().storage.allMedicines()
+}
+
+export function putMedicine(item: Medicine): Promise<void> {
+  return platform().storage.putMedicine(item)
+}
+
+export function deleteMedicine(id: string): Promise<void> {
+  return platform().storage.deleteMedicine(id)
+}
+
+/**
+ * Идентификатор препарата. В отличие от измерений, детерминированным его сделать
+ * не из чего: один и тот же препарат заводят дважды с разным сроком годности —
+ * это две разные коробки, а не дубль.
+ */
+export function newMedicineId(): string {
+  return `med-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 // ── сохранность ────────────────────────────────────────────────────────────

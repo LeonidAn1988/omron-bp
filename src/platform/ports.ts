@@ -10,7 +10,7 @@
  * пересказ Web Bluetooth или IndexedDB. Иначе порт перестаёт быть портом.
  */
 
-import type { Measurement, Settings } from '../types'
+import type { Measurement, Medicine, Settings } from '../types'
 
 // ── Bluetooth ──────────────────────────────────────────────────────────────
 
@@ -79,6 +79,10 @@ export interface StoragePort {
   clearMeasurements(): Promise<void>
   loadSettings(): Promise<Partial<Settings> | undefined>
   saveSettings(settings: Settings): Promise<void>
+
+  allMedicines(): Promise<Medicine[]>
+  putMedicine(item: Medicine): Promise<void>
+  deleteMedicine(id: string): Promise<void>
 
   /**
    * Попросить платформу не вытеснять наши данные.

@@ -2,18 +2,19 @@
  * Реализация StoragePort поверх IndexedDB.
  *
  * Здесь же живёт миграция схемы: версия 1 знала только давление и не хранила вид
- * измерения, версия 2 добавила сахар. Потеря данных при обновлении — одна из самых
- * частых жалоб на приложения этого класса, поэтому миграция покрыта отдельным тестом
- * (tests/migration.test.mjs).
+ * измерения, версия 2 добавила сахар, версия 3 — аптечку. Потеря данных при
+ * обновлении — одна из самых частых жалоб на приложения этого класса, поэтому
+ * миграция покрыта отдельным тестом (tests/migration.test.mjs).
  */
 
-import type { Measurement, Settings } from '../../types'
+import type { Measurement, Medicine, Settings } from '../../types'
 import type { StoragePort } from '../ports'
 
 const DB_NAME = 'omron-bp'
-const DB_VERSION = 2
+const DB_VERSION = 3
 const MEASUREMENTS = 'readings'
 const META = 'meta'
+const MEDICINES = 'medicines'
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -39,6 +40,9 @@ function openDb(): Promise<IDBDatabase> {
       if (!store.indexNames.contains('user')) store.createIndex('user', 'user')
       if (!store.indexNames.contains('kind')) store.createIndex('kind', 'kind')
       if (!db.objectStoreNames.contains(META)) db.createObjectStore(META)
+      // Версия 3: аптечка. Отдельное хранилище — препарат не измерение, у него
+      // нет момента времени и он не попадает ни в графики, ни в отчёт.
+      if (!db.objectStoreNames.contains(MEDICINES)) db.createObjectStore(MEDICINES, { keyPath: 'id' })
 
       // До версии 2 вид измерения не хранился — все записи были про давление.
       if (event.oldVersion > 0 && event.oldVersion < 2) {
@@ -102,6 +106,18 @@ export const webStorage: StoragePort = {
 
   async saveSettings(settings) {
     await tx(META, 'readwrite', (s) => s.put(settings, 'settings'))
+  },
+
+  async allMedicines() {
+    return tx<Medicine[]>(MEDICINES, 'readonly', (s) => s.getAll())
+  },
+
+  async putMedicine(item) {
+    await tx(MEDICINES, 'readwrite', (s) => s.put(item))
+  },
+
+  async deleteMedicine(id) {
+    await tx(MEDICINES, 'readwrite', (s) => s.delete(id))
   },
 
   /**

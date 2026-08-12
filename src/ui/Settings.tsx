@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import type { Measurement, Settings as SettingsData, ThemeChoice } from '../types'
 import { DEFAULT_PAIRING_KEY } from '../ble/session'
-import { download, parseImportFile, toCsv, toJson } from '../logic/io'
+import { download, parseImportFile, toCsv, toJson, type ImportResult } from '../logic/io'
 import { Banner, Field } from './bits'
 import { DataSafety } from './Backup'
 import type { BackupStatus } from './useBackup'
@@ -18,7 +18,7 @@ export function Settings({
   settings,
   onChange,
   measurements,
-  onImport,
+  onRestore,
   onClearAll,
   showUserPicker,
   backup,
@@ -26,7 +26,7 @@ export function Settings({
   settings: SettingsData
   onChange: (next: SettingsData) => void
   measurements: Measurement[]
-  onImport: (measurements: Measurement[]) => Promise<number>
+  onRestore: (incoming: ImportResult) => Promise<{ added: number; medicines: number; settingsRestored: boolean }>
   onClearAll: () => Promise<void>
   showUserPicker: boolean
   backup: BackupStatus
@@ -42,14 +42,13 @@ export function Settings({
     event.target.value = ''
     if (!file) return
     try {
-      const { measurements: parsed, skipped } = parseImportFile(file.name, await file.text())
-      const added = await onImport(parsed)
-      setMessage({
-        tone: 'good',
-        text:
-          `Разобрано записей: ${parsed.length}, добавлено новых: ${added}.` +
-          (skipped ? ` Пропущено нечитаемых строк: ${skipped}.` : ''),
-      })
+      const parsed = parseImportFile(file.name, await file.text())
+      const { added, medicines, settingsRestored } = await onRestore(parsed)
+      const parts = [`Разобрано записей: ${parsed.measurements.length}, добавлено новых: ${added}.`]
+      if (medicines > 0) parts.push(`Добавлено препаратов в аптечку: ${medicines}.`)
+      if (settingsRestored) parts.push('Настройки восстановлены.')
+      if (parsed.skipped) parts.push(`Пропущено нечитаемых строк: ${parsed.skipped}.`)
+      setMessage({ tone: 'good', text: parts.join(' ') })
     } catch (error) {
       setMessage({ tone: 'critical', text: error instanceof Error ? error.message : String(error) })
     }

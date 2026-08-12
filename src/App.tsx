@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { isBp, isGlucose, type Measurement, type Settings as SettingsData } from './types'
+import { isBp, isGlucose, type Measurement, type Medicine, type Settings as SettingsData } from './types'
 import {
   DEFAULT_SETTINGS,
   addNewMeasurements,
   clearMeasurements,
   deleteMeasurement,
   getAllMeasurements,
+  getAllMedicines,
   loadSettings,
+  deleteMedicine,
+  newMedicineId,
   putMeasurements,
+  putMedicine,
   saveSettings,
 } from './db/store'
 import { PERIODS, filterByPeriod, summarize, summarizeGlucose, type PeriodKey } from './logic/stats'
@@ -16,8 +20,11 @@ import { DayPartChart, GlucoseChart, PulseChart, TrendChart } from './ui/Charts'
 import { LatestAlert, SummaryTiles } from './ui/Summary'
 import { GlucoseEntry, GlucoseList, GlucoseTiles } from './ui/Glucose'
 import { Readings } from './ui/Readings'
+import { Medicines, MedicineNudge } from './ui/Medicines'
 import { Entry } from './ui/Entry'
 import { Sync } from './ui/Sync'
+import { countAlerts } from './logic/medicines'
+import type { ImportResult } from './logic/io'
 import { applyTheme } from './ui/theme'
 import { useBackup } from './ui/useBackup'
 import { BackupNudge } from './ui/Backup'
@@ -35,7 +42,7 @@ const TABS = [
 ] as const
 
 type TabKey = (typeof TABS)[number]['key']
-type DiaryKey = 'bp' | 'glucose'
+type DiaryKey = 'bp' | 'glucose' | 'meds'
 
 function PeriodPicker({ value, onChange }: { value: PeriodKey; onChange: (next: PeriodKey) => void }) {
   return (
@@ -51,6 +58,7 @@ function PeriodPicker({ value, onChange }: { value: PeriodKey; onChange: (next: 
 
 export default function App() {
   const [measurements, setMeasurements] = useState<Measurement[]>([])
+  const [medicines, setMedicines] = useState<Medicine[]>([])
   const [settings, setSettings] = useState<SettingsData>(DEFAULT_SETTINGS)
   const [period, setPeriod] = useState<PeriodKey>('30d')
   const [tab, setTab] = useState<TabKey>('overview')
@@ -61,8 +69,9 @@ export default function App() {
   const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
-    Promise.all([getAllMeasurements(), loadSettings()]).then(([stored, loaded]) => {
+    Promise.all([getAllMeasurements(), loadSettings(), getAllMedicines()]).then(([stored, loaded, pills]) => {
       setMeasurements(stored)
+      setMedicines(pills)
       // Дневник сахара включается сам, если данные по нему уже есть.
       setSettings(loaded.trackGlucose || stored.some(isGlucose) ? { ...loaded, trackGlucose: true } : loaded)
       setReady(true)
@@ -77,6 +86,7 @@ export default function App() {
   }, [settings.theme])
 
   const refresh = useCallback(async () => setMeasurements(await getAllMeasurements()), [])
+  const refreshMedicines = useCallback(async () => setMedicines(await getAllMedicines()), [])
 
   const handleAdd = useCallback(
     async (item: Measurement) => {
@@ -138,7 +148,61 @@ export default function App() {
     void saveSettings(next)
   }, [])
 
-  const backup = useBackup(measurements, settings, updateSettings, ready)
+  /** Настройки читаются из ссылки: восстановление не должно пересоздаваться при каждой правке. */
+  const settingsRef = useRef(settings)
+  settingsRef.current = settings
+
+  /**
+   * Восстановление из резервной копии. В отличие от импорта измерений, здесь
+   * возвращается всё, что человек вводил руками: дневник, аптечка, настройки.
+   *
+   * Слияние только добавляющее. Копия — снимок прошлого, и перезаписывать ею
+   * то, что уже есть на этом устройстве, значит откатывать более свежие правки.
+   */
+  const handleRestore = useCallback(
+    async (incoming: ImportResult) => {
+      const added = await addNewMeasurements(incoming.measurements)
+
+      const known = new Set((await getAllMedicines()).map((m) => m.id))
+      const freshMedicines = incoming.medicines.filter((m) => !known.has(m.id))
+      for (const item of freshMedicines) await putMedicine(item)
+
+      let settingsRestored = false
+      if (incoming.settings) {
+        // Тема не переносится: на телефоне и на компьютере она своя, и подменять
+        // её чужим выбором — сюрприз, которого никто не просил.
+        const { theme: _theme, ...rest } = incoming.settings
+        updateSettings({ ...settingsRef.current, ...rest })
+        settingsRestored = true
+      }
+
+      await refresh()
+      await refreshMedicines()
+      return { added: added.length, medicines: freshMedicines.length, settingsRestored }
+    },
+    [refresh, refreshMedicines, updateSettings],
+  )
+
+  const handleSaveMedicine = useCallback(
+    async (item: Medicine) => {
+      await putMedicine(item.id ? item : { ...item, id: newMedicineId() })
+      await refreshMedicines()
+    },
+    [refreshMedicines],
+  )
+
+  const handleDeleteMedicine = useCallback(
+    async (id: string) => {
+      await deleteMedicine(id)
+      await refreshMedicines()
+    },
+    [refreshMedicines],
+  )
+
+  /** Сколько препаратов требуют внимания — для пометки на переключателе. */
+  const medicineAlerts = useMemo(() => countAlerts(medicines, Date.now()), [medicines])
+
+  const backup = useBackup(measurements, medicines, settings, updateSettings, ready)
 
   const glucoseTargets: GlucoseTargets = useMemo(
     () => ({
@@ -191,13 +255,24 @@ export default function App() {
     </Reveal>
   )
 
-  const diaryPicker = showGlucose && (
-    <div className="segmented no-print" role="group" aria-label="Дневник">
+  /**
+   * Переключатель дневников. Аптечка живёт здесь, а не отдельной вкладкой:
+   * шестой пункт в нижней навигации сузил бы каждый до нечитаемого, а по смыслу
+   * это тот же раздел «что я вношу руками».
+   */
+  const diaryPicker = (
+    <div className="segmented segmented--fill no-print" role="group" aria-label="Дневник">
       <button aria-pressed={diary === 'bp'} onClick={() => setDiary('bp')}>
         Давление
       </button>
-      <button aria-pressed={diary === 'glucose'} onClick={() => setDiary('glucose')}>
-        Сахар
+      {showGlucose && (
+        <button aria-pressed={diary === 'glucose'} onClick={() => setDiary('glucose')}>
+          Сахар
+        </button>
+      )}
+      <button aria-pressed={diary === 'meds'} onClick={() => setDiary('meds')}>
+        Аптечка
+        {medicineAlerts > 0 && <span className="segmented__mark" aria-hidden="true" />}
       </button>
     </div>
   )
@@ -233,6 +308,14 @@ export default function App() {
           {/* Предупреждение о копии стоит здесь, а не в настройках: до настроек
               человек не дойдёт, а потеря дневника необратима. */}
           <BackupNudge status={backup} onOpenSettings={() => setTab('settings')} />
+
+          <MedicineNudge
+            count={medicineAlerts}
+            onOpen={() => {
+              setDiary('meds')
+              setTab('readings')
+            }}
+          />
 
           {measurements.length === 0 ? (
             <Banner tone="info">
@@ -303,9 +386,11 @@ export default function App() {
 
       {tab === 'readings' && (
         <div className="stack">
-          {diaryPicker && <div className="row">{diaryPicker}</div>}
+          <div className="row">{diaryPicker}</div>
 
-          {diary === 'bp' || !showGlucose ? (
+          {diary === 'meds' ? (
+            <Medicines medicines={medicines} onSave={handleSaveMedicine} onDelete={handleDeleteMedicine} />
+          ) : diary === 'bp' || !showGlucose ? (
             <>
               <Entry user={settings.activeUser} onAdd={handleAdd} />
               {undoBanner}
@@ -395,7 +480,7 @@ export default function App() {
           settings={settings}
           onChange={updateSettings}
           measurements={measurements}
-          onImport={handleImport}
+          onRestore={handleRestore}
           onClearAll={handleClearAll}
           showUserPicker={hasSecondUser}
           backup={backup}

@@ -1,15 +1,25 @@
 /**
- * Миграция хранилища с версии 1 на версию 2.
+ * Миграция хранилища: версия 1 → 2 → 3.
  *
  * Версия 1 знала только давление и не хранила вид измерения. Версия 2 добавила
- * сахар, поэтому старым записям проставляется `kind: 'bp'`.
+ * сахар, поэтому старым записям проставляется `kind: 'bp'`. Версия 3 добавила
+ * аптечку отдельным хранилищем.
  *
  * Потеря данных при обновлении — одна из самых частых жалоб на приложения этого
  * класса, поэтому проверка отдельная и подробная: сверяются не только количество,
  * но и значения каждой записи.
  */
 import { IDBFactory } from 'fake-indexeddb'
-import { installWebPlatform, useIndexedDbFactory, getAllMeasurements, putMeasurements, loadSettings } from './build/api.mjs'
+import {
+  installWebPlatform,
+  useIndexedDbFactory,
+  getAllMeasurements,
+  putMeasurements,
+  loadSettings,
+  getAllMedicines,
+  putMedicine,
+  deleteMedicine,
+} from './build/api.mjs'
 
 const DB_NAME = 'omron-bp'
 
@@ -107,6 +117,31 @@ export async function run() {
 
   const settings = await loadSettings()
   check('настройки получили значения по умолчанию для сахара', settings.glucoseFastingMax === 7 && settings.glucoseLow === 3.9)
+
+  // ── версия 3: аптечка появилась в базе, где её никогда не было ────────────
+  check('аптечка после миграции пуста, а не сломана', (await getAllMedicines()).length === 0)
+
+  await putMedicine({
+    id: 'med-1',
+    name: 'Лозартан',
+    dose: '50 мг',
+    left: 28,
+    perDay: 1,
+    expires: Date.UTC(2027, 4, 1),
+    note: 'утром',
+  })
+  const pills = await getAllMedicines()
+  check('препарат сохранён', pills.length === 1 && pills[0].name === 'Лозартан', JSON.stringify(pills))
+  check('поля препарата не потерялись', pills[0].left === 28 && pills[0].perDay === 1 && pills[0].note === 'утром')
+
+  check(
+    'измерения от аптечки не пострадали',
+    (await getAllMeasurements()).length === legacy.length + 3,
+    'аптечка лежит в отдельном хранилище и на дневник влиять не должна',
+  )
+
+  await deleteMedicine('med-1')
+  check('препарат удаляется', (await getAllMedicines()).length === 0)
 
   return failures
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Measurement, Settings } from '../types'
+import type { Measurement, Medicine, Settings } from '../types'
 import { backupTarget, requestDurability } from '../db/store'
 import { canShareFile, download, shareFile, toJson } from '../logic/io'
 import {
@@ -45,6 +45,7 @@ export interface BackupStatus {
 
 export function useBackup(
   measurements: Measurement[],
+  medicines: Medicine[],
   settings: Settings,
   onSettings: (next: Settings) => void,
   ready: boolean,
@@ -55,15 +56,31 @@ export function useBackup(
   const [failed, setFailed] = useState(false)
 
   const supported = backupTarget.isSupported()
-  const count = measurements.length
+  /**
+   * Считаем и измерения, и препараты. Иначе внесённая аптечка не сдвигала
+   * счётчик, копия не обновлялась и не предупреждала — а введена она руками и
+   * теряется так же безвозвратно, как измерение.
+   */
+  const count = measurements.length + medicines.length
 
   /**
    * Настройки читаются из ссылки, а не из замыкания: автокопия срабатывает по
    * изменению данных, и если бы она зависела ещё и от настроек, то запускалась
    * бы повторно от собственной же отметки о времени.
    */
-  const latest = useRef({ settings, measurements, onSettings })
-  latest.current = { settings, measurements, onSettings }
+  const latest = useRef({ settings, measurements, medicines, onSettings })
+  latest.current = { settings, measurements, medicines, onSettings }
+
+  /**
+   * Что уходит в копию. Одних измерений мало: аптечка и настройки тоже введены
+   * руками и теряются так же безвозвратно. Служебные поля про сами копии из
+   * снимка исключены — они описывают устройство, а не данные.
+   */
+  const snapshot = (): string => {
+    const { measurements: items, medicines: pills, settings: current } = latest.current
+    const { backupLastAt: _at, backupLastCount: _count, ...rest } = current
+    return toJson({ measurements: items, medicines: pills, settings: rest })
+  }
 
   useEffect(() => {
     void requestDurability().then(setDurable)
@@ -78,16 +95,17 @@ export function useBackup(
   // Автоматическая копия: пишем, как только дневник разошёлся с файлом.
   useEffect(() => {
     if (!ready || !target) return
-    const { settings: current, measurements: items } = latest.current
-    if (!shouldAutoBackup({ lastAt: current.backupLastAt, lastCount: current.backupLastCount }, items.length)) return
+    const { settings: current, measurements: items, medicines: pills } = latest.current
+    const total = items.length + pills.length
+    if (!shouldAutoBackup({ lastAt: current.backupLastAt, lastCount: current.backupLastCount }, total)) return
 
     let cancelled = false
     void (async () => {
-      const ok = await backupTarget.write(toJson(items))
+      const ok = await backupTarget.write(snapshot())
       if (cancelled) return
       if (ok) {
         setFailed(false)
-        markDone(items.length)
+        markDone(total)
       } else {
         // Цель пропала. Молчать нельзя: человек считает, что копии идут.
         setFailed(true)
@@ -122,9 +140,8 @@ export function useBackup(
   const saveNow = useCallback(async () => {
     setBusy(true)
     try {
-      const items = latest.current.measurements
-      await download(backupFilename(Date.now()), toJson(items), 'application/json')
-      markDone(items.length)
+      await download(backupFilename(Date.now()), snapshot(), 'application/json')
+      markDone(latest.current.measurements.length + latest.current.medicines.length)
     } finally {
       setBusy(false)
     }
@@ -137,11 +154,10 @@ export function useBackup(
   const shareNow = useCallback(async () => {
     setBusy(true)
     try {
-      const items = latest.current.measurements
-      const sent = await shareFile(backupFilename(Date.now()), toJson(items), 'application/json')
+      const sent = await shareFile(backupFilename(Date.now()), snapshot(), 'application/json')
       // Отметку ставим только при подтверждённой передаче: закрытое окно
       // «поделиться» означает, что копии нет, и делать вид иначе нельзя.
-      if (sent) markDone(items.length)
+      if (sent) markDone(latest.current.measurements.length + latest.current.medicines.length)
     } finally {
       setBusy(false)
     }

@@ -1,4 +1,4 @@
-import type { GlucoseContext, Measurement } from '../types'
+import type { GlucoseContext, Measurement, Medicine, Settings } from '../types'
 import { deviceMeasurementId } from '../db/store'
 import { platform } from '../platform/ports'
 
@@ -46,8 +46,37 @@ export function toCsv(items: Measurement[]): string {
   return '﻿' + [header.join(','), ...rows].join('\n')
 }
 
-export function toJson(items: Measurement[]): string {
-  return JSON.stringify({ format: 'omron-bp/v2', exportedAt: new Date().toISOString(), measurements: items }, null, 2)
+/**
+ * Полный снимок для резервной копии и переноса на другое устройство.
+ *
+ * Одних измерений мало: аптечка и настройки — тоже данные, введённые руками, и
+ * теряются они так же безвозвратно. Копия, в которой их нет, обещает больше,
+ * чем спасает.
+ */
+export interface Snapshot {
+  measurements: Measurement[]
+  medicines: Medicine[]
+  /** Настройки без служебных полей — что и когда копировалось, у каждого устройства своё. */
+  settings: Omit<Settings, 'backupLastAt' | 'backupLastCount'> | null
+}
+
+export function toJson(snapshot: Snapshot | Measurement[]): string {
+  // Массив на входе — старый вызов «только измерения». Оставлен, чтобы выгрузка
+  // измерений из раздела «Данные» осталась выгрузкой измерений.
+  const full: Snapshot = Array.isArray(snapshot)
+    ? { measurements: snapshot, medicines: [], settings: null }
+    : snapshot
+  return JSON.stringify(
+    {
+      format: 'omron-bp/v3',
+      exportedAt: new Date().toISOString(),
+      measurements: full.measurements,
+      medicines: full.medicines,
+      settings: full.settings ?? undefined,
+    },
+    null,
+    2,
+  )
 }
 
 /** Как именно файл попадёт к пользователю, решает платформа. */
@@ -174,11 +203,15 @@ function parseContext(value: string | undefined): GlucoseContext {
 export interface ImportResult {
   measurements: Measurement[]
   skipped: number
+  /** Аптечка из копии. Пусто для CSV и для старых файлов. */
+  medicines: Medicine[]
+  /** Настройки из копии, если файл их содержит. */
+  settings: Snapshot['settings']
 }
 
 export function parseCsv(text: string): ImportResult {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0)
-  if (lines.length < 2) return { measurements: [], skipped: 0 }
+  if (lines.length < 2) return { measurements: [], skipped: 0, medicines: [], settings: null }
 
   const delimiter = detectDelimiter(lines[0])
   const headers = splitCsvLine(lines[0], delimiter)
@@ -254,21 +287,58 @@ export function parseCsv(text: string): ImportResult {
     })
   }
 
-  return { measurements, skipped }
+  return { measurements, skipped, medicines: [], settings: null }
 }
 
-/** Наш бэкап (v1 и v2) и формат ubpm.json из omblepy. */
+/**
+ * Аптечка из файла. Проверяем поштучно: чужой или испорченный файл не должен
+ * протащить в базу запись без названия — она была бы не редактируемой пустотой.
+ */
+function parseMedicines(raw: unknown): Medicine[] {
+  if (!Array.isArray(raw)) return []
+  const optionalNumber = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
+  return raw
+    .filter((m): m is Record<string, unknown> => !!m && typeof m === 'object')
+    .filter((m) => typeof m.id === 'string' && typeof m.name === 'string' && m.name.trim() !== '')
+    .map((m) => ({
+      id: m.id as string,
+      name: (m.name as string).trim(),
+      dose: typeof m.dose === 'string' ? m.dose : '',
+      left: optionalNumber(m.left),
+      perDay: optionalNumber(m.perDay),
+      expires: optionalNumber(m.expires),
+      note: typeof m.note === 'string' && m.note !== '' ? m.note : undefined,
+    }))
+}
+
+/**
+ * Настройки из файла. Служебные поля про резервные копии отбрасываем: они
+ * описывают устройство, где копия делалась, а не данные внутри неё.
+ */
+function parseSettings(raw: unknown): Snapshot['settings'] {
+  if (!raw || typeof raw !== 'object') return null
+  const { backupLastAt: _at, backupLastCount: _count, ...rest } = raw as Settings
+  return rest
+}
+
+/** Наш бэкап (v1, v2, v3) и формат ubpm.json из omblepy. */
 export function parseJson(text: string): ImportResult {
   const data = JSON.parse(text)
 
-  // v2 — оба дневника; v1 — только давление, вид в записях не хранился.
+  // v3 — плюс аптечка и настройки; v2 — оба дневника; v1 — только давление,
+  // вид в записях не хранился.
   const own = data?.measurements ?? data?.readings
   if (Array.isArray(own)) {
     const measurements = (own as Partial<Measurement>[])
       .filter((m) => m && typeof m.ts === 'number')
       .map((m) => (m.kind ? m : { ...m, kind: 'bp' as const }))
       .filter((m) => (m.kind === 'glucose' ? Number.isFinite((m as never)['mmol']) : Number.isFinite((m as never)['sys'])))
-    return { measurements: measurements as Measurement[], skipped: own.length - measurements.length }
+    return {
+      measurements: measurements as Measurement[],
+      skipped: own.length - measurements.length,
+      medicines: parseMedicines(data?.medicines),
+      settings: parseSettings(data?.settings),
+    }
   }
 
   if (data?.UBPM && typeof data.UBPM === 'object') {
@@ -299,7 +369,7 @@ export function parseJson(text: string): ImportResult {
         })
       }
     }
-    return { measurements, skipped }
+    return { measurements, skipped, medicines: [], settings: null }
   }
 
   throw new Error('Неизвестный формат JSON. Ожидается резервная копия этого приложения или ubpm.json от omblepy.')

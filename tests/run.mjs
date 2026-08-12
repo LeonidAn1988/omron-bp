@@ -36,6 +36,7 @@ const suites = [
   ['Миграция хранилища с версии 1 на версию 2', await import('./migration.test.mjs')],
   ['Профиль глюкометра (пакеты по спецификации)', await import('./glucose-profile.test.mjs')],
   ['Сохранность дневника', await import('./backup.test.mjs')],
+  ['Аптечка: остатки и сроки', await import('./medicines.test.mjs')],
   ['Переносимость ядра', await import('./portability.test.mjs')],
 ]
 
