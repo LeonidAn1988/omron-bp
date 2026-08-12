@@ -512,6 +512,14 @@ input[type='radio'] {
   box-shadow: 0 0 0 3px var(--accent-quiet);
 }
 .numfield__step {
+  /* appearance и явные размеры обязательны: iOS Safari со штатным видом
+     push-button не растягивает кнопку по grid-ячейке и ужимает её до
+     содержимого — на устройстве выходило 40px вместо 44. */
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-width: var(--tap);
+  min-height: var(--tap);
   border: 0;
   background: transparent;
   color: var(--text-secondary);
