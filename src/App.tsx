@@ -54,7 +54,8 @@ export default function App() {
   const [diary, setDiary] = useState<DiaryKey>('bp')
   const [ready, setReady] = useState(false)
   const [undo, setUndo] = useState<Measurement | null>(null)
-  const undoTimer = useRef<number | undefined>(undefined)
+  // ReturnType, а не number: в браузере таймер это число, в Node — объект.
+  const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
     Promise.all([getAllMeasurements(), loadSettings()]).then(([stored, loaded]) => {
@@ -63,7 +64,7 @@ export default function App() {
       setSettings(loaded.trackGlucose || stored.some(isGlucose) ? { ...loaded, trackGlucose: true } : loaded)
       setReady(true)
     })
-    return () => window.clearTimeout(undoTimer.current)
+    return () => clearTimeout(undoTimer.current)
   }, [])
 
   const refresh = useCallback(async () => setMeasurements(await getAllMeasurements()), [])
@@ -91,8 +92,8 @@ export default function App() {
       await deleteMeasurement(id)
       await refresh()
       setUndo(victim)
-      window.clearTimeout(undoTimer.current)
-      undoTimer.current = window.setTimeout(() => setUndo(null), 8000)
+      clearTimeout(undoTimer.current)
+      undoTimer.current = setTimeout(() => setUndo(null), 8000)
     },
     [measurements, refresh],
   )

@@ -1,7 +1,11 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { installWebPlatform } from './platform/web'
 import './app.css'
+
+// Платформа устанавливается до первого рендера: ядро обращается к портам сразу.
+installWebPlatform()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

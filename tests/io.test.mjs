@@ -1,5 +1,5 @@
 /** Круговой рейс экспорта-импорта и чтение чужих форматов. */
-import { toCsv, toJson, parseCsv, parseJson, parseImportFile } from './build/io.mjs'
+import { toCsv, toJson, parseCsv, parseJson, parseImportFile } from './build/api.mjs'
 
 export function run() {
   let failures = 0

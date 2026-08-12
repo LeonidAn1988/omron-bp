@@ -1,5 +1,6 @@
 import type { GlucoseContext, Measurement } from '../types'
 import { deviceMeasurementId } from '../db/store'
+import { platform } from '../platform/ports'
 
 // ── экспорт ────────────────────────────────────────────────────────────────
 
@@ -49,14 +50,9 @@ export function toJson(items: Measurement[]): string {
   return JSON.stringify({ format: 'omron-bp/v2', exportedAt: new Date().toISOString(), measurements: items }, null, 2)
 }
 
-export function download(filename: string, content: string, mime: string) {
-  const blob = new Blob([content], { type: `${mime};charset=utf-8` })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+/** Как именно файл попадёт к пользователю, решает платформа. */
+export function download(filename: string, content: string, mime: string): Promise<void> {
+  return platform().files.save(filename, content, mime)
 }
 
 // ── импорт ─────────────────────────────────────────────────────────────────

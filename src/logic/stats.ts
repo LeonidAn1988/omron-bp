@@ -156,8 +156,10 @@ export function dailyAverages(readings: BpReading[]): DailyPoint[] {
 export function movingAverage(points: DailyPoint[], windowDays = 7): { ts: number; sys: number; dia: number }[] {
   const span = windowDays * 86_400_000
   return points.map((point) => {
-    const window = points.filter((p) => p.ts <= point.ts && p.ts > point.ts - span)
-    return { ts: point.ts, sys: mean(window.map((p) => p.sys)), dia: mean(window.map((p) => p.dia)) }
+    // Не `window`: имя затеняло бы глобальный объект в файле, который обязан
+    // оставаться переносимым, и путало бы проверку переносимости.
+    const frame = points.filter((p) => p.ts <= point.ts && p.ts > point.ts - span)
+    return { ts: point.ts, sys: mean(frame.map((p) => p.sys)), dia: mean(frame.map((p) => p.dia)) }
   })
 }
 
@@ -225,7 +227,7 @@ export function dailyGlucose(readings: GlucoseReading[]): DailyGlucosePoint[] {
 export function glucoseMovingAverage(points: DailyGlucosePoint[], windowDays = 7): { ts: number; mmol: number }[] {
   const span = windowDays * 86_400_000
   return points.map((point) => {
-    const window = points.filter((p) => p.ts <= point.ts && p.ts > point.ts - span)
-    return { ts: point.ts, mmol: mean(window.map((p) => p.mmol)) }
+    const frame = points.filter((p) => p.ts <= point.ts && p.ts > point.ts - span)
+    return { ts: point.ts, mmol: mean(frame.map((p) => p.mmol)) }
   })
 }

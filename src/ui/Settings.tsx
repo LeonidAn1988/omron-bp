@@ -166,10 +166,10 @@ export function Settings({
         </div>
 
         <div className="row">
-          <button className="btn" onClick={() => download(`davlenie-${today()}.csv`, toCsv(measurements), 'text/csv')} disabled={!measurements.length}>
+          <button className="btn" onClick={() => download(`dnevnik-${today()}.csv`, toCsv(measurements), 'text/csv')} disabled={!measurements.length}>
             Экспорт CSV
           </button>
-          <button className="btn" onClick={() => download(`davlenie-${today()}.json`, toJson(measurements), 'application/json')} disabled={!measurements.length}>
+          <button className="btn" onClick={() => download(`dnevnik-${today()}.json`, toJson(measurements), 'application/json')} disabled={!measurements.length}>
             Резервная копия JSON
           </button>
           <button className="btn" onClick={() => fileRef.current?.click()}>

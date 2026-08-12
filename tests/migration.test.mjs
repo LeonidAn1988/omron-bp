@@ -9,7 +9,7 @@
  * но и значения каждой записи.
  */
 import { IDBFactory } from 'fake-indexeddb'
-import { useIndexedDbFactory, getAllMeasurements, putMeasurements, loadSettings } from './build/store.mjs'
+import { installWebPlatform, useIndexedDbFactory, getAllMeasurements, putMeasurements, loadSettings } from './build/api.mjs'
 
 const DB_NAME = 'omron-bp'
 
@@ -60,6 +60,7 @@ export async function run() {
   const factory = new IDBFactory()
   await seedVersion1(factory, legacy)
 
+  installWebPlatform()
   useIndexedDbFactory(factory)
   const migrated = await getAllMeasurements()
 

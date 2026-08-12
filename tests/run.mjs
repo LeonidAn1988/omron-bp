@@ -14,31 +14,27 @@ const buildDir = join(testsDir, 'build')
 rmSync(buildDir, { recursive: true, force: true })
 mkdirSync(buildDir, { recursive: true })
 
-for (const [entry, out] of [
-  ['src/ble/hem6232t.ts', 'hem6232t.mjs'],
-  ['src/logic/io.ts', 'io.mjs'],
-  ['src/db/store.ts', 'store.mjs'],
-]) {
-  execFileSync(
-    'npx',
-    [
-      'esbuild',
-      entry,
-      '--bundle',
-      '--format=esm',
-      // fake-indexeddb остаётся внешним: тест подсовывает его через useIndexedDbFactory
-      '--external:fake-indexeddb',
-      `--outfile=${join(buildDir, out)}`,
-      '--log-level=error',
-    ],
-    { cwd: root, stdio: 'inherit' },
-  )
-}
+// Один бандл на все наборы: реестр платформы хранит состояние в модуле,
+// и при раздельных бандлах установленная платформа была бы не видна.
+execFileSync(
+  'npx',
+  [
+    'esbuild',
+    'tests/api.ts',
+    '--bundle',
+    '--format=esm',
+    '--external:fake-indexeddb',
+    `--outfile=${join(buildDir, 'api.mjs')}`,
+    '--log-level=error',
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
 
 const suites = [
   ['Разбор записи прибора (сверка с omblepy)', await import('./parse-record.test.mjs')],
   ['Экспорт и импорт файлов', await import('./io.test.mjs')],
   ['Миграция хранилища с версии 1 на версию 2', await import('./migration.test.mjs')],
+  ['Переносимость ядра', await import('./portability.test.mjs')],
 ]
 
 let failures = 0

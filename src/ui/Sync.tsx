@@ -6,11 +6,13 @@ import {
   getKnownDevices,
   inspectDevice,
   isBluetoothEnabled,
-  isWebBluetoothAvailable,
+  isBluetoothSupported,
+  isCancellation,
   pairDevice,
   pickDevice,
   PairingRequiredError,
   type DeviceRecord,
+  type GattDevice,
 } from '../ble/session'
 import { BleLog, logToText, useBleLog } from './BleLog'
 import { Banner, Reveal } from './bits'
@@ -54,7 +56,7 @@ export function Sync({
   onGoManual: () => void
 }) {
   const { lines, log, clear } = useBleLog()
-  const [device, setDevice] = useState<BluetoothDevice | null>(null)
+  const [device, setDevice] = useState<GattDevice | null>(null)
   const [busy, setBusy] = useState<Busy>(null)
   /** До первого прочитанного блока длительность неизвестна — показываем «идёт», а не проценты. */
   const [connecting, setConnecting] = useState(false)
@@ -68,7 +70,7 @@ export function Sync({
   const [radioOff, setRadioOff] = useState(false)
 
   const resultRef = useRef<HTMLDivElement>(null)
-  const supported = isWebBluetoothAvailable()
+  const supported = isBluetoothSupported()
 
   useEffect(() => {
     if (!supported) return
@@ -85,14 +87,14 @@ export function Sync({
     resultRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }, [outcome, error, needsPairing, paired])
 
-  async function ensureDevice(): Promise<BluetoothDevice> {
+  async function ensureDevice(): Promise<GattDevice> {
     if (device) return device
     const picked = await pickDevice(showAll)
     setDevice(picked)
     return picked
   }
 
-  async function run(kind: Exclude<Busy, null>, action: (device: BluetoothDevice) => Promise<void>) {
+  async function run(kind: Exclude<Busy, null>, action: (device: GattDevice) => Promise<void>) {
     setBusy(kind)
     setError(null)
     setNeedsPairing(false)
@@ -107,7 +109,7 @@ export function Sync({
       if (caught instanceof PairingRequiredError) {
         setNeedsPairing(true)
         log('warn', `прибор отклонил ключ, код статуса ${caught.statusCode}`)
-      } else if (!/User cancelled|chooser|cancell?ed/i.test(message)) {
+      } else if (!isCancellation(caught)) {
         // Закрытый пользователем системный диалог выбора — не ошибка, молчим.
         setError(message)
         log('error', message)

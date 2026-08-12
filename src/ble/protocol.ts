@@ -17,6 +17,8 @@
  *   [n..]    хвост, подобранный так, что XOR всех байт пакета == 0
  */
 
+import type { GattCharacteristic, GattService } from '../platform/ports'
+
 export const OMRON_SERVICE = 'ecbe3980-c9a2-11e1-b1bd-0002a5d5c51b'
 
 /** Каналы notify: прибор -> мы */
@@ -85,17 +87,6 @@ function xor(bytes: ArrayLike<number>): number {
   return acc
 }
 
-/**
- * Web Bluetooth принимает BufferSource поверх обычного ArrayBuffer.
- * Копия здесь не только успокаивает типы: subarray() отдаёт окно в общий буфер,
- * и передавать такое окно в GATT-запись небезопасно.
- */
-function toBuffer(bytes: Uint8Array): ArrayBuffer {
-  const copy = new ArrayBuffer(bytes.byteLength)
-  new Uint8Array(copy).set(bytes)
-  return copy
-}
-
 /** Дописывает к телу команды два хвостовых байта так, чтобы XOR всего пакета стал нулём. */
 function withChecksum(body: number[]): Uint8Array {
   return Uint8Array.from([...body, 0x00, xor(body)])
@@ -114,9 +105,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
  * Один экземпляр живёт ровно столько, сколько длится одно подключение.
  */
 export class OmronTransport {
-  private rxChars: BluetoothRemoteGATTCharacteristic[] = []
-  private txChars: BluetoothRemoteGATTCharacteristic[] = []
-  private unlockChar!: BluetoothRemoteGATTCharacteristic
+  private rxChars: GattCharacteristic[] = []
+  private txChars: GattCharacteristic[] = []
+  private unlockChar!: GattCharacteristic
 
   private rxBuffers: (Uint8Array | null)[] = [null, null, null, null]
   private pendingPacket: RxPacket | null = null
@@ -125,20 +116,17 @@ export class OmronTransport {
   private unlockResponse: Uint8Array | null = null
   private unlockNotifyActive = false
 
-  private readonly onRx = (event: Event) => this.handleRx(event)
-  private readonly onUnlockRx = (event: Event) => {
-    const target = event.target as BluetoothRemoteGATTCharacteristic
-    this.unlockResponse = new Uint8Array(target.value!.buffer)
-    this.log('debug', `unlock < ${hex(this.unlockResponse)}`)
+  private readonly onUnlockRx = (bytes: Uint8Array) => {
+    this.unlockResponse = bytes
+    this.log('debug', `unlock < ${hex(bytes)}`)
   }
 
   constructor(
-    private readonly service: BluetoothRemoteGATTService,
+    private readonly service: GattService,
     private readonly log: Logger = () => {},
   ) {}
 
-  static async create(server: BluetoothRemoteGATTServer, log: Logger = () => {}) {
-    const service = await server.getPrimaryService(OMRON_SERVICE)
+  static async create(service: GattService, log: Logger = () => {}) {
     const transport = new OmronTransport(service, log)
     await transport.resolveCharacteristics()
     return transport
@@ -152,12 +140,7 @@ export class OmronTransport {
 
   // ── приём ────────────────────────────────────────────────────────────────
 
-  private handleRx(event: Event) {
-    const target = event.target as BluetoothRemoteGATTCharacteristic
-    const index = this.rxChars.findIndex((c) => c.uuid === target.uuid)
-    if (index < 0) return
-
-    const bytes = new Uint8Array(target.value!.buffer)
+  private handleRx(index: number, bytes: Uint8Array) {
     this.rxBuffers[index] = bytes
     this.log('debug', `rx ch${index} < ${hex(bytes)}`)
 
@@ -200,23 +183,15 @@ export class OmronTransport {
 
   private async enableNotifications() {
     if (this.notifyActive) return
-    for (const char of this.rxChars) {
-      char.addEventListener('characteristicvaluechanged', this.onRx)
-      await char.startNotifications()
+    for (const [index, char] of this.rxChars.entries()) {
+      await char.startNotifications((bytes) => this.handleRx(index, bytes))
     }
     this.notifyActive = true
   }
 
   private async disableNotifications() {
     if (!this.notifyActive) return
-    for (const char of this.rxChars) {
-      try {
-        await char.stopNotifications()
-      } catch {
-        /* прибор мог уже отключиться сам */
-      }
-      char.removeEventListener('characteristicvaluechanged', this.onRx)
-    }
+    for (const char of this.rxChars) await char.stopNotifications()
     this.notifyActive = false
   }
 
@@ -230,7 +205,7 @@ export class OmronTransport {
       for (let i = 0; i * CHANNEL_WIDTH < command.length; i++) {
         const chunk = command.subarray(i * CHANNEL_WIDTH, (i + 1) * CHANNEL_WIDTH)
         this.log('debug', `tx ch${i} > ${hex(chunk)}`)
-        await this.txChars[i].writeValueWithResponse(toBuffer(chunk))
+        await this.txChars[i].writeValue(chunk)
       }
 
       const deadline = Date.now() + timeoutMs
@@ -251,7 +226,7 @@ export class OmronTransport {
 
   private async unlockTransceive(payload: Uint8Array, timeoutMs = 3000): Promise<Uint8Array> {
     this.unlockResponse = null
-    await this.unlockChar.writeValueWithResponse(toBuffer(payload))
+    await this.unlockChar.writeValue(payload)
     const deadline = Date.now() + timeoutMs
     while (!this.unlockResponse && Date.now() < deadline) await sleep(20)
     if (!this.unlockResponse) throw new OmronProtocolError('Прибор не ответил на канале разблокировки')
@@ -260,19 +235,13 @@ export class OmronTransport {
 
   private async startUnlockNotifications() {
     if (this.unlockNotifyActive) return
-    this.unlockChar.addEventListener('characteristicvaluechanged', this.onUnlockRx)
-    await this.unlockChar.startNotifications()
+    await this.unlockChar.startNotifications(this.onUnlockRx)
     this.unlockNotifyActive = true
   }
 
   private async stopUnlockNotifications() {
     if (!this.unlockNotifyActive) return
-    try {
-      await this.unlockChar.stopNotifications()
-    } catch {
-      /* ignore */
-    }
-    this.unlockChar.removeEventListener('characteristicvaluechanged', this.onUnlockRx)
+    await this.unlockChar.stopNotifications()
     this.unlockNotifyActive = false
   }
 
@@ -307,9 +276,7 @@ export class OmronTransport {
   async writePairingKey(key: Uint8Array) {
     // Подписка на нулевой RX-канал заставляет прибор инициировать BLE-сопряжение
     // на уровне ОС — без этого запись ключа не проходит.
-    const primer = () => {}
-    this.rxChars[0].addEventListener('characteristicvaluechanged', primer)
-    await this.rxChars[0].startNotifications()
+    await this.rxChars[0].startNotifications(() => {})
 
     await this.startUnlockNotifications()
 
@@ -337,12 +304,7 @@ export class OmronTransport {
     }
 
     await this.stopUnlockNotifications()
-    try {
-      await this.rxChars[0].stopNotifications()
-    } catch {
-      /* ignore */
-    }
-    this.rxChars[0].removeEventListener('characteristicvaluechanged', primer)
+    await this.rxChars[0].stopNotifications()
     this.log('info', 'ключ сопряжения записан в прибор')
   }
 

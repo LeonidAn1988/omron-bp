@@ -7,7 +7,7 @@
  * это единственное место, где ошибка молча испортила бы историю измерений.
  */
 import { readFileSync } from 'node:fs'
-import { parseRecord } from './build/hem6232t.mjs'
+import { parseRecord } from './build/api.mjs'
 
 const cases = JSON.parse(readFileSync(new URL('./fixtures/omblepy-records.json', import.meta.url), 'utf8'))
 

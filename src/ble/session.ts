@@ -1,6 +1,8 @@
 /**
- * Высокоуровневый сценарий работы с тонометром: выбор устройства, подключение,
- * сопряжение и выгрузка истории.
+ * Сценарии работы с тонометром: выбор устройства, сопряжение, выгрузка истории.
+ *
+ * Про конкретную платформу здесь не знают — всё идёт через BluetoothPort,
+ * поэтому файл переезжает на Android, iOS и десктоп без правок.
  */
 
 import {
@@ -16,63 +18,67 @@ import {
   type Logger,
 } from './protocol'
 import { readAllRecords, type DeviceRecord, type ReadProgress } from './hem6232t'
+import { platform, type GattDevice } from '../platform/ports'
 
-export type { DeviceRecord, ReadProgress }
+export type { DeviceRecord, ReadProgress, GattDevice }
 export { DEFAULT_PAIRING_KEY, OmronProtocolError, PairingRequiredError }
 
 /** Приборы Omron рекламируются под такими именами. */
 const NAME_PREFIXES = ['BLESmart_', 'BLEsmart_', 'OMRON', 'Omron', 'omron']
 
-export function isWebBluetoothAvailable(): boolean {
-  return typeof navigator !== 'undefined' && 'bluetooth' in navigator
+export function isBluetoothSupported(): boolean {
+  return platform().bluetooth.isSupported()
 }
 
-export async function isBluetoothEnabled(): Promise<boolean | null> {
-  if (!isWebBluetoothAvailable()) return null
-  try {
-    return await navigator.bluetooth.getAvailability()
-  } catch {
-    return null
-  }
+export function isBluetoothEnabled(): Promise<boolean | null> {
+  return platform().bluetooth.isEnabled()
 }
 
-/** Открывает системный выбор устройства. Обязан вызываться из обработчика клика. */
-export async function pickDevice(showAll = false): Promise<BluetoothDevice> {
-  const options: RequestDeviceOptions = showAll
-    ? { acceptAllDevices: true, optionalServices: [OMRON_SERVICE] }
-    : {
-        filters: [...NAME_PREFIXES.map((namePrefix) => ({ namePrefix })), { services: [OMRON_SERVICE] }],
-        optionalServices: [OMRON_SERVICE],
-      }
-  return navigator.bluetooth.requestDevice(options)
+export function isCancellation(error: unknown): boolean {
+  return platform().bluetooth.isCancellation(error)
+}
+
+/** Открывает системный выбор устройства. Обязан вызываться из обработчика жеста. */
+export function pickDevice(showAll = false): Promise<GattDevice> {
+  return platform().bluetooth.pickDevice({ serviceUuid: OMRON_SERVICE, namePrefixes: NAME_PREFIXES, showAll })
 }
 
 /** Ранее разрешённые устройства — позволяет переподключаться без диалога выбора. */
-export async function getKnownDevices(): Promise<BluetoothDevice[]> {
-  if (!isWebBluetoothAvailable()) return []
-  const bluetooth = navigator.bluetooth as Bluetooth & { getDevices?: () => Promise<BluetoothDevice[]> }
-  if (typeof bluetooth.getDevices !== 'function') return []
-  try {
-    return await bluetooth.getDevices()
-  } catch {
-    return []
-  }
+export function getKnownDevices(): Promise<GattDevice[]> {
+  return platform().bluetooth.knownDevices(OMRON_SERVICE)
 }
 
-async function connect(device: BluetoothDevice, log: Logger): Promise<OmronTransport> {
-  if (!device.gatt) throw new OmronProtocolError('У выбранного устройства нет GATT — это не тонометр Omron')
+async function connect(device: GattDevice, log: Logger): Promise<OmronTransport> {
   log('info', `подключение к «${device.name ?? 'без имени'}»`)
-  const server = await device.gatt.connect()
-  // На части платформ сервисы резолвятся с задержкой сразу после connect().
-  for (let attempt = 0; attempt < 10; attempt++) {
-    try {
-      return await OmronTransport.create(server, log)
-    } catch (error) {
-      if (attempt === 9) throw error
-      await new Promise((r) => setTimeout(r, 250))
+  const service = await device.connect(OMRON_SERVICE)
+  return OmronTransport.create(service, log)
+}
+
+const ROLE_BY_UUID: Record<string, string> = {
+  ...Object.fromEntries(RX_CHANNELS.map((uuid, i) => [uuid, `rx ${i}`])),
+  ...Object.fromEntries(TX_CHANNELS.map((uuid, i) => [uuid, `tx ${i}`])),
+  [UNLOCK_CHAR]: 'разблокировка',
+}
+
+/**
+ * Диагностика: перечисляет характеристики проприетарного сервиса и их свойства.
+ * Нужна, если протокол на конкретном экземпляре разойдётся с ожидаемым.
+ */
+export async function inspectDevice(device: GattDevice, log: Logger): Promise<void> {
+  log('info', `устройство: ${device.name ?? 'без имени'} (id ${device.id})`)
+  const service = await device.connect(OMRON_SERVICE)
+  try {
+    log('info', `сервис ${OMRON_SERVICE}`)
+    for (const { characteristic, properties } of await service.listCharacteristics()) {
+      const flags = Object.entries(properties)
+        .filter(([, on]) => on)
+        .map(([name]) => name)
+        .join(',')
+      log('info', `  ${characteristic.uuid}  [${flags}]  ${ROLE_BY_UUID[characteristic.uuid] ?? '—'}`)
     }
+  } finally {
+    device.disconnect()
   }
-  throw new OmronProtocolError('Не удалось получить сервисы устройства')
 }
 
 export interface SyncResult {
@@ -84,7 +90,7 @@ export interface SyncResult {
  * Разовое сопряжение: пишет ключ в прибор.
  * Прибор должен быть в режиме сопряжения — на экране мигает «P».
  */
-export async function pairDevice(device: BluetoothDevice, keyHex: string, log: Logger): Promise<void> {
+export async function pairDevice(device: GattDevice, keyHex: string, log: Logger): Promise<void> {
   const key = parseHexKey(keyHex)
   const transport = await connect(device, log)
   try {
@@ -94,52 +100,13 @@ export async function pairDevice(device: BluetoothDevice, keyHex: string, log: L
     await transport.endSession()
   } finally {
     await transport.dispose()
-    device.gatt?.disconnect()
+    device.disconnect()
   }
-}
-
-/**
- * Диагностика: перечисляет характеристики проприетарного сервиса и их свойства.
- * Нужна, если протокол на конкретном экземпляре разойдётся с ожидаемым.
- *
- * Полный дамп всех сервисов Web Bluetooth не отдаёт — видно только то, что
- * заявлено в filters/optionalServices, поэтому смотрим свой сервис.
- */
-export async function inspectDevice(device: BluetoothDevice, log: Logger): Promise<void> {
-  if (!device.gatt) throw new OmronProtocolError('У устройства нет GATT')
-  const server = await device.gatt.connect()
-  try {
-    log('info', `устройство: ${device.name ?? 'без имени'} (id ${device.id})`)
-    const service = await server.getPrimaryService(OMRON_SERVICE)
-    log('info', `сервис ${service.uuid}`)
-    for (const characteristic of await service.getCharacteristics()) {
-      const props = Object.entries({
-        read: characteristic.properties.read,
-        write: characteristic.properties.write,
-        writeNR: characteristic.properties.writeWithoutResponse,
-        notify: characteristic.properties.notify,
-        indicate: characteristic.properties.indicate,
-      })
-        .filter(([, on]) => on)
-        .map(([name]) => name)
-        .join(',')
-      const role = ROLE_BY_UUID[characteristic.uuid] ?? '—'
-      log('info', `  ${characteristic.uuid}  [${props}]  ${role}`)
-    }
-  } finally {
-    device.gatt.disconnect()
-  }
-}
-
-const ROLE_BY_UUID: Record<string, string> = {
-  ...Object.fromEntries(RX_CHANNELS.map((uuid, i) => [uuid, `rx ${i}`])),
-  ...Object.fromEntries(TX_CHANNELS.map((uuid, i) => [uuid, `tx ${i}`])),
-  [UNLOCK_CHAR]: 'разблокировка',
 }
 
 /** Выгружает всю историю измерений. Ничего не пишет в прибор. */
 export async function downloadRecords(
-  device: BluetoothDevice,
+  device: GattDevice,
   keyHex: string,
   log: Logger,
   onProgress?: (p: ReadProgress) => void,
@@ -155,6 +122,6 @@ export async function downloadRecords(
     return { records, deviceName: device.name ?? 'Omron' }
   } finally {
     await transport.dispose()
-    device.gatt?.disconnect()
+    device.disconnect()
   }
 }
