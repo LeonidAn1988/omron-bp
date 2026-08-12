@@ -50,8 +50,17 @@ export function DataSafety({ status }: { status: BackupStatus }) {
         </div>
 
         <div className="row">
-          <button className="btn btn--primary" onClick={() => void status.saveNow()} disabled={busy || count === 0}>
-            Сохранить копию
+          {status.canShare && (
+            <button className="btn btn--primary" onClick={() => void status.shareNow()} disabled={busy || count === 0}>
+              Отправить копию
+            </button>
+          )}
+          <button
+            className={status.canShare ? 'btn' : 'btn btn--primary'}
+            onClick={() => void status.saveNow()}
+            disabled={busy || count === 0}
+          >
+            Сохранить в файл
           </button>
           {supported &&
             (target ? (
@@ -90,9 +99,9 @@ export function DataSafety({ status }: { status: BackupStatus }) {
       <Banner tone="info">
         <b>Копия — это обычный файл с вашими записями.</b>
         <div style={{ marginTop: 4 }}>
-          Он никуда не отправляется. Чтобы данные пережили потерю телефона, положите его туда, что вы не потеряете
-          вместе с ним, — в облако, на компьютер или в почту себе. Восстановить дневник из файла можно ниже, в разделе
-          «Данные».
+          Приложение никуда его не отправляет само. Чтобы данные пережили потерю телефона, копия должна оказаться за
+          его пределами: «Отправить копию» открывает выбор — облако, мессенджер, почта себе. Восстановить дневник из
+          файла можно ниже, в разделе «Данные».
         </div>
       </Banner>
     </div>
@@ -112,8 +121,12 @@ export function BackupNudge({ status, onOpenSettings }: { status: BackupStatus; 
           : `С последней копии прошло больше ${STALE_DAYS} дней, и за это время появились новые записи.`}
       </div>
       <div className="row" style={{ marginTop: 'var(--space-3)' }}>
-        <button className="btn btn--primary" onClick={() => void status.saveNow()} disabled={status.busy}>
-          Сохранить копию
+        <button
+          className="btn btn--primary"
+          onClick={() => void (status.canShare ? status.shareNow() : status.saveNow())}
+          disabled={status.busy}
+        >
+          {status.canShare ? 'Отправить копию' : 'Сохранить копию'}
         </button>
         <button className="btn" onClick={onOpenSettings}>
           Настроить

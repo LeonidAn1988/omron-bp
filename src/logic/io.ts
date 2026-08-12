@@ -55,6 +55,16 @@ export function download(filename: string, content: string, mime: string): Promi
   return platform().files.save(filename, content, mime)
 }
 
+/** Умеет ли платформа передать файл в другое приложение. */
+export function canShareFile(): boolean {
+  return platform().files.canShare()
+}
+
+/** Отдать файл системному «поделиться». `false` — пользователь закрыл окно. */
+export function shareFile(filename: string, content: string, mime: string): Promise<boolean> {
+  return platform().files.share(filename, content, mime)
+}
+
 // ── импорт ─────────────────────────────────────────────────────────────────
 
 const HEADER_ALIASES: Record<string, string[]> = {

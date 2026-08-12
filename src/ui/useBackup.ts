@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Measurement, Settings } from '../types'
 import { backupTarget, requestDurability } from '../db/store'
-import { download, toJson } from '../logic/io'
+import { canShareFile, download, shareFile, toJson } from '../logic/io'
 import { backupFilename, backupWarning, shouldAutoBackup, type BackupWarning } from '../logic/backup'
 
 /**
@@ -29,6 +29,10 @@ export interface BackupStatus {
   chooseTarget: () => Promise<void>
   forgetTarget: () => Promise<void>
   saveNow: () => Promise<void>
+  /** Умеет ли платформа отдать копию в другое приложение. */
+  canShare: boolean
+  /** Передать копию в облако, мессенджер или почту — чтобы она пережила устройство. */
+  shareNow: () => Promise<void>
 }
 
 export function useBackup(
@@ -118,6 +122,23 @@ export function useBackup(
     }
   }, [markDone])
 
+  /**
+   * Передача копии наружу. На телефоне это важнее скачивания: скачанный файл
+   * лежит в той же памяти, что и дневник, и пропадает вместе с телефоном.
+   */
+  const shareNow = useCallback(async () => {
+    setBusy(true)
+    try {
+      const items = latest.current.measurements
+      const sent = await shareFile(backupFilename(Date.now()), toJson(items), 'application/json')
+      // Отметку ставим только при подтверждённой передаче: закрытое окно
+      // «поделиться» означает, что копии нет, и делать вид иначе нельзя.
+      if (sent) markDone(items.length)
+    } finally {
+      setBusy(false)
+    }
+  }, [markDone])
+
   return {
     supported,
     target,
@@ -134,5 +155,7 @@ export function useBackup(
     chooseTarget,
     forgetTarget,
     saveNow,
+    canShare: canShareFile(),
+    shareNow,
   }
 }
