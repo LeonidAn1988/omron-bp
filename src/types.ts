@@ -95,4 +95,9 @@ export interface Settings {
 
   /** Светлая или тёмная тема. */
   theme: ThemeChoice
+
+  /** Когда сделана последняя резервная копия. null — не делалась. */
+  backupLastAt: number | null
+  /** Сколько записей вошло в последнюю копию: по расхождению видно, что она устарела. */
+  backupLastCount: number
 }

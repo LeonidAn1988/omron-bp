@@ -79,6 +79,18 @@ export interface StoragePort {
   clearMeasurements(): Promise<void>
   loadSettings(): Promise<Partial<Settings> | undefined>
   saveSettings(settings: Settings): Promise<void>
+
+  /**
+   * Попросить платформу не вытеснять наши данные.
+   *
+   * Браузер вправе очистить хранилище сайта, когда на устройстве кончается
+   * место, а Safari стирает его сам после недели без заходов. Для дневника
+   * измерений это тихая потеря, поэтому разрешение спрашивается сразу.
+   *
+   * Возвращает, действует ли защита. `null` — платформа такого не умеет и
+   * вопрос к ней неприменим (на нативной, например, данные и так не вытесняются).
+   */
+  requestDurability(): Promise<boolean | null>
 }
 
 // ── файлы ──────────────────────────────────────────────────────────────────
@@ -88,12 +100,33 @@ export interface FilePort {
   save(filename: string, content: string, mime: string): Promise<void>
 }
 
+/**
+ * Автоматические резервные копии в один и тот же файл.
+ *
+ * Отдельный порт, а не метод у FilePort: «отдать файл» это разовое действие по
+ * нажатию, а здесь долгоживущая цель, в которую приложение пишет само и без
+ * спроса. Не всякая платформа так умеет — в вебе это есть в Chrome на
+ * компьютере, но не в Safari и не в мобильном Chrome, поэтому `isSupported`.
+ */
+export interface BackupPort {
+  isSupported(): boolean
+  /** Спросить у пользователя файл для копий. Обязан вызываться из обработчика жеста. */
+  choose(suggestedName: string): Promise<string | null>
+  /** Имя ранее выбранного файла, если он выбран и доступ к нему цел. */
+  target(): Promise<string | null>
+  /** Записать копию. `false` — цель пропала или доступ отозван. */
+  write(content: string): Promise<boolean>
+  /** Забыть цель — копии перестают делаться сами. */
+  forget(): Promise<void>
+}
+
 // ── реестр ─────────────────────────────────────────────────────────────────
 
 export interface Platform {
   bluetooth: BluetoothPort
   storage: StoragePort
   files: FilePort
+  backup: BackupPort
 }
 
 let current: Platform | null = null

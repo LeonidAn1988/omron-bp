@@ -28,4 +28,13 @@ export {
   deviceMeasurementId,
 } from '../src/db/store'
 
+export {
+  shouldAutoBackup,
+  backupWarning,
+  describeBackupAge,
+  backupFilename,
+  STALE_DAYS,
+  NO_BACKUP,
+} from '../src/logic/backup'
+
 export { installWebPlatform, useIndexedDbFactory } from '../src/platform/web'

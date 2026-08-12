@@ -21,6 +21,8 @@ export const DEFAULT_SETTINGS: Settings = {
   glucoseLow: 3.9,
   trackGlucose: false,
   theme: 'auto',
+  backupLastAt: null,
+  backupLastCount: 0,
 }
 
 /**
@@ -78,4 +80,19 @@ export async function loadSettings(): Promise<Settings> {
 
 export function saveSettings(settings: Settings): Promise<void> {
   return platform().storage.saveSettings(settings)
+}
+
+// ── сохранность ────────────────────────────────────────────────────────────
+
+/** Просит платформу не вытеснять данные. Ответ показываем в настройках. */
+export function requestDurability(): Promise<boolean | null> {
+  return platform().storage.requestDurability()
+}
+
+export const backupTarget = {
+  isSupported: () => platform().backup.isSupported(),
+  choose: (suggestedName: string) => platform().backup.choose(suggestedName),
+  current: () => platform().backup.target(),
+  write: (content: string) => platform().backup.write(content),
+  forget: () => platform().backup.forget(),
 }

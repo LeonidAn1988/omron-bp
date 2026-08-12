@@ -103,4 +103,16 @@ export const webStorage: StoragePort = {
   async saveSettings(settings) {
     await tx(META, 'readwrite', (s) => s.put(settings, 'settings'))
   },
+
+  /**
+   * Постоянное хранилище. Chrome решает сам по «вовлечённости» и установке на
+   * домашний экран, Safari даёт его установленным приложениям. Отказ не ошибка:
+   * данные останутся, просто без гарантии, что браузер их не вытеснит.
+   */
+  async requestDurability() {
+    if (!navigator.storage?.persist) return null
+    if (await navigator.storage.persisted()) return true
+    return await navigator.storage.persist()
+  },
+
 }

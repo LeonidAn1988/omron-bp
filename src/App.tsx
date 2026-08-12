@@ -19,6 +19,8 @@ import { Readings } from './ui/Readings'
 import { Entry } from './ui/Entry'
 import { Sync } from './ui/Sync'
 import { applyTheme } from './ui/theme'
+import { useBackup } from './ui/useBackup'
+import { BackupNudge } from './ui/Backup'
 import { Settings } from './ui/Settings'
 import { Report } from './ui/Report'
 import { Banner, Reveal } from './ui/bits'
@@ -136,6 +138,8 @@ export default function App() {
     void saveSettings(next)
   }, [])
 
+  const backup = useBackup(measurements, settings, updateSettings, ready)
+
   const glucoseTargets: GlucoseTargets = useMemo(
     () => ({
       fastingMax: settings.glucoseFastingMax,
@@ -225,6 +229,10 @@ export default function App() {
       {tab === 'overview' && (
         <div className="stack">
           <LatestAlert latest={latestBp} />
+
+          {/* Предупреждение о копии стоит здесь, а не в настройках: до настроек
+              человек не дойдёт, а потеря дневника необратима. */}
+          <BackupNudge status={backup} onOpenSettings={() => setTab('settings')} />
 
           {measurements.length === 0 ? (
             <Banner tone="info">
@@ -390,6 +398,7 @@ export default function App() {
           onImport={handleImport}
           onClearAll={handleClearAll}
           showUserPicker={hasSecondUser}
+          backup={backup}
         />
       )}
     </div>

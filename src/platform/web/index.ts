@@ -10,11 +10,13 @@ import { installPlatform, type Platform } from '../ports'
 import { webBluetooth } from './bluetooth'
 import { webStorage } from './storage'
 import { webFiles } from './files'
+import { webBackup } from './backup'
 
 export const webPlatform: Platform = {
   bluetooth: webBluetooth,
   storage: webStorage,
   files: webFiles,
+  backup: webBackup,
 }
 
 export function installWebPlatform() {

@@ -3,6 +3,8 @@ import type { Measurement, Settings as SettingsData, ThemeChoice } from '../type
 import { DEFAULT_PAIRING_KEY } from '../ble/session'
 import { download, parseImportFile, toCsv, toJson } from '../logic/io'
 import { Banner, Field } from './bits'
+import { DataSafety } from './Backup'
+import type { BackupStatus } from './useBackup'
 
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -19,6 +21,7 @@ export function Settings({
   onImport,
   onClearAll,
   showUserPicker,
+  backup,
 }: {
   settings: SettingsData
   onChange: (next: SettingsData) => void
@@ -26,6 +29,7 @@ export function Settings({
   onImport: (measurements: Measurement[]) => Promise<number>
   onClearAll: () => Promise<void>
   showUserPicker: boolean
+  backup: BackupStatus
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [message, setMessage] = useState<{ tone: 'good' | 'critical'; text: string } | null>(null)
@@ -72,6 +76,8 @@ export function Settings({
           «Как в системе» — приложение темнеет вместе с телефоном или компьютером.
         </p>
       </div>
+
+      <DataSafety status={backup} />
 
       <div className="card">
         <div className="card__head">
