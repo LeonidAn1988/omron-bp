@@ -68,6 +68,9 @@ export type Measurement = BpReading | GlucoseReading
 export const isBp = (m: Measurement): m is BpReading => m.kind === 'bp'
 export const isGlucose = (m: Measurement): m is GlucoseReading => m.kind === 'glucose'
 
+/** Оформление. «Как в системе» — значение по умолчанию, оно же поведение до этой настройки. */
+export type ThemeChoice = 'auto' | 'light' | 'dark'
+
 export interface Settings {
   /** Ключ сопряжения, 32 hex-символа. */
   pairingKey: string
@@ -89,4 +92,7 @@ export interface Settings {
 
   /** Показывать ли раздел сахара. Включается сам, как только появляется первая запись. */
   trackGlucose: boolean
+
+  /** Светлая или тёмная тема. */
+  theme: ThemeChoice
 }

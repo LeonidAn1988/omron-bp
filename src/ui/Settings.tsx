@@ -1,10 +1,16 @@
 import { useRef, useState } from 'react'
-import type { Measurement, Settings as SettingsData } from '../types'
+import type { Measurement, Settings as SettingsData, ThemeChoice } from '../types'
 import { DEFAULT_PAIRING_KEY } from '../ble/session'
 import { download, parseImportFile, toCsv, toJson } from '../logic/io'
 import { Banner, Field } from './bits'
 
 const today = () => new Date().toISOString().slice(0, 10)
+
+const THEMES: { key: ThemeChoice; title: string }[] = [
+  { key: 'auto', title: 'Как в системе' },
+  { key: 'light', title: 'Светлая' },
+  { key: 'dark', title: 'Тёмная' },
+]
 
 export function Settings({
   settings,
@@ -47,6 +53,26 @@ export function Settings({
 
   return (
     <div className="stack">
+      <div className="card">
+        <div className="card__head">
+          <h2>Оформление</h2>
+        </div>
+
+        <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
+          Тема
+        </div>
+        <div className="segmented segmented--fill" role="group" aria-label="Тема оформления">
+          {THEMES.map(({ key, title }) => (
+            <button key={key} aria-pressed={settings.theme === key} onClick={() => patch({ theme: key })}>
+              {title}
+            </button>
+          ))}
+        </div>
+        <p className="muted" style={{ marginTop: 'var(--space-3)', marginBottom: 0 }}>
+          «Как в системе» — приложение темнеет вместе с телефоном или компьютером.
+        </p>
+      </div>
+
       <div className="card">
         <div className="card__head">
           <h2>Пользователи и цели</h2>

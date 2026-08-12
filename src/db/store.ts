@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   glucosePostMealMax: 10.0,
   glucoseLow: 3.9,
   trackGlucose: false,
+  theme: 'auto',
 }
 
 /**

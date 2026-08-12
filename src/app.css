@@ -516,6 +516,21 @@ input[type='radio'] {
 .segmented button + button {
   border-left: 1px solid var(--border-strong);
 }
+/* Группа во всю ширину: три подписи в строку помещались с запасом в 28px, а
+   этого мало — системный шрифт на устройстве бывает крупнее нашего. Равные доли
+   и перенос подписи держат вёрстку при любой ширине. */
+.segmented--fill {
+  display: flex;
+  width: 100%;
+}
+.segmented--fill button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--space-2);
+  white-space: normal;
+  line-height: 1.2;
+}
+
 .segmented button:hover:not([aria-pressed='true']) {
   background: var(--hover);
 }

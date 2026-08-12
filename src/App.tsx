@@ -18,6 +18,7 @@ import { GlucoseEntry, GlucoseList, GlucoseTiles } from './ui/Glucose'
 import { Readings } from './ui/Readings'
 import { Entry } from './ui/Entry'
 import { Sync } from './ui/Sync'
+import { applyTheme } from './ui/theme'
 import { Settings } from './ui/Settings'
 import { Report } from './ui/Report'
 import { Banner, Reveal } from './ui/bits'
@@ -66,6 +67,12 @@ export default function App() {
     })
     return () => clearTimeout(undoTimer.current)
   }, [])
+
+  // Тему ставит и скрипт в index.html — до первой отрисовки. Здесь она
+  // приводится в соответствие с настройками: они главный источник истины.
+  useEffect(() => {
+    applyTheme(settings.theme)
+  }, [settings.theme])
 
   const refresh = useCallback(async () => setMeasurements(await getAllMeasurements()), [])
 

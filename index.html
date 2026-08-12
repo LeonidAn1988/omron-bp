@@ -10,6 +10,18 @@
     />
     <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#f0efec" media="(prefers-color-scheme: light)" />
+    <!-- Выбранная тема применяется до первой отрисовки. Настройки лежат в
+         IndexedDB и читаются асинхронно — если ждать их, тёмный экран успеет
+         мигнуть белым. Поэтому выбор продублирован в localStorage: он читается
+         синхронно и только для этой строчки. -->
+    <script>
+      try {
+        var choice = localStorage.getItem('theme')
+        if (choice === 'light' || choice === 'dark') document.documentElement.dataset.theme = choice
+      } catch (e) {
+        /* приватный режим может запретить хранилище — тогда остаётся системная тема */
+      }
+    </script>
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <title>Дневник здоровья · давление и сахар</title>
