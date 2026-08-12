@@ -1,8 +1,11 @@
-import { useRef, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 import { GLUCOSE_CONTEXT_LABELS, type GlucoseContext, type GlucoseReading } from '../types'
 import { classifyGlucose, glucoseAlertFor, glucoseCeiling, type GlucoseTargets } from '../logic/classify'
 import type { GlucoseSummary } from '../logic/stats'
 import { Banner, Reveal } from './bits'
+import { NumberField } from './NumberField'
+import { GlucoseEditor } from './EditRow'
+import { PencilIcon, TrashIcon } from './icons'
 
 const DATE_TIME = new Intl.DateTimeFormat('ru-RU', {
   day: '2-digit',
@@ -119,26 +122,20 @@ export function GlucoseEntry({
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)' }}>
-        <label className="field">
-          <span>Сахар, ммоль/л</span>
-          <input
-            ref={valueRef}
-            inputMode="decimal"
-            enterKeyHint="done"
-            autoComplete="off"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder="5,4"
-            style={{
-              minHeight: 52,
-              fontSize: 'var(--fs-5)',
-              fontWeight: 600,
-              textAlign: 'center',
-              fontVariantNumeric: 'tabular-nums',
-            }}
-            required
-          />
-        </label>
+        <NumberField
+          label="Сахар"
+          unit="ммоль/л"
+          value={value}
+          onChange={setValue}
+          placeholder="5,4"
+          min={1}
+          max={40}
+          start={5.5}
+          step={0.1}
+          decimals={1}
+          inputRef={valueRef}
+          required
+        />
         <div className="field">
           <span>Когда</span>
           {editingWhen ? (
@@ -226,15 +223,21 @@ export function GlucoseList({
   readings,
   targets,
   onDelete,
+  onUpdate,
 }: {
   readings: GlucoseReading[]
   targets: GlucoseTargets
   onDelete?: (id: string) => void
+  onUpdate?: (reading: GlucoseReading) => Promise<void>
 }) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+
   if (readings.length === 0) {
     return <div className="chart__empty">За выбранный период замеров сахара нет</div>
   }
   const rows = [...readings].sort((a, b) => b.ts - a.ts)
+  const editable = Boolean(onUpdate)
+  const columns = 5 + (onDelete || editable ? 1 : 0)
 
   return (
     <div className="table-scroll">
@@ -246,14 +249,16 @@ export function GlucoseList({
             <th>Оценка</th>
             <th>Момент замера</th>
             <th>Примечание</th>
-            {onDelete && <th className="no-print" aria-label="Удалить" />}
+            {(onDelete || editable) && <th className="no-print" aria-label="Действия" />}
           </tr>
         </thead>
         <tbody>
           {rows.map((reading) => {
             const category = classifyGlucose(reading.mmol, reading.context, targets)
+            const editing = editingId === reading.id
             return (
-              <tr key={reading.id}>
+              <Fragment key={reading.id}>
+              <tr data-editing={editing || undefined}>
                 <td data-col="when">{DATE_TIME.format(reading.ts)}</td>
                 <td data-col="val" className="num">
                   {reading.mmol.toFixed(1)}
@@ -269,19 +274,50 @@ export function GlucoseList({
                   {reading.note ? `${reading.note} · ` : ''}
                   <span className="muted">{SOURCE_LABELS[reading.source]}</span>
                 </td>
-                {onDelete && (
+                {(onDelete || editable) && (
                   <td data-col="del" className="no-print">
-                    <button
-                      className="btn btn--icon"
-                      title="Удалить замер"
-                      aria-label={`Удалить замер от ${DATE_TIME.format(reading.ts)}`}
-                      onClick={() => onDelete(reading.id)}
-                    >
-                      ✕
-                    </button>
+                    <div className="row" style={{ gap: 'var(--space-1)', flexWrap: 'nowrap' }}>
+                      {editable && (
+                        <button
+                          className="row-edit"
+                          title="Изменить замер"
+                          aria-label={`Изменить замер от ${DATE_TIME.format(reading.ts)}`}
+                          aria-expanded={editing}
+                          onClick={() => setEditingId(editing ? null : reading.id)}
+                        >
+                          <PencilIcon />
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          className="btn btn--icon"
+                          title="Удалить замер"
+                          aria-label={`Удалить замер от ${DATE_TIME.format(reading.ts)}`}
+                          onClick={() => onDelete(reading.id)}
+                        >
+                          <TrashIcon />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 )}
               </tr>
+
+              {editing && onUpdate && (
+                <tr data-editor="true" className="no-print">
+                  <td colSpan={columns}>
+                    <GlucoseEditor
+                      reading={reading}
+                      onCancel={() => setEditingId(null)}
+                      onSave={async (next) => {
+                        await onUpdate(next)
+                        setEditingId(null)
+                      }}
+                    />
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             )
           })}
         </tbody>

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { BpReading } from '../types'
 import { alertFor, classify } from '../logic/classify'
 import { Banner, Field, Reveal } from './bits'
+import { NumberField } from './NumberField'
 
 /** Значение для input[type=datetime-local] — он работает в локальном времени без зоны. */
 function toLocalInput(date: Date): string {
@@ -91,14 +92,6 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
     window.setTimeout(() => setSaved(false), 4000)
   }
 
-  const bigInput: React.CSSProperties = {
-    minHeight: 52,
-    fontSize: 'var(--fs-5)',
-    fontWeight: 600,
-    textAlign: 'center',
-    fontVariantNumeric: 'tabular-nums',
-  }
-
   return (
     <form className="card" onSubmit={submit}>
       <div className="card__head">
@@ -112,44 +105,12 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
-        <Field label="Верхнее">
-          <input
-            ref={sysRef}
-            inputMode="numeric"
-            enterKeyHint="next"
-            autoComplete="off"
-            value={sys}
-            onChange={(e) => setSys(e.target.value)}
-            placeholder="120"
-            style={bigInput}
-            required
-          />
-        </Field>
-        <Field label="Нижнее">
-          <input
-            ref={diaRef}
-            inputMode="numeric"
-            enterKeyHint="next"
-            autoComplete="off"
-            value={dia}
-            onChange={(e) => setDia(e.target.value)}
-            placeholder="80"
-            style={bigInput}
-            required
-          />
-        </Field>
+        <NumberField label="Верхнее" value={sys} onChange={setSys} placeholder="120" min={40} max={300} start={120} inputRef={sysRef} required />
+        <NumberField label="Нижнее" value={dia} onChange={setDia} placeholder="80" min={20} max={250} start={80} inputRef={diaRef} required />
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', marginTop: 'var(--space-3)' }}>
-        <Field label="Пульс">
-          <input
-            inputMode="numeric"
-            autoComplete="off"
-            value={bpm}
-            onChange={(e) => setBpm(e.target.value)}
-            placeholder="70"
-          />
-        </Field>
+        <NumberField label="Пульс" value={bpm} onChange={setBpm} placeholder="70" min={20} max={250} start={70} size="compact" />
         <div className="field">
           <span>Когда</span>
           {editingWhen ? (

@@ -98,6 +98,19 @@ export default function App() {
     [measurements, refresh],
   )
 
+  /**
+   * Правка записи. Идентификатор не меняется даже при правке времени — и это
+   * важно: повторная выгрузка с прибора пропускает записи, чьи идентификаторы
+   * уже есть, поэтому исправление переживёт следующую синхронизацию.
+   */
+  const handleUpdate = useCallback(
+    async (next: Measurement) => {
+      await putMeasurements([next])
+      await refresh()
+    },
+    [refresh],
+  )
+
   const handleUndo = useCallback(async () => {
     if (!undo) return
     await putMeasurements([undo])
@@ -291,7 +304,7 @@ export default function App() {
                 <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }}>
                   <PeriodPicker value={period} onChange={setPeriod} />
                 </div>
-                <Readings readings={bpScoped} onDelete={handleDelete} />
+                <Readings readings={bpScoped} onDelete={handleDelete} onUpdate={handleUpdate} />
               </div>
             </>
           ) : (
@@ -308,7 +321,7 @@ export default function App() {
                 <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }}>
                   <PeriodPicker value={period} onChange={setPeriod} />
                 </div>
-                <GlucoseList readings={glucoseScoped} targets={glucoseTargets} onDelete={handleDelete} />
+                <GlucoseList readings={glucoseScoped} targets={glucoseTargets} onDelete={handleDelete} onUpdate={handleUpdate} />
               </div>
             </>
           )}
