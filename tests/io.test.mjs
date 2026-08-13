@@ -129,7 +129,12 @@ export function run() {
   const snapshot = {
     measurements: mixed,
     medicines: [
-      { id: 'med-1', name: 'Лозартан', dose: '50 мг', inn: 'Лозартан', left: 12, perDay: 1, expires: Date.UTC(2027, 4, 1), note: 'утром' },
+      {
+        id: 'med-1', name: 'Лозартан', dose: '50 мг', inn: 'Лозартан', left: 12, perDay: null,
+        expires: Date.UTC(2027, 4, 1), note: 'утром', leftAt: Date.UTC(2026, 7, 3),
+        times: ['08:00', '20:00'], perTime: 2, meal: 'after', autoDeduct: true,
+        taken: [Date.UTC(2026, 7, 12, 5, 0), Date.UTC(2026, 7, 12, 17, 0)],
+      },
       { id: 'med-2', name: 'Метформин', dose: '850 мг', left: null, perDay: null, expires: null },
     ],
     settings: { targetSys: 135, targetDia: 85, activeUser: 1, trackGlucose: true },
@@ -139,6 +144,32 @@ export function run() {
   check('в копии есть аптечка', restored.medicines.length === 2, JSON.stringify(restored.medicines))
   check('препарат восстановлен полностью', restored.medicines[0].name === 'Лозартан' && restored.medicines[0].left === 12)
   check('действующее вещество пережило копию', restored.medicines[0].inn === 'Лозартан')
+
+  // Расписание и автосписание — тоже введённые руками данные: без них
+  // восстановленная аптечка молчит, а остаток перестаёт считаться.
+  const m = restored.medicines[0]
+  check('расписание пережило копию', JSON.stringify(m.times) === JSON.stringify(['08:00', '20:00']), JSON.stringify(m))
+  check('штук за приём пережило копию', m.perTime === 2)
+  check('отношение к еде пережило копию', m.meal === 'after')
+  check('автосписание пережило копию', m.autoDeduct === true)
+  check('дата подтверждения остатка пережила копию', m.leftAt === Date.UTC(2026, 7, 3))
+  check('отметки о приёме пережили копию', (m.taken ?? []).length === 2)
+
+  // Чужой или испорченный файл не должен протащить мусор в расписание.
+  const кривое = parseJson(
+    JSON.stringify({
+      format: 'omron-bp/v3',
+      measurements: [],
+      medicines: [
+        { id: 'x', name: 'Тест', times: ['08:00', 'вечером', 25, null], perTime: 'два', meal: 'иногда', autoDeduct: 'да', taken: ['вчера', 5] },
+      ],
+    }),
+  ).medicines[0]
+  check('в расписание попало только время', JSON.stringify(кривое.times) === JSON.stringify(['08:00']), JSON.stringify(кривое.times))
+  check('нечисловое число за приём отброшено', кривое.perTime === undefined)
+  check('незнакомое отношение к еде отброшено', кривое.meal === undefined)
+  check('автосписание включается только настоящим true', кривое.autoDeduct === undefined)
+  check('нечисловые отметки отброшены', JSON.stringify(кривое.taken) === JSON.stringify([5]))
   check('пустые поля препарата остались пустыми', restored.medicines[1].left === null && restored.medicines[1].expires === null)
   check('в копии есть настройки', restored.settings?.targetSys === 135)
 

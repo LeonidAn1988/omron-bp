@@ -20,6 +20,10 @@ import {
   pendingToday,
   markTaken,
   undoTaken,
+  setLeft,
+  effectiveLeft,
+  isEstimated,
+  runsOutAt,
   KEEP_INTAKES_DAYS,
 } from './build/api.mjs'
 
@@ -192,5 +196,55 @@ export function run() {
   check('две штуки за приём списываются вместе', markTaken(med({ left: 10, perTime: 2 }), now).left === 8)
   check('остаток без счёта не ломает отметку', markTaken(med({ left: null }), now).left === null)
 
+  // ── автосписание ─────────────────────────────────────────────────────────
+  const вручную = med({ left: 30, perDay: 1, leftAt: now - 10 * DAY })
+  const авто = med({ left: 30, perDay: 1, leftAt: now - 10 * DAY, autoDeduct: true })
+
+  check('без автосписания показываем подтверждённый остаток', effectiveLeft(вручную, now) === 30)
+  check('с автосписанием показываем расчётный', effectiveLeft(авто, now) === 20)
+  check('без автосписания расчёт помечен как оценка', isEstimated(вручную, now) === false)
+  check(
+    'с автосписанием число расходится с подтверждённым',
+    isEstimated(авто, now) === true,
+    'интерфейс обязан сказать, что это расчёт, а не пересчитанная упаковка',
+  )
+  check('свежий остаток оценкой не считается', isEstimated(med({ left: 30, perDay: 1, leftAt: now, autoDeduct: true }), now) === false)
+
+  const автоОтмечен = markTaken(авто, now)
+  check(
+    'при автосписании отметка не списывает второй раз',
+    автоОтмечен.left === 30 && автоОтмечен.leftAt === авто.leftAt,
+    'расписание уже списало эту дозу',
+  )
+  check('но сама отметка сохраняется', (автоОтмечен.taken ?? []).length === 1)
+  check('снятие отметки при автосписании тоже не трогает остаток', undoTaken(автоОтмечен, now).left === 30)
+
+  // ── правка остатка ───────────────────────────────────────────────────────
+  const поправлен = setLeft(авто, 12, now)
+  check('остаток заменён', поправлен.left === 12)
+  check('отсчёт начат заново', поправлен.leftAt === now)
+  check(
+    'после правки расчёт совпадает с введённым',
+    effectiveLeft(поправлен, now) === 12,
+    'иначе человек вводит 12, а видит другое число',
+  )
+  check('дробное округляется', setLeft(вручную, 12.6, now).left === 13)
+  check('отрицательное не принимается', setLeft(вручную, -5, now).left === 0)
+  check('можно перестать считать', setLeft(вручную, null, now).left === null)
+
+  // ── дата, когда запас кончится ───────────────────────────────────────────
+  check(
+    'запас кончится через столько же дней, сколько его хватит',
+    runsOutAt(med({ left: 14, perDay: 1 }), now) === startOfDayTs(now) + 14 * DAY,
+  )
+  check('без расчёта даты нет', runsOutAt(med({ left: 14 }), now) === null)
+
   return failures
+}
+
+/** Начало суток — дублируем локально, чтобы не тянуть в тесты внутренности модуля. */
+function startOfDayTs(ts) {
+  const d = new Date(ts)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
 }

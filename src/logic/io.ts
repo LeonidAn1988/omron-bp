@@ -297,6 +297,19 @@ export function parseCsv(text: string): ImportResult {
 function parseMedicines(raw: unknown): Medicine[] {
   if (!Array.isArray(raw)) return []
   const optionalNumber = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null)
+  const text = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.trim() !== '' ? value : undefined
+  const times = (value: unknown): string[] | undefined => {
+    if (!Array.isArray(value)) return undefined
+    const list = value.filter((t): t is string => typeof t === 'string' && /^\d{1,2}:\d{2}$/.test(t))
+    return list.length > 0 ? list : undefined
+  }
+  const marks = (value: unknown): number[] | undefined => {
+    if (!Array.isArray(value)) return undefined
+    const list = value.filter((t): t is number => typeof t === 'number' && Number.isFinite(t))
+    return list.length > 0 ? list : undefined
+  }
+
   return raw
     .filter((m): m is Record<string, unknown> => !!m && typeof m === 'object')
     .filter((m) => typeof m.id === 'string' && typeof m.name === 'string' && m.name.trim() !== '')
@@ -304,11 +317,19 @@ function parseMedicines(raw: unknown): Medicine[] {
       id: m.id as string,
       name: (m.name as string).trim(),
       dose: typeof m.dose === 'string' ? m.dose : '',
-      inn: typeof m.inn === 'string' && m.inn !== '' ? m.inn : undefined,
+      inn: text(m.inn),
       left: optionalNumber(m.left),
       perDay: optionalNumber(m.perDay),
       expires: optionalNumber(m.expires),
-      note: typeof m.note === 'string' && m.note !== '' ? m.note : undefined,
+      note: text(m.note),
+      // Расписание, отметки и автосписание переносятся наравне с остальным:
+      // без них восстановленная аптечка молчит и остаток перестаёт считаться.
+      leftAt: optionalNumber(m.leftAt) ?? undefined,
+      times: times(m.times),
+      perTime: optionalNumber(m.perTime) ?? undefined,
+      meal: m.meal === 'before' || m.meal === 'after' || m.meal === 'any' ? m.meal : undefined,
+      autoDeduct: m.autoDeduct === true ? true : undefined,
+      taken: marks(m.taken),
     }))
 }
 

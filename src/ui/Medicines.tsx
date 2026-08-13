@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import type { Medicine } from '../types'
 import {
-  daysToExpiry,
   dosesToday,
+  effectiveLeft,
+  isEstimated,
+  runsOutAt,
+  setLeft,
+  SUPPLY_SOON_DAYS,
   expiryToMonth,
   formatTime,
   markTaken,
@@ -11,7 +15,6 @@ import {
   normalizeTimes,
   parseTime,
   perDayOf,
-  projectedLeft,
   sortMedicines,
   supplyDays,
   undoTaken,
@@ -130,13 +133,15 @@ function TodayDoses({ medicines, onSave }: { medicines: Medicine[]; onSave: (ite
 
   if (rows.length === 0) return null
 
-  const left = rows.filter((r) => r.slot.takenAt === null).length
+  // Автосписываемые в счётчик не идут: отмечать их не нужно, и «осталось 6»
+  // при пяти автоматических читалось бы как невыполненный долг.
+  const left = rows.filter((r) => r.slot.takenAt === null && !r.medicine.autoDeduct).length
 
   return (
     <div className="card">
       <div className="card__head">
         <h2>Сегодня</h2>
-        <span className="muted">{left === 0 ? 'всё принято' : `осталось приёмов: ${left}`}</span>
+        <span className="muted">{left === 0 ? 'всё отмечено' : `осталось отметить: ${left}`}</span>
       </div>
 
       <ul className="doses">
@@ -151,7 +156,11 @@ function TodayDoses({ medicines, onSave }: { medicines: Medicine[]; onSave: (ite
               )}
               {slot.overdue && <span className="dose__late">время прошло</span>}
             </span>
-            {slot.takenAt === null ? (
+            {/* При автосписании кнопки нет намеренно: расписание уже списало эту
+                дозу, и второе списание по нажатию увело бы остаток вдвое. */}
+            {medicine.autoDeduct ? (
+              <span className="dose__auto">списывается само</span>
+            ) : slot.takenAt === null ? (
               <button className="btn btn--primary" onClick={() => void onSave(markTaken(medicine, Date.now()))}>
                 Принял
               </button>
@@ -221,6 +230,7 @@ export function Medicines({
                 key={item.id}
                 medicine={item}
                 now={now}
+                onSave={onSave}
                 onEdit={() => {
                   setAdding(false)
                   setEditingId(item.id)
@@ -276,82 +286,243 @@ export function Medicines({
   )
 }
 
+/** «26 августа» — дата, когда запас кончится. Она нагляднее, чем «через 13 дней». */
+const dayMonth = (ts: number): string => {
+  const d = new Date(ts)
+  return `${d.getDate()} ${MONTHS_GENITIVE[d.getMonth()]}`
+}
+
+/** Горизонт полосы запаса. Дальше месяца загадывать бессмысленно, а полоса всё равно полна. */
+const SUPPLY_HORIZON = 30
+
+/**
+ * Прогноз запаса: полоса и подпись.
+ *
+ * Полоса нужна для взгляда мельком — заполнена наполовину или почти пуста
+ * видно быстрее, чем читается число. Смысл при этом несёт подпись: полоса
+ * скрыта от скринридера, дублировать её словами нечем.
+ */
+function Supply({ days, until }: { days: number; until: number | null }) {
+  const state = days <= 0 ? 'critical' : days <= SUPPLY_SOON_DAYS ? 'warning' : 'ok'
+  const fill = Math.max(2, Math.min(100, Math.round((days / SUPPLY_HORIZON) * 100)))
+
+  return (
+    <div className="supply" data-state={state}>
+      <div className="supply__track" aria-hidden="true">
+        <div className="supply__fill" style={{ width: `${fill}%` }} />
+      </div>
+      <div className="supply__text">
+        {days <= 0 ? 'Запас кончился' : <>Хватит на {days} {plural(days, 'день', 'дня', 'дней')}</>}
+        {until !== null && days > 0 && <span className="muted"> · до {dayMonth(until)}</span>}
+      </div>
+    </div>
+  )
+}
+
+/** Пара «подпись — значение». Сетка вместо строки через точки: глазами ищут подпись. */
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="fact">
+      <dt>{label}</dt>
+      <dd>{children}</dd>
+    </div>
+  )
+}
+
 function MedicineRow({
   medicine,
   now,
   onEdit,
+  onSave,
   onDelete,
 }: {
   medicine: Medicine
   now: number
   onEdit: () => void
+  onSave: (item: Medicine) => Promise<void>
   onDelete: () => void
 }) {
   const [confirming, setConfirming] = useState(false)
+  const [editingLeft, setEditingLeft] = useState(false)
+
   const alert = medicineAlert(medicine, now)
   const supply = supplyDays(medicine, now)
-  const expiry = daysToExpiry(medicine, now)
   const perDay = perDayOf(medicine)
-  const expected = projectedLeft(medicine, now)
-  /** Остаток разошёлся с подтверждённым: показываем расчётный и говорим, что он расчётный. */
-  const drifted = expected !== null && medicine.left !== null && expected !== medicine.left
+  const left = effectiveLeft(medicine, now)
+  const estimated = isEstimated(medicine, now)
 
-  // Факты в строку: то, что уже сказано предупреждением, здесь не повторяется.
-  const facts = [
-    medicine.left !== null && (drifted ? `по расчёту осталось ~${expected}` : `осталось ${medicine.left}`),
-    medicine.times?.length ? medicine.times.join(', ') : perDay !== null && `по ${perDay} в день`,
-    supply !== null && alert?.kind !== 'low' && `хватит на ${days(supply)}`,
-    medicine.expires !== null && alert?.kind !== 'expired' && alert?.kind !== 'expiring' && expiry !== null
-      ? `годен до конца ${monthYear(medicine.expires)}`
-      : false,
-  ].filter(Boolean) as string[]
+  const schedule = medicine.times?.length
+    ? medicine.times.join(', ')
+    : perDay !== null
+      ? `${perDay} ${plural(perDay, 'раз', 'раза', 'раз')} в день`
+      : null
+
+  const perTime = medicine.perTime ?? 1
+  const scheduleNote = [
+    medicine.times?.length && perTime > 1 ? `по ${perTime} шт.` : '',
+    medicine.meal ? MEAL_SHORT[medicine.meal] : '',
+  ]
+    .filter(Boolean)
+    .join(', ')
 
   return (
     <li className="pill">
-      <div className="pill__body">
+      <div className="pill__head">
         <div className="pill__title">
           <span className="pill__name">{medicine.name}</span>
           {medicine.dose && <span className="pill__dose">{medicine.dose}</span>}
         </div>
-        {/* Действующее вещество под торговым названием: врач называет препарат
-            им, а на упаковке напечатано название конкретной фирмы. */}
-        {medicine.inn && medicine.inn.toLowerCase() !== medicine.name.toLowerCase() && (
-          <div className="pill__inn">{medicine.inn}</div>
-        )}
-        {facts.length > 0 && <div className="pill__facts">{facts.join(' · ')}</div>}
-        {alert && <div className={`pill__alert pill__alert--${ALERT_TONE[alert.kind]}`}>{alertText(alert, medicine)}</div>}
-        {medicine.note && <div className="pill__note">{medicine.note}</div>}
+
+        <div className="pill__actions">
+          {confirming ? (
+            // Удаление в два касания. Отменить его нечем — препарат вводили руками,
+            // и восстанавливать его будет неоткуда, кроме резервной копии.
+            <>
+              <button className="btn btn--danger btn--sm" onClick={onDelete}>
+                Удалить
+              </button>
+              <button className="btn btn--sm" onClick={() => setConfirming(false)}>
+                Отмена
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="btn btn--icon" onClick={onEdit} aria-label={`Изменить: ${medicine.name}`}>
+                <PencilIcon />
+              </button>
+              <button
+                className="btn btn--icon"
+                onClick={() => setConfirming(true)}
+                aria-label={`Удалить: ${medicine.name}`}
+              >
+                <TrashIcon />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      <div className="pill__actions">
-        {confirming ? (
-          // Удаление в два касания. Отменить его нечем — препарат вводили руками,
-          // и восстанавливать его будет неоткуда, кроме резервной копии.
-          <>
-            <button className="btn btn--danger btn--sm" onClick={onDelete}>
-              Удалить
-            </button>
-            <button className="btn btn--sm" onClick={() => setConfirming(false)}>
-              Отмена
-            </button>
-          </>
-        ) : (
-          <>
-            <button className="btn btn--icon" onClick={onEdit} aria-label={`Изменить: ${medicine.name}`}>
+      {/* Действующее вещество под торговым названием: врач называет препарат им,
+          а на упаковке напечатано название конкретной фирмы. */}
+      {medicine.inn && medicine.inn.toLowerCase() !== medicine.name.toLowerCase() && (
+        <div className="pill__inn">{medicine.inn}</div>
+      )}
+
+      {alert && (
+        <div className={`pill__alert pill__alert--${ALERT_TONE[alert.kind]}`}>{alertText(alert, medicine)}</div>
+      )}
+
+      {supply !== null && alert?.kind !== 'expired' && <Supply days={supply} until={runsOutAt(medicine, now)} />}
+
+      <dl className="facts">
+        <Fact label="Остаток">
+          {left === null ? (
+            <span className="muted">не считаем</span>
+          ) : (
+            <button
+              className="fact__edit"
+              onClick={() => setEditingLeft(true)}
+              aria-label={`Изменить остаток: ${medicine.name}`}
+            >
+              {estimated && '≈ '}
+              {left} шт.
               <PencilIcon />
             </button>
-            <button
-              className="btn btn--icon"
-              onClick={() => setConfirming(true)}
-              aria-label={`Удалить: ${medicine.name}`}
-            >
-              <TrashIcon />
-            </button>
-          </>
+          )}
+          {medicine.autoDeduct && <span className="fact__note">списывается само</span>}
+          {estimated && !medicine.autoDeduct && <span className="fact__note">по расчёту</span>}
+        </Fact>
+
+        {schedule && (
+          <Fact label="Приём">
+            {schedule}
+            {scheduleNote && <span className="fact__note">{scheduleNote}</span>}
+          </Fact>
         )}
-      </div>
+
+        {/* Срок не повторяем, когда о нём уже сказано предупреждением: одно и то
+            же двумя способами в одной строке читается как две разные вещи. */}
+        {medicine.expires !== null && alert?.kind !== 'expired' && alert?.kind !== 'expiring' && (
+          <Fact label="Годен до">{monthYear(medicine.expires)}</Fact>
+        )}
+      </dl>
+
+      {editingLeft && (
+        <LeftEditor
+          medicine={medicine}
+          onCancel={() => setEditingLeft(false)}
+          onSave={async (value) => {
+            await onSave(setLeft(medicine, value, Date.now()))
+            setEditingLeft(false)
+          }}
+        />
+      )}
+
+      {medicine.note && <div className="pill__note">{medicine.note}</div>}
     </li>
   )
+}
+
+/**
+ * Правка остатка на месте.
+ *
+ * Отдельно от общей формы: пересчитать упаковку — самое частое действие после
+ * отметки приёма, и открывать ради одного числа форму с восемью полями незачем.
+ */
+function LeftEditor({
+  medicine,
+  onSave,
+  onCancel,
+}: {
+  medicine: Medicine
+  onSave: (value: number) => Promise<void>
+  onCancel: () => void
+}) {
+  const [value, setValue] = useState(String(medicine.left ?? ''))
+  const [busy, setBusy] = useState(false)
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault()
+    const parsed = Number(value.replace(',', '.'))
+    if (!Number.isFinite(parsed)) return
+    setBusy(true)
+    try {
+      await onSave(parsed)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form className="pill__left-edit" onSubmit={submit}>
+      <div style={{ maxWidth: 170 }}>
+        <NumberField
+          label="Сколько осталось"
+          value={value}
+          onChange={setValue}
+          min={0}
+          max={999}
+          start={30}
+          size="compact"
+          autoFocus
+        />
+      </div>
+      <div className="row">
+        <button type="submit" className="btn btn--primary btn--sm" disabled={busy}>
+          Сохранить
+        </button>
+        <button type="button" className="btn btn--sm" onClick={onCancel} disabled={busy}>
+          Отмена
+        </button>
+      </div>
+    </form>
+  )
+}
+
+const MEAL_SHORT: Record<NonNullable<Medicine['meal']>, string> = {
+  before: 'до еды',
+  after: 'после еды',
+  any: '',
 }
 
 const MEALS: { key: Medicine['meal']; title: string }[] = [
@@ -450,6 +621,7 @@ function MedicineForm({
   const [times, setTimes] = useState<string[]>(normalizeTimes(medicine?.times ?? []))
   const [perTime, setPerTime] = useState(String(medicine?.perTime ?? 1))
   const [meal, setMeal] = useState<Medicine['meal']>(medicine?.meal)
+  const [autoDeduct, setAutoDeduct] = useState(medicine?.autoDeduct ?? false)
   /** Дозировки выбранного из реестра препарата — показываем кнопками. */
   const [doses, setDoses] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
@@ -478,6 +650,7 @@ function MedicineForm({
         perDay: numberOrNull(perDay),
         expires: month ? monthToExpiry(month) : null,
         note: note.trim() || undefined,
+        autoDeduct: autoDeduct || undefined,
         times: times.length > 0 ? times : undefined,
         perTime: times.length > 0 ? Number(perTime) || 1 : undefined,
         meal: times.length > 0 ? meal : undefined,
@@ -570,6 +743,20 @@ function MedicineForm({
           </div>
         )}
       </div>
+
+      {(times.length > 0 || left.trim() !== '') && (
+        <div>
+          <label className="badge">
+            <input type="checkbox" checked={autoDeduct} onChange={(e) => setAutoDeduct(e.target.checked)} />
+            Списывать без подтверждения
+          </label>
+          <p className="muted" style={{ margin: 'var(--space-1) 0 0' }}>
+            {autoDeduct
+              ? 'Остаток уменьшается сам по расписанию. Отмечать приём не нужно — кнопка «Принял» пропадёт.'
+              : 'Остаток уменьшается только по кнопке «Принял». Включите, если отмечать каждый приём не хочется.'}
+          </p>
+        </div>
+      )}
 
       <Field label="Годен до — месяц с упаковки">
         <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />

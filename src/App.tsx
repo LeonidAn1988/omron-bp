@@ -207,7 +207,7 @@ export default function App() {
    * отмечен, либо что-то кончается. Считать там нечего, важен сам факт.
    */
   const medicineMark = useMemo(
-    () => medicineAlerts > 0 || pendingToday(medicines, Date.now()) > 0,
+    () => medicineAlerts > 0 || pendingToday(medicines.filter((m) => !m.autoDeduct), Date.now()) > 0,
     [medicines, medicineAlerts],
   )
 

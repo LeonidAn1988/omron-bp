@@ -1062,17 +1062,21 @@ tbody tr:hover {
   list-style: none;
 }
 .pill {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
+  padding: var(--space-4) 0;
   border-top: 1px solid var(--border);
 }
 .pill:first-child {
   border-top: 0;
   padding-top: var(--space-2);
 }
-.pill__body {
+/* Название и действия в одну строку, остальное под ними: раньше действия
+   держали собственную колонку и сужали всё остальное. */
+.pill__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.pill__head .pill__title {
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -1094,11 +1098,123 @@ tbody tr:hover {
   font-size: var(--fs-1);
   color: var(--text-secondary);
 }
-.pill__facts,
 .pill__note {
-  margin-top: var(--space-1);
+  margin-top: var(--space-2);
   font-size: var(--fs-1);
   color: var(--text-muted);
+}
+
+/* ── прогноз запаса ─────────────────────────────────────────────────────── */
+
+/* Полоса для взгляда мельком: «почти пусто» видно быстрее, чем читается число.
+   Смысл несёт подпись — полоса от скринридера скрыта, дублировать её нечем. */
+.supply {
+  margin-top: var(--space-3);
+}
+.supply__track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--grid);
+  overflow: hidden;
+}
+.supply__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tone);
+  transition: width var(--dur-slow) var(--ease);
+}
+.supply__text {
+  margin-top: var(--space-2);
+  font-size: var(--fs-1);
+  color: var(--text-secondary);
+}
+.supply[data-state='ok'] {
+  --tone: var(--good);
+}
+.supply[data-state='warning'] {
+  --tone: var(--warning);
+}
+.supply[data-state='critical'] {
+  --tone: var(--critical-text);
+}
+.supply[data-state='critical'] .supply__text,
+.supply[data-state='warning'] .supply__text {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .supply__fill {
+    transition: none;
+  }
+}
+
+/* ── факты о препарате ──────────────────────────────────────────────────── */
+
+/* Сетка «подпись — значение» вместо строки через точки: глазами ищут подпись,
+   а не позицию в перечислении. Колонки подстраиваются под ширину сами. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+.fact dt {
+  font-size: var(--fs-1);
+  color: var(--text-muted);
+}
+.fact dd {
+  margin: 2px 0 0;
+  font-weight: 600;
+  overflow-wrap: break-word;
+}
+.fact__note {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-1);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* Остаток правится нажатием по нему же: отдельная кнопка «изменить» рядом с
+   числом читалась бы как ещё одно действие в списке, где их и так два. */
+.fact__edit {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  margin: -10px -8px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+.fact__edit svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+}
+.fact__edit:hover {
+  background: var(--hover);
+}
+.fact__edit:hover svg {
+  color: var(--accent);
+}
+
+.pill__left-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
 }
 .pill__note {
   font-style: italic;
@@ -1282,6 +1398,11 @@ tbody tr:hover {
 }
 .dose > .btn {
   flex: 0 0 auto;
+}
+.dose__auto {
+  flex: 0 0 auto;
+  font-size: var(--fs-1);
+  color: var(--text-muted);
 }
 
 /* Подсказка из реестра лекарств. Список лежит поверх формы, а не раздвигает

@@ -98,6 +98,30 @@ export function projectedLeft(medicine: Medicine, now: number): number | null {
   return Math.max(0, left - days * perDay)
 }
 
+/**
+ * Остаток, который показываем человеку.
+ *
+ * При автосписании расчётный остаток и есть ответ: человек согласился, что
+ * назначенное принимается, и оговорка «по расчёту» ему только мешает. Без
+ * автосписания правдой остаётся подтверждённое число, а расчёт идёт рядом
+ * пометкой.
+ */
+export function effectiveLeft(medicine: Medicine, now: number): number | null {
+  return medicine.autoDeduct ? projectedLeft(medicine, now) : medicine.left
+}
+
+/** Показанное число — оценка, а не подтверждённый факт. */
+export function isEstimated(medicine: Medicine, now: number): boolean {
+  const shown = effectiveLeft(medicine, now)
+  return shown !== null && medicine.left !== null && shown !== medicine.left
+}
+
+/** Когда запас кончится. `null` — считать не из чего. */
+export function runsOutAt(medicine: Medicine, now: number): number | null {
+  const days = supplyDays(medicine, now)
+  return days === null ? null : startOfDay(now) + days * DAY
+}
+
 /** На сколько дней хватит остатка. `null` — нечего или не из чего считать. */
 export function supplyDays(medicine: Medicine, now?: number): number | null {
   const perDay = perDayOf(medicine)
@@ -248,6 +272,9 @@ export function pendingToday(items: Medicine[], now: number): number {
 export function markTaken(medicine: Medicine, now: number): Medicine {
   const horizon = now - KEEP_INTAKES_DAYS * DAY
   const taken = [...(medicine.taken ?? []).filter((t) => t >= horizon), now].sort((a, b) => a - b)
+  // При автосписании расписание уже списало эту дозу: отметка её только
+  // фиксирует, иначе одна таблетка ушла бы из остатка дважды.
+  if (medicine.autoDeduct) return { ...medicine, taken }
   const left = medicine.left === null ? null : Math.max(0, medicine.left - perTimeOf(medicine))
   // Остаток пересчитан только что — расчётной поправке не с чего начинать заново.
   return { ...medicine, taken, left, leftAt: now }
@@ -256,6 +283,16 @@ export function markTaken(medicine: Medicine, now: number): Medicine {
 /** Снять ошибочную отметку и вернуть штуки в остаток. */
 export function undoTaken(medicine: Medicine, at: number): Medicine {
   const taken = (medicine.taken ?? []).filter((t) => t !== at)
+  if (medicine.autoDeduct) return { ...medicine, taken }
   const left = medicine.left === null ? null : medicine.left + perTimeOf(medicine)
   return { ...medicine, taken, left, leftAt: Date.now() }
+}
+
+/**
+ * Правка остатка руками: пересчитали упаковку — говорим приложению точное
+ * число. Это же снимает накопленную расчётную поправку: отсчёт начинается
+ * заново от сегодняшнего дня.
+ */
+export function setLeft(medicine: Medicine, value: number | null, now: number): Medicine {
+  return { ...medicine, left: value === null ? null : Math.max(0, Math.round(value)), leftAt: now }
 }

@@ -57,6 +57,10 @@ export {
   pendingToday,
   markTaken,
   undoTaken,
+  setLeft,
+  effectiveLeft,
+  isEstimated,
+  runsOutAt,
   KEEP_INTAKES_DAYS,
 } from '../src/logic/medicines'
 
