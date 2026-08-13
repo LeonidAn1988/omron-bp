@@ -1061,9 +1061,13 @@ tbody tr:hover {
   padding: 0;
   list-style: none;
 }
+/* Карточки разделяются ритмом, а не рамкой: рамка внутри карточки раздела —
+   это вложенная карточка, а они всегда лишние. Работает разница расстояний:
+   внутри карточки блоки стоят по 8-12px, между карточками — 28px и линия.
+   Пока промежутки были одинаковыми, список сливался в сплошное полотно. */
 .pill {
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--border);
+  padding: var(--space-6) 0 var(--space-5);
+  border-top: 2px solid var(--border);
 }
 .pill:first-child {
   border-top: 0;
@@ -1087,7 +1091,9 @@ tbody tr:hover {
   gap: var(--space-2);
 }
 .pill__name {
-  font-weight: 600;
+  font-size: var(--fs-3);
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 .pill__dose {
   font-size: var(--fs-1);
@@ -1109,7 +1115,7 @@ tbody tr:hover {
 /* Полоса для взгляда мельком: «почти пусто» видно быстрее, чем читается число.
    Смысл несёт подпись — полоса от скринридера скрыта, дублировать её нечем. */
 .supply {
-  margin-top: var(--space-3);
+  margin-top: var(--space-4);
 }
 .supply__track {
   height: 6px;
@@ -1155,9 +1161,13 @@ tbody tr:hover {
    а не позицию в перечислении. Колонки подстраиваются под ширину сами. */
 .facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-  gap: var(--space-3);
-  margin: var(--space-3) 0 0;
+  /* 88px даёт три колонки на 360px: пять полей укладываются в два ряда вместо
+     трёх, и карточка не растёт вдвое ради полноты состава. */
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  /* По вертикали просторнее, чем по горизонтали: строки полей не должны
+     слипаться в решётку, где не видно, что к чему относится. */
+  gap: var(--space-4) var(--space-3);
+  margin: var(--space-4) 0 0;
 }
 .fact dt {
   font-size: var(--fs-1);
@@ -1176,8 +1186,15 @@ tbody tr:hover {
   color: var(--text-muted);
 }
 
-/* Остаток правится нажатием по нему же: отдельная кнопка «изменить» рядом с
-   числом читалась бы как ещё одно действие в списке, где их и так два. */
+/* Незаполненное поле: прочерк вместо пустоты, чтобы состав карточек читался
+   одинаково, и приглушённый — он не должен спорить с настоящими значениями. */
+.fact__empty {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Значение поля — само по себе кнопка правки: отдельная кнопка «изменить»
+   рядом с каждым читалась бы как ещё одно действие в списке, где их и так два. */
 .fact__edit {
   display: inline-flex;
   align-items: center;
@@ -1185,6 +1202,7 @@ tbody tr:hover {
   min-height: var(--tap);
   margin: -10px -8px;
   padding: 0 8px;
+  text-align: left;
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;

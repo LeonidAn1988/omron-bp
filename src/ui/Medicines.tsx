@@ -68,15 +68,13 @@ const monthYear = (ts: number): string => {
   return `${MONTHS_GENITIVE[d.getMonth()]} ${d.getFullYear()}`
 }
 
-/** Для истёкшего срока — точная дата: последний годный день мы знаем наверняка. */
-const EXACT_DATE = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
-
 const days = (n: number): string => `${n} ${plural(n, 'день', 'дня', 'дней')}`
 
 function alertText(alert: MedicineAlert, medicine: Medicine): string {
   switch (alert.kind) {
     case 'expired':
-      return `Срок годности истёк ${EXACT_DATE.format(medicine.expires!)}`
+      // Дату не повторяем: она стоит полем «Годен до» в той же карточке.
+      return 'Срок годности истёк'
     case 'out':
       return 'Закончился'
     case 'low':
@@ -322,12 +320,50 @@ function Supply({ days, until }: { days: number; until: number | null }) {
   )
 }
 
-/** Пара «подпись — значение». Сетка вместо строки через точки: глазами ищут подпись. */
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+/**
+ * Пара «подпись — значение».
+ *
+ * Набор полей у всех препаратов один и тот же, даже когда значения нет: карточки
+ * с разным составом невозможно сравнивать глазами — взгляд каждый раз ищет
+ * заново, где что. Пустое поле показывается прочерком и открывает правку, то
+ * есть заодно подсказывает, что можно дополнить.
+ */
+function Fact({
+  label,
+  value,
+  note,
+  onEdit,
+  quick,
+}: {
+  label: string
+  value: React.ReactNode
+  note?: string
+  onEdit: { label: string; run: () => void }
+  /**
+   * Поле с собственной быстрой правкой — у него значок карандаша.
+   *
+   * У остальных значка нет намеренно: пять карандашей в карточке спорят с
+   * правкой в шапке, а на перенесённом значении карандаш повисает в конце
+   * второй строки и выглядит поломкой. Нажать можно всё равно по значению.
+   */
+  quick?: boolean
+}) {
+  const empty = value === null || value === undefined || value === ''
+
   return (
     <div className="fact">
       <dt>{label}</dt>
-      <dd>{children}</dd>
+      <dd>
+        <button
+          className={quick ? 'fact__edit fact__edit--quick' : 'fact__edit'}
+          onClick={onEdit.run}
+          aria-label={onEdit.label}
+        >
+          {empty ? <span className="fact__empty">—</span> : value}
+          {quick && <PencilIcon />}
+        </button>
+        {note && <span className="fact__note">{note}</span>}
+      </dd>
     </div>
   )
 }
@@ -421,12 +457,6 @@ function MedicineRow({
 
       {/* Действующее вещество под торговым названием: врач называет препарат им,
           а на упаковке напечатано название конкретной фирмы. */}
-      {(medicine.form || (medicine.inn && medicine.inn.toLowerCase() !== medicine.name.toLowerCase())) && (
-        <div className="pill__inn">
-          {[shortForm(medicine.form), medicine.inn !== medicine.name ? medicine.inn : ''].filter(Boolean).join(' · ')}
-        </div>
-      )}
-
       {shownAlert && (
         <div className={`pill__alert pill__alert--${ALERT_TONE[shownAlert.kind]}`}>
           {alertText(shownAlert, medicine)}
@@ -436,36 +466,42 @@ function MedicineRow({
       {showSupply && <Supply days={supply!} until={runsOutAt(medicine, now)} />}
 
       <dl className="facts">
-        <Fact label="Остаток">
-          {left === null ? (
-            <span className="muted">не считаем</span>
-          ) : (
-            <button
-              className="fact__edit"
-              onClick={() => setEditingLeft(true)}
-              aria-label={`Изменить остаток: ${medicine.name}`}
-            >
-              {estimated && '≈ '}
-              {left} шт.
-              <PencilIcon />
-            </button>
-          )}
-          {medicine.autoDeduct && <span className="fact__note">списывается само</span>}
-          {estimated && !medicine.autoDeduct && <span className="fact__note">по расчёту</span>}
-        </Fact>
+        <Fact
+          label="Остаток"
+          value={left === null ? '' : `${estimated ? '≈ ' : ''}${left} шт.`}
+          note={medicine.autoDeduct ? 'списывается само' : estimated ? 'по расчёту' : undefined}
+          onEdit={{ label: `Изменить остаток: ${medicine.name}`, run: () => setEditingLeft(true) }}
+          quick
+        />
 
-        {schedule && (
-          <Fact label="Приём">
-            {schedule}
-            {scheduleNote && <span className="fact__note">{scheduleNote}</span>}
-          </Fact>
-        )}
+        <Fact
+          label="Приём"
+          value={schedule ?? ''}
+          note={scheduleNote || undefined}
+          onEdit={{ label: `Изменить расписание: ${medicine.name}`, run: onEdit }}
+        />
 
-        {/* Срок не повторяем, когда о нём уже сказано предупреждением: одно и то
-            же двумя способами в одной строке читается как две разные вещи. */}
-        {medicine.expires !== null && shownAlert?.kind !== 'expired' && shownAlert?.kind !== 'expiring' && (
-          <Fact label="Годен до">{monthYear(medicine.expires)}</Fact>
-        )}
+        <Fact
+          label="Годен до"
+          value={medicine.expires === null ? '' : monthYear(medicine.expires)}
+          onEdit={{ label: `Изменить срок годности: ${medicine.name}`, run: onEdit }}
+        />
+
+        <Fact
+          label="Форма"
+          value={shortForm(medicine.form)}
+          onEdit={{ label: `Изменить форму: ${medicine.name}`, run: onEdit }}
+        />
+
+        {/* Вещество стоит полем, а не подписью под названием: у препаратов вроде
+            «Лозартан» оно совпадает с названием, подпись пришлось бы прятать — и
+            карточки получались разного состава. С подписью повтор осмыслен: он
+            говорит, что это дженерик, названный по своему веществу. */}
+        <Fact
+          label="Вещество"
+          value={medicine.inn ?? ''}
+          onEdit={{ label: `Изменить вещество: ${medicine.name}`, run: onEdit }}
+        />
       </dl>
 
       {editingLeft && (
