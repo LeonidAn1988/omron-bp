@@ -25,6 +25,9 @@ import {
   isEstimated,
   runsOutAt,
   shortForm,
+  restockList,
+  restockText,
+  RESTOCK_DAYS,
   KEEP_INTAKES_DAYS,
 } from './build/api.mjs'
 
@@ -245,6 +248,52 @@ export function run() {
   check('запятая тоже граница', shortForm('Таблетки, покрытые оболочкой') === 'таблетки')
   check('капли остаются каплями', shortForm('Капли глазные') === 'капли')
   check('формы может не быть', shortForm(undefined) === '' && shortForm('') === '')
+
+  // ── список для заказа ────────────────────────────────────────────────────
+  const аптечка = [
+    med({ id: 'a', name: 'Спокойный', left: 100, perDay: 1, expires: now + 400 * DAY }),
+    med({ id: 'b', name: 'Кончается', left: 4, perDay: 1 }),
+    med({ id: 'c', name: 'Кончился', left: 0, perDay: 2 }),
+    med({ id: 'd', name: 'Просрочен', left: 50, perDay: 1, expires: now - DAY }),
+    med({ id: 'e', name: 'Истекает', left: 100, perDay: 1, expires: now + 10 * DAY }),
+  ]
+  const заказ = restockList(аптечка, now)
+
+  check('спокойный в список не попал', !заказ.some((r) => r.medicine.name === 'Спокойный'))
+  check('в списке четыре препарата', заказ.length === 4, заказ.map((r) => r.medicine.name).join(', '))
+  check(
+    'порядок по срочности',
+    заказ.map((r) => r.medicine.name).join(',') === 'Кончился,Просрочен,Кончается,Истекает',
+    заказ.map((r) => r.medicine.name).join(','),
+  )
+  check(
+    'кончившийся требует месячный запас',
+    заказ.find((r) => r.medicine.name === 'Кончился')?.need === RESTOCK_DAYS * 2,
+    'по две в день на тридцать дней',
+  )
+  check(
+    'кончающийся требует только недостающее',
+    заказ.find((r) => r.medicine.name === 'Кончается')?.need === RESTOCK_DAYS - 4,
+  )
+  check(
+    'у просроченного старая пачка не в счёт',
+    заказ.find((r) => r.medicine.name === 'Просрочен')?.need === RESTOCK_DAYS,
+    'принимать её нельзя, значит запас нулевой',
+  )
+  check(
+    'без суточного расхода количество не выдумываем',
+    restockList([med({ id: 'f', name: 'Без расхода', left: 0 })], now)[0].need === null,
+  )
+
+  const текст = restockText([
+    { medicine: med({ name: 'Конкор®', dose: '5 мг', form: 'Таблетки покрытые пленочной оболочкой', inn: 'Бисопролол' }), reason: 'low', need: 30 },
+    { medicine: med({ name: 'Лозартан', dose: '50 мг', inn: 'Лозартан' }), reason: 'out', need: null },
+  ])
+  check('строка содержит название, дозировку и форму', текст.split('\n')[0].startsWith('Конкор®, 5 мг, таблетки'))
+  check('вещество в скобках — по нему подбирают аналог', текст.includes('(Бисопролол)'))
+  check('количество дописано', текст.includes('— 30 шт.'))
+  check('вещество не дублирует название', !текст.split('\n')[1].includes('(Лозартан)'))
+  check('без количества строка не обрывается', текст.split('\n')[1] === 'Лозартан, 50 мг')
 
   return failures
 }

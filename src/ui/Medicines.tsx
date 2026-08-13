@@ -6,6 +6,8 @@ import {
   EXPIRY_SOON_DAYS,
   effectiveLeft,
   isEstimated,
+  restockList,
+  restockText,
   runsOutAt,
   setLeft,
   shortForm,
@@ -24,8 +26,9 @@ import {
   type MedicineAlert,
 } from '../logic/medicines'
 import { buildCalendar, countCalendarEvents } from '../logic/calendar'
-import { download } from '../logic/io'
+import { canShareFile, download, shareFile } from '../logic/io'
 import { plural } from '../logic/plural'
+import { RESTOCK_DAYS } from '../logic/medicines'
 import { NumberField } from './NumberField'
 import { Banner, Field } from './bits'
 import { DrugPicker, VariantPicker } from './DrugPicker'
@@ -177,6 +180,89 @@ function TodayDoses({ medicines, onSave }: { medicines: Medicine[]; onSave: (ite
   )
 }
 
+const REASON_LABEL: Record<'out' | 'low' | 'expired' | 'expiring', string> = {
+  out: 'закончился',
+  expired: 'просрочен',
+  low: 'кончается',
+  expiring: 'истекает срок',
+}
+
+/**
+ * Что пора купить.
+ *
+ * Отдельный экран, а не пометки в общем списке: в аптеке и в аптечном
+ * приложении нужен готовый перечень, а не разбор десяти карточек. Список
+ * отдаётся простым текстом — его вставляют в мессенджер, диктуют по телефону
+ * и читают с экрана у прилавка.
+ */
+function Restock({ medicines }: { medicines: Medicine[] }) {
+  const [copied, setCopied] = useState(false)
+  const list = restockList(medicines, Date.now())
+  if (list.length === 0) return null
+
+  const text = restockText(list)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    } catch {
+      // Буфер обмена бывает запрещён политикой страницы. Молчать нельзя:
+      // человек нажал и ждёт, поэтому предлагаем файл.
+      await download('купить.txt', text, 'text/plain')
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card__head">
+        <h2>Купить</h2>
+        <span className="muted">
+          {list.length} {plural(list.length, 'препарат', 'препарата', 'препаратов')}
+        </span>
+      </div>
+
+      <ul className="buy">
+        {list.map(({ medicine, reason, need }) => (
+          <li key={medicine.id} className="buy__row">
+            <span className="buy__body">
+              <span className="buy__name">{medicine.name}</span>
+              {medicine.dose && <span className="buy__dose">{medicine.dose}</span>}
+              <span className="buy__why" data-reason={reason}>
+                {REASON_LABEL[reason]}
+              </span>
+              {medicine.inn && medicine.inn !== medicine.name && (
+                <span className="buy__inn">по веществу: {medicine.inn}</span>
+              )}
+            </span>
+            {need !== null && <span className="buy__need">{need} шт.</span>}
+          </li>
+        ))}
+      </ul>
+
+      <div className="row" style={{ marginTop: 'var(--space-4)' }}>
+        {canShareFile() && (
+          <button
+            className="btn btn--primary"
+            onClick={() => void shareFile('купить.txt', text, 'text/plain')}
+          >
+            Отправить список
+          </button>
+        )}
+        <button className={canShareFile() ? 'btn' : 'btn btn--primary'} onClick={() => void copy()}>
+          {copied ? 'Скопировано' : 'Скопировать'}
+        </button>
+      </div>
+
+      <p className="muted" style={{ margin: 'var(--space-3) 0 0' }}>
+        Количество рассчитано на {RESTOCK_DAYS} {plural(RESTOCK_DAYS, 'день', 'дня', 'дней')} по вашему расписанию. Просроченная пачка в запас не засчитана —
+        принимать её нельзя.
+      </p>
+    </div>
+  )
+}
+
 export function Medicines({
   medicines,
   onSave,
@@ -199,6 +285,8 @@ export function Medicines({
   return (
     <>
       <TodayDoses medicines={medicines} onSave={onSave} />
+
+      <Restock medicines={medicines} />
 
       <div className="card">
       <div className="card__head">

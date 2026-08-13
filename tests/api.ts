@@ -62,6 +62,9 @@ export {
   isEstimated,
   runsOutAt,
   shortForm,
+  restockList,
+  restockText,
+  RESTOCK_DAYS,
   KEEP_INTAKES_DAYS,
 } from '../src/logic/medicines'
 

@@ -309,3 +309,66 @@ export function shortForm(form: string | undefined): string {
   if (!form) return ''
   return form.trim().split(/[\s,]+/)[0].toLowerCase()
 }
+
+// ── список для заказа ──────────────────────────────────────────────────────
+
+/** На сколько дней вперёд закупаемся. Месяц — обычный горизонт рецепта. */
+export const RESTOCK_DAYS = 30
+
+export interface RestockItem {
+  medicine: Medicine
+  /** Почему попал в список. */
+  reason: 'out' | 'low' | 'expired' | 'expiring'
+  /** Сколько штук докупить до месячного запаса. `null` — расход неизвестен. */
+  need: number | null
+}
+
+const REASON_WEIGHT: Record<RestockItem['reason'], number> = { out: 4, expired: 3, low: 2, expiring: 1 }
+
+/**
+ * Что пора купить.
+ *
+ * Список строится из тех же правил, что и предупреждения в аптечке, — иначе
+ * человек видел бы тревогу на карточке и пустой список покупок рядом. Просроченное
+ * входит наравне с кончающимся: пачка есть, но принимать её нельзя, значит
+ * купить всё равно нужно.
+ */
+export function restockList(items: Medicine[], now: number): RestockItem[] {
+  const list: RestockItem[] = []
+
+  for (const medicine of items) {
+    const alert = medicineAlert(medicine, now)
+    if (!alert) continue
+
+    const perDay = perDayOf(medicine)
+    const left = alert.kind === 'expired' ? 0 : Math.max(0, projectedLeft(medicine, now) ?? 0)
+    // Докупаем до месячного запаса. Просроченное считаем за ноль: старую пачку
+    // в расчёт брать нельзя.
+    const need = perDay !== null && perDay > 0 ? Math.max(0, Math.ceil(RESTOCK_DAYS * perDay - left)) : null
+
+    list.push({ medicine, reason: alert.kind, need: need === 0 ? null : need })
+  }
+
+  return list.sort((a, b) => {
+    const weight = REASON_WEIGHT[b.reason] - REASON_WEIGHT[a.reason]
+    return weight !== 0 ? weight : a.medicine.name.localeCompare(b.medicine.name, 'ru')
+  })
+}
+
+/**
+ * Список одной строкой на препарат — чтобы отправить себе или показать в аптеке.
+ *
+ * Простой текст, а не файл: его вставляют в мессенджер, диктуют по телефону и
+ * читают с экрана у прилавка. Действующее вещество идёт следом за названием:
+ * в аптеке предложат аналог, и по веществу его сверяют.
+ */
+export function restockText(list: RestockItem[]): string {
+  return list
+    .map(({ medicine, need }) => {
+      const parts = [medicine.name, medicine.dose, shortForm(medicine.form)].filter(Boolean)
+      const inn = medicine.inn && medicine.inn !== medicine.name ? ` (${medicine.inn})` : ''
+      const count = need !== null ? ` — ${need} шт.` : ''
+      return `${parts.join(', ')}${inn}${count}`
+    })
+    .join('\n')
+}

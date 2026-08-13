@@ -1423,6 +1423,68 @@ tbody tr:hover {
   color: var(--text-muted);
 }
 
+/* Список покупок. Плотнее аптечки: здесь не разбираются, а бегло сверяются с
+   полкой, поэтому строка одна и вся помещается в поле зрения. */
+.buy {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.buy__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+}
+.buy__row:first-child {
+  border-top: 0;
+}
+.buy__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.buy__name {
+  font-weight: 600;
+}
+.buy__dose {
+  font-size: var(--fs-1);
+  color: var(--text-secondary);
+}
+.buy__why {
+  font-size: var(--fs-1);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.buy__why::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--space-2);
+  border-radius: 50%;
+  background: var(--tone, var(--warning));
+  vertical-align: middle;
+}
+.buy__why[data-reason='out'],
+.buy__why[data-reason='expired'] {
+  --tone: var(--critical-text);
+}
+.buy__inn {
+  flex-basis: 100%;
+  font-size: var(--fs-1);
+  color: var(--text-muted);
+}
+.buy__need {
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Подсказка из реестра лекарств. Список лежит поверх формы, а не раздвигает
    её: на телефоне раздвигание уводит поле из-под пальца. */
 .suggest {
