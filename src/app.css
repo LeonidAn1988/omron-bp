@@ -1166,7 +1166,7 @@ tbody tr:hover {
 .report-facts td {
   padding: var(--space-1) var(--space-3) var(--space-1) 0;
   vertical-align: top;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   /* Общее правило запрещает переносы в ячейках — там это верно для чисел и дат.
      Здесь ячейки текстовые, и без переноса таблица распирала карточку. */
   white-space: normal;
@@ -1183,6 +1183,22 @@ tbody tr:hover {
 .report-drugs {
   width: 100%;
   border-collapse: collapse;
+  /* Фиксированная раскладка вместо переноса «где придётся»: та ломала слова
+     посреди — «Дозировк/а», «Метформи/н». Колонки заданы долями, и текст
+     переносится по пробелам, как ему положено. */
+  table-layout: fixed;
+}
+.report-drugs th:nth-child(1),
+.report-drugs td:nth-child(1) {
+  width: 38%;
+}
+/* 30%: при меньшей ширине слово «Дозировка» в заголовке рвалось пополам —
+   переносить внутри слова в шапке таблицы нельзя. Сокращать его тоже нельзя,
+   «доза» и «дозировка» для врача разные вещи: здесь сила таблетки, а не
+   принимаемое количество. */
+.report-drugs th:nth-child(2),
+.report-drugs td:nth-child(2) {
+  width: 30%;
 }
 .report-drugs th,
 .report-drugs td {
@@ -1193,7 +1209,9 @@ tbody tr:hover {
   /* Общее правило запрещает переносы в ячейках и заголовках. Здесь колонок три
      и все текстовые: на 360px без переноса таблица вылезала за карточку. */
   white-space: normal;
-  overflow-wrap: anywhere;
+  /* break-word, а не anywhere: рвать разрешено только слово, которое иначе не
+     влезает целиком, а не любое подходящее место. */
+  overflow-wrap: break-word;
 }
 .report-drugs th {
   font-size: var(--fs-1);
