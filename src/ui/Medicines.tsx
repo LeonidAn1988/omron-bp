@@ -12,6 +12,8 @@ import {
 import { plural } from '../logic/plural'
 import { NumberField } from './NumberField'
 import { Banner, Field } from './bits'
+import { DoseChips, DrugPicker } from './DrugPicker'
+import type { Drug } from '../logic/drugs'
 import { PencilIcon, TrashIcon } from './icons'
 
 /**
@@ -217,6 +219,11 @@ function MedicineRow({
           <span className="pill__name">{medicine.name}</span>
           {medicine.dose && <span className="pill__dose">{medicine.dose}</span>}
         </div>
+        {/* Действующее вещество под торговым названием: врач называет препарат
+            им, а на упаковке напечатано название конкретной фирмы. */}
+        {medicine.inn && medicine.inn.toLowerCase() !== medicine.name.toLowerCase() && (
+          <div className="pill__inn">{medicine.inn}</div>
+        )}
         {facts.length > 0 && <div className="pill__facts">{facts.join(' · ')}</div>}
         {alert && <div className={`pill__alert pill__alert--${ALERT_TONE[alert.kind]}`}>{alertText(alert, medicine)}</div>}
         {medicine.note && <div className="pill__note">{medicine.note}</div>}
@@ -274,6 +281,9 @@ function MedicineForm({
   )
   const [month, setMonth] = useState(medicine?.expires ? expiryToMonth(medicine.expires) : '')
   const [note, setNote] = useState(medicine?.note ?? '')
+  const [inn, setInn] = useState(medicine?.inn ?? '')
+  /** Дозировки выбранного из реестра препарата — показываем кнопками. */
+  const [doses, setDoses] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -295,6 +305,7 @@ function MedicineForm({
         id: medicine?.id ?? '',
         name: name.trim(),
         dose: dose.trim(),
+        inn: inn.trim() || undefined,
         left: numberOrNull(left),
         perDay: numberOrNull(perDay),
         expires: month ? monthToExpiry(month) : null,
@@ -307,13 +318,33 @@ function MedicineForm({
 
   return (
     <form onSubmit={submit} className="stack" style={{ gap: 'var(--space-4)' }}>
-      <Field label="Название">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Лозартан" autoFocus />
-      </Field>
+      <DrugPicker
+        value={name}
+        onChange={(next) => {
+          setName(next)
+          // Правка названия руками отвязывает карточку от реестра: подставленное
+          // международное наименование могло относиться к другому препарату.
+          setInn('')
+          setDoses([])
+        }}
+        onPick={(drug: Drug) => {
+          setName(drug.n)
+          setInn(drug.i ?? '')
+          setDoses(drug.d ?? [])
+          if (drug.d?.length === 1) setDose(drug.d[0])
+        }}
+      />
+
+      {inn && inn.toLowerCase() !== name.trim().toLowerCase() && (
+        <div className="muted" style={{ marginTop: 'calc(-1 * var(--space-2))' }}>
+          Действующее вещество: <b>{inn}</b>
+        </div>
+      )}
 
       <Field label="Дозировка, как на упаковке">
         <input value={dose} onChange={(e) => setDose(e.target.value)} placeholder="50 мг" />
       </Field>
+      <DoseChips doses={doses} value={dose} onPick={setDose} />
 
       <div className="grid grid--two">
         <NumberField label="Осталось" value={left} onChange={setLeft} placeholder="30" min={0} max={999} start={30} size="compact" />

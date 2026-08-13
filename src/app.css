@@ -1089,6 +1089,11 @@ tbody tr:hover {
   font-size: var(--fs-1);
   color: var(--text-secondary);
 }
+.pill__inn {
+  margin-top: 2px;
+  font-size: var(--fs-1);
+  color: var(--text-secondary);
+}
 .pill__facts,
 .pill__note {
   margin-top: var(--space-1);
@@ -1148,6 +1153,86 @@ tbody tr:hover {
 }
 .pills__edit--new {
   margin-top: var(--space-4);
+}
+
+/* Подсказка из реестра лекарств. Список лежит поверх формы, а не раздвигает
+   её: на телефоне раздвигание уводит поле из-под пальца. */
+.suggest {
+  position: relative;
+}
+.suggest__list {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+  list-style: none;
+  /* Не фиксированные 300px: на телефоне список упирался в нижнюю навигацию,
+     и последняя подсказка оказывалась недосягаемой. */
+  max-height: min(300px, 42vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(11, 11, 11, 0.14);
+}
+.suggest__item {
+  display: block;
+  width: 100%;
+  min-height: var(--tap);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.suggest__item:hover,
+.suggest__item[data-active='true'] {
+  background: var(--accent-quiet);
+}
+.suggest__name {
+  display: block;
+  font-weight: 600;
+}
+.suggest__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-1);
+  color: var(--text-muted);
+}
+
+/* Дозировки кнопками: набирать «12,5 мг» на телефоне мучительно. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: calc(-1 * var(--space-2));
+}
+.chip {
+  min-height: var(--tap);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--fs-1);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.chip:hover {
+  background: var(--hover);
+}
+.chip[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
 }
 
 /* ── журнал BLE ─────────────────────────────────────────────────────────── */

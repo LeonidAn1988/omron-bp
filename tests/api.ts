@@ -33,6 +33,8 @@ export {
 
 export { plural } from '../src/logic/plural'
 
+export { normalize, searchDrugs, describeDrug } from '../src/logic/drugs'
+
 export {
   medicineAlert,
   supplyDays,

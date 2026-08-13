@@ -129,7 +129,7 @@ export function run() {
   const snapshot = {
     measurements: mixed,
     medicines: [
-      { id: 'med-1', name: 'Лозартан', dose: '50 мг', left: 12, perDay: 1, expires: Date.UTC(2027, 4, 1), note: 'утром' },
+      { id: 'med-1', name: 'Лозартан', dose: '50 мг', inn: 'Лозартан', left: 12, perDay: 1, expires: Date.UTC(2027, 4, 1), note: 'утром' },
       { id: 'med-2', name: 'Метформин', dose: '850 мг', left: null, perDay: null, expires: null },
     ],
     settings: { targetSys: 135, targetDia: 85, activeUser: 1, trackGlucose: true },
@@ -138,6 +138,7 @@ export function run() {
   check('в копии есть измерения', restored.measurements.length === 5)
   check('в копии есть аптечка', restored.medicines.length === 2, JSON.stringify(restored.medicines))
   check('препарат восстановлен полностью', restored.medicines[0].name === 'Лозартан' && restored.medicines[0].left === 12)
+  check('действующее вещество пережило копию', restored.medicines[0].inn === 'Лозартан')
   check('пустые поля препарата остались пустыми', restored.medicines[1].left === null && restored.medicines[1].expires === null)
   check('в копии есть настройки', restored.settings?.targetSys === 135)
 
