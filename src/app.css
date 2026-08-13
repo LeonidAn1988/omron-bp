@@ -1190,6 +1190,10 @@ tbody tr:hover {
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
+  /* Общее правило запрещает переносы в ячейках и заголовках. Здесь колонок три
+     и все текстовые: на 360px без переноса таблица вылезала за карточку. */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .report-drugs th {
   font-size: var(--fs-1);

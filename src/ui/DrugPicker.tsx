@@ -83,18 +83,26 @@ export function DrugPicker({
     if (!visible) return
     let timer: ReturnType<typeof setTimeout>
 
+    /**
+     * Нижняя граница списка. Навигация прилипшая только на телефоне; на широком
+     * экране она уезжает вверх, и отсчёт от неё схлопывал список до минимума —
+     * на десктопе помещалось полтора пункта при полном экране свободного места.
+     */
+    const floorOf = (bottom: number) => {
+      const nav = document.querySelector('nav.tabs')
+      const navTop = nav?.getBoundingClientRect().top ?? Infinity
+      return navTop > bottom ? Math.min(navTop, window.innerHeight) : window.innerHeight
+    }
+
     const fit = () => {
       const box = boxRef.current?.getBoundingClientRect()
       const list = listRef.current
       if (!box || !list) return
-      const nav = document.querySelector('nav.tabs')
-      const floor = nav ? nav.getBoundingClientRect().top : window.innerHeight
-      list.style.maxHeight = `${Math.max(140, Math.round(floor - box.bottom - 12))}px`
+      list.style.maxHeight = `${Math.max(140, Math.round(floorOf(box.bottom) - box.bottom - 12))}px`
     }
 
     const box = boxRef.current?.getBoundingClientRect()
-    const nav = document.querySelector('nav.tabs')
-    const floor = nav ? nav.getBoundingClientRect().top : window.innerHeight
+    const floor = box ? floorOf(box.bottom) : window.innerHeight
     if (box && floor - box.bottom < 220) {
       boxRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
       // Пересчитываем после прокрутки: до неё свободное место другое.
