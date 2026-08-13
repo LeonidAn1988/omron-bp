@@ -23,6 +23,10 @@
       }
     </script>
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+    <!-- iOS не понимает SVG на домашнем экране: без этой строки значок там
+         подставлялся чужой, а приложение само советует добавить его на экран —
+         именно так на iPhone включается постоянное хранилище. -->
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <title>Дневник здоровья · давление и сахар</title>
   </head>
