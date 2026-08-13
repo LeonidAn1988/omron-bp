@@ -33,7 +33,7 @@ export {
 
 export { plural } from '../src/logic/plural'
 
-export { normalize, searchDrugs, describeDrug } from '../src/logic/drugs'
+export { normalize, searchDrugs, describeDrug, variantsOf } from '../src/logic/drugs'
 
 export { buildCalendar, countCalendarEvents, foldLine, doseTitle } from '../src/logic/calendar'
 
@@ -61,6 +61,7 @@ export {
   effectiveLeft,
   isEstimated,
   runsOutAt,
+  shortForm,
   KEEP_INTAKES_DAYS,
 } from '../src/logic/medicines'
 

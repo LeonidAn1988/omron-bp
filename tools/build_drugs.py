@@ -37,42 +37,24 @@ GRLS_HOST = 'https://grls.minzdrav.gov.ru/'
 UA = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
 
 # Колонки листа «Действующий». Шапка занимает пять строк, данные идут с шестой.
-COL_TRADE, COL_MNN, COL_FORMS = 8, 9, 10
+COL_TRADE, COL_MNN, COL_FORMS, COL_GROUP = 8, 9, 10, 13
 FIRST_DATA_ROW = 6
 
 # Пометки о рецептурности приклеены к тому же полю, что и форма выпуска.
 RX_NOISE = re.compile(r'-\s*(Без рецепта|По рецепту)\s*;?', re.I)
 
-# «25 мг», «12,5 мг», «0,5 мл», «100 МЕ», «5 %». Единицы — только те, что
-# человек видит на упаковке; «кг» и «шт» это фасовка, а не дозировка.
-DOSE = re.compile(r'(?<![\d,.])(\d{1,4}(?:[,.]\d{1,3})?)\s*(мкг|мг|г|мл|МЕ|ЕД|%)(?![а-яА-Я])')
+# Единицы, которые человек видит на упаковке. «кг» и «шт» — фасовка, не дозировка.
+UNIT = r'(?:мкг|мг|г|мл|МЕ|ЕД|%)'
 
-# Форма выпуска стоит в начале описания, до первой дозировки.
-KNOWN_FORMS = [
-    ('таблетки', 'таблетки'),
-    ('капсулы', 'капсулы'),
-    ('драже', 'драже'),
-    ('гранулы', 'гранулы'),
-    ('порошок', 'порошок'),
-    ('раствор', 'раствор'),
-    ('суспензия', 'суспензия'),
-    ('сироп', 'сироп'),
-    ('капли', 'капли'),
-    ('спрей', 'спрей'),
-    ('аэрозоль', 'аэрозоль'),
-    ('мазь', 'мазь'),
-    ('крем', 'крем'),
-    ('гель', 'гель'),
-    ('суппозитории', 'суппозитории'),
-    ('пластырь', 'пластырь'),
-    ('настойка', 'настойка'),
-    ('лиофилизат', 'лиофилизат'),
-    ('концентрат', 'концентрат'),
-    ('эмульсия', 'эмульсия'),
-    ('пастилки', 'пастилки'),
-    ('сбор', 'сбор'),
-]
+# «25 мг», «12,5 мг», «1000 мг», «100 000 МЕ», «10 мг/мл», «5 мг/5 мл».
+DOSE_ONE = re.compile(
+    rf'^(\d{{1,7}}(?:[\s\u00a0]\d{{3}})*(?:[,.]\d{{1,3}})?)\s*({UNIT})'
+    rf'(?:\s*/\s*(\d{{1,4}}(?:[,.]\d{{1,3}})?)?\s*({UNIT}))?$',
+    re.I,
+)
 
+# «14 шт.», «30 доз» — количество в упаковке, а не сила препарата.
+COUNT = re.compile(r'^\d+(?:[,.]\d+)?\s*(?:шт|доз|табл|капс)\.?$', re.I)
 
 def fetch_zip() -> bytes:
     """Скачивает свежую выгрузку. Ссылка на странице одноразовая — берём её оттуда же."""
@@ -108,71 +90,163 @@ def open_active_sheet(blob: bytes):
     sys.exit('В архиве нет листа «Действующий».')
 
 
-def parse_forms(raw: str) -> tuple[str | None, list[str]]:
-    """Из описания упаковки вытаскивает форму выпуска и все дозировки."""
+def normalize_dose(match: re.Match) -> str:
+    """«12.5 мг» → «12,5 мг», «10 мг / мл» → «10 мг/мл». Разделитель дробной части — запятая."""
+    value = match.group(1).replace('.', ',').replace('\u00a0', ' ')
+    unit = match.group(2)
+    if match.group(4):
+        per = f'{match.group(3)} ' if match.group(3) else ''
+        return f'{value} {unit}/{per}{match.group(4)}'
+    return f'{value} {unit}'
+
+
+def parse_dose(part: str) -> str | None:
+    """
+    Дозировка целиком, включая комбинированные препараты.
+
+    «5 мг+160 мг» — это один препарат из двух веществ, а не две дозировки.
+    Пока правило требовало одну дозировку на долю, такая запись не опознавалась
+    и целиком уезжала в название формы: в справочнике заводились «формы» вроде
+    «Таблетки покрытые пленочной оболочкой 5 мг+160 мг». Комбинаций много —
+    почти тысяча наименований.
+    """
+    chunks = [c.strip() for c in part.split('+')]
+    parsed = []
+    for chunk in chunks:
+        found = DOSE_ONE.match(chunk)
+        if not found:
+            return None
+        parsed.append(normalize_dose(found))
+    return ' + '.join(parsed)
+
+
+def normalize_form(text: str) -> str:
+    """
+    Приводит запись формы к сравнимому виду.
+
+    Реестр пишет и «таблетки, покрытые пленочной оболочкой», и то же самое без
+    запятой. Без приведения одна форма двоится и в подсказке идут две одинаковые
+    строки подряд.
+    """
+    text = re.sub(r'\s+', ' ', text.replace(',', ' ')).strip(' -;.')
+    return text[0].upper() + text[1:] if text else ''
+
+
+def parse_entry(entry: str) -> tuple[str, str | None]:
+    """
+    Разбирает одну запись упаковки.
+
+    Реестр держит порядок: `форма, дозировка, фасовка - упаковка - упаковка`.
+    Поэтому форма — всё до первой доли, похожей на дозировку, а дозировка —
+    первая такая доля. Первая, а не любая: у капель это «1 %», а следующие
+    «5 мл» — объём флакона, и подставлять его как силу препарата нельзя.
+    """
+    head = re.split(r'\s+-\s+', entry)[0]
+    form_parts: list[str] = []
+    dose: str | None = None
+
+    for part in (p.strip() for p in head.split(',')):
+        if not part:
+            continue
+        found = parse_dose(part)
+        if found:
+            if dose is None:
+                dose = found
+        elif dose is None and not COUNT.match(part):
+            form_parts.append(part)
+
+    return normalize_form(', '.join(form_parts)), dose
+
+
+def split_entries(raw: str) -> list[str]:
+    """
+    Разбивает поле «Формы выпуска» на отдельные записи упаковки.
+
+    Куски, начинающиеся с дефиса, — это хвосты упаковки от предыдущей записи
+    («- пачки картонные (30 шт.)»). Раньше они принимали вид отдельных форм, и
+    в справочнике заводились «формы выпуска» вроде «пачки картонные».
+    """
     text = RX_NOISE.sub('', raw or '').strip(' ;/')
-    if not text:
-        return None, []
+    parts = [p.strip() for p in re.split(r'\s{2,}|;\s*', text)]
+    return [p for p in parts if p and not p.startswith('-')]
 
-    head = text[:120].lower()
-    form = next((title for needle, title in KNOWN_FORMS if needle in head), None)
 
-    doses: list[str] = []
-    for value, unit in DOSE.findall(text):
-        dose = f'{value.replace(".", ",")} {unit}'
-        if dose not in doses:
-            doses.append(dose)
-    return form, doses
+def is_substance(forms: str, group: str) -> bool:
+    """
+    Фармацевтическая субстанция — сырьё для производства, а не то, что лежит в
+    домашней аптечке. В реестре их пятая часть, и в подсказке они мешают:
+    человек набирает «ди», а ему предлагают «1,3-Диэтилбензимидазолия трийодид».
+    """
+    return forms.lower().lstrip(' -;/').startswith('субстанция') or group.strip() in ('', '~')
 
 
 def dose_key(dose: str) -> tuple[str, float]:
-    """Сортировка дозировок по числу внутри единицы, а не по строке: 5 мг раньше 100 мг."""
-    value, unit = dose.rsplit(' ', 1)
-    return unit, float(value.replace(',', '.'))
+    """Сортировка по числу внутри единицы, а не по строке: 5 мг раньше 100 мг."""
+    value, unit = dose.split(' ', 1)
+    # У комбинации сортируем по первому веществу — оно основное.
+    try:
+        number = float(value.replace(',', '.').replace(' ', ''))
+    except ValueError:
+        number = 0.0
+    return unit, number
 
 
 def build(blob: bytes) -> dict:
     book, sheet = open_active_sheet(blob)
+    # наименование → форма → набор дозировок
     merged: dict[str, dict] = {}
-    rows = 0
+    rows = skipped = 0
 
     for row in sheet.iter_rows(min_row=FIRST_DATA_ROW, values_only=True):
         trade = str(row[COL_TRADE] or '').strip()
         if not trade:
+            continue
+
+        raw_forms = str(row[COL_FORMS] or '')
+        if is_substance(raw_forms, str(row[COL_GROUP] or '')):
+            skipped += 1
             continue
         rows += 1
 
         mnn = str(row[COL_MNN] or '').strip()
         if mnn in ('~', '-'):
             mnn = ''
-        form, doses = parse_forms(str(row[COL_FORMS] or ''))
 
-        # Одно торговое наименование выпускают несколько заводов — записи
-        # сливаются, иначе в подсказке двадцать одинаковых строк подряд.
-        item = merged.setdefault(trade.lower(), {'n': trade, 'i': mnn, 'f': form, 'd': []})
+        item = merged.setdefault(trade.lower(), {'n': trade, 'i': mnn, 'forms': {}})
         if not item['i'] and mnn:
             item['i'] = mnn
-        if not item['f'] and form:
-            item['f'] = form
-        for dose in doses:
-            if dose not in item['d']:
-                item['d'].append(dose)
+
+        for entry in split_entries(raw_forms):
+            form, dose = parse_entry(entry)
+            if not form:
+                continue
+            doses = item['forms'].setdefault(form, set())
+            if dose:
+                doses.add(dose)
 
     book.close()
 
+    forms_index: dict[str, int] = {}
     items = []
     for item in merged.values():
-        item['d'] = sorted(set(item['d']), key=dose_key)[:12]
-        if not item['i']:
-            del item['i']
-        if not item['f']:
-            del item['f']
-        if not item['d']:
-            del item['d']
-        items.append(item)
-    items.sort(key=lambda x: x['n'].lower())
+        variants = []
+        for form, doses in item['forms'].items():
+            index = forms_index.setdefault(form, len(forms_index))
+            variants.append([index, sorted(doses, key=dose_key)[:14]])
+        # Формы по частоте не отсортировать — сортируем по названию, чтобы
+        # порядок был устойчив между сборками.
+        variants.sort(key=lambda v: v[0])
 
-    return {'source': 'ГРЛС', 'rows': rows, 'items': items}
+        record: dict = {'n': item['n']}
+        if item['i']:
+            record['i'] = item['i']
+        if variants:
+            record['v'] = variants
+        items.append(record)
+
+    items.sort(key=lambda x: x['n'].lower())
+    forms = [name for name, _ in sorted(forms_index.items(), key=lambda kv: kv[1])]
+    return {'source': 'ГРЛС', 'rows': rows, 'skipped': skipped, 'forms': forms, 'items': items}
 
 
 def main() -> None:
@@ -198,15 +272,18 @@ def main() -> None:
     out.write_text(json.dumps(data, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
 
     with_mnn = sum(1 for i in data['items'] if 'i' in i)
-    with_form = sum(1 for i in data['items'] if 'f' in i)
-    with_dose = sum(1 for i in data['items'] if 'd' in i)
+    with_form = sum(1 for i in data['items'] if i.get('v'))
+    with_dose = sum(1 for i in data['items'] if any(v[1] for v in i.get('v', [])))
+    multi = sum(1 for i in data['items'] if len(i.get('v', [])) > 1)
     total = len(data['items'])
     print(
-        f'записей в реестре: {data["rows"]}\n'
+        f'строк реестра: {data["rows"]}, пропущено субстанций: {data["skipped"]}\n'
         f'наименований после слияния: {total}\n'
         f'  с международным наименованием: {with_mnn} ({with_mnn / total:.1%})\n'
         f'  с формой выпуска: {with_form} ({with_form / total:.1%})\n'
         f'  с дозировками: {with_dose} ({with_dose / total:.1%})\n'
+        f'  с несколькими формами: {multi} ({multi / total:.1%})\n'
+        f'различных форм выпуска: {len(data["forms"])}\n'
         f'выгрузка от {stamp}, файл {out} — {out.stat().st_size / 1024:.0f} КБ',
         file=sys.stderr,
     )

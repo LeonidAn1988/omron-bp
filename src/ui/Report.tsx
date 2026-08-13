@@ -270,7 +270,10 @@ export function Report({
                         {item.name}
                         {inn && <div className="muted">{inn}</div>}
                       </td>
-                      <td>{item.dose || '—'}</td>
+                      <td>
+                        {item.dose || '—'}
+                        {item.form && <div className="muted">{item.form.toLowerCase()}</div>}
+                      </td>
                       <td>
                         {item.times?.length
                           ? `${item.times.join(', ')}${MEAL_NOTE[item.meal ?? 'any']}`

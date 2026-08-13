@@ -8,6 +8,7 @@ import {
   isEstimated,
   runsOutAt,
   setLeft,
+  shortForm,
   SUPPLY_SOON_DAYS,
   expiryToMonth,
   formatTime,
@@ -27,8 +28,8 @@ import { download } from '../logic/io'
 import { plural } from '../logic/plural'
 import { NumberField } from './NumberField'
 import { Banner, Field } from './bits'
-import { DoseChips, DrugPicker } from './DrugPicker'
-import type { Drug } from '../logic/drugs'
+import { DrugPicker, VariantPicker } from './DrugPicker'
+import type { Drug, DrugVariant } from '../logic/drugs'
 import { PencilIcon, TrashIcon } from './icons'
 
 /**
@@ -420,8 +421,10 @@ function MedicineRow({
 
       {/* Действующее вещество под торговым названием: врач называет препарат им,
           а на упаковке напечатано название конкретной фирмы. */}
-      {medicine.inn && medicine.inn.toLowerCase() !== medicine.name.toLowerCase() && (
-        <div className="pill__inn">{medicine.inn}</div>
+      {(medicine.form || (medicine.inn && medicine.inn.toLowerCase() !== medicine.name.toLowerCase())) && (
+        <div className="pill__inn">
+          {[shortForm(medicine.form), medicine.inn !== medicine.name ? medicine.inn : ''].filter(Boolean).join(' · ')}
+        </div>
       )}
 
       {shownAlert && (
@@ -636,12 +639,13 @@ function MedicineForm({
   const [month, setMonth] = useState(medicine?.expires ? expiryToMonth(medicine.expires) : '')
   const [note, setNote] = useState(medicine?.note ?? '')
   const [inn, setInn] = useState(medicine?.inn ?? '')
+  const [form, setForm] = useState(medicine?.form ?? '')
+  /** Варианты выпуска выбранного препарата: форма и её дозировки. */
+  const [variants, setVariants] = useState<DrugVariant[]>([])
   const [times, setTimes] = useState<string[]>(normalizeTimes(medicine?.times ?? []))
   const [perTime, setPerTime] = useState(String(medicine?.perTime ?? 1))
   const [meal, setMeal] = useState<Medicine['meal']>(medicine?.meal)
   const [autoDeduct, setAutoDeduct] = useState(medicine?.autoDeduct ?? false)
-  /** Дозировки выбранного из реестра препарата — показываем кнопками. */
-  const [doses, setDoses] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -664,6 +668,7 @@ function MedicineForm({
         name: name.trim(),
         dose: dose.trim(),
         inn: inn.trim() || undefined,
+        form: form.trim() || undefined,
         left: numberOrNull(left),
         perDay: numberOrNull(perDay),
         expires: month ? monthToExpiry(month) : null,
@@ -688,16 +693,21 @@ function MedicineForm({
         value={name}
         onChange={(next) => {
           setName(next)
-          // Правка названия руками отвязывает карточку от реестра: подставленное
-          // международное наименование могло относиться к другому препарату.
+          // Правка названия руками отвязывает карточку от реестра: подставленные
+          // вещество и форма могли относиться к другому препарату.
           setInn('')
-          setDoses([])
+          setForm('')
+          setVariants([])
         }}
-        onPick={(drug: Drug) => {
+        onPick={(drug: Drug, picked: DrugVariant[]) => {
           setName(drug.n)
           setInn(drug.i ?? '')
-          setDoses(drug.d ?? [])
-          if (drug.d?.length === 1) setDose(drug.d[0])
+          setVariants(picked)
+          // Форма одна — выбирать не из чего, ставим молча. Заодно подставляем
+          // единственную дозировку: спрашивать про выбор из одного незачем.
+          const only = picked.length === 1 ? picked[0] : null
+          setForm(only?.form ?? '')
+          if (only?.doses.length === 1) setDose(only.doses[0])
         }}
       />
 
@@ -707,10 +717,24 @@ function MedicineForm({
         </div>
       )}
 
+      <VariantPicker
+        variants={variants}
+        form={form}
+        dose={dose}
+        onForm={(next) => {
+          setForm(next)
+          // Дозировка от прежней формы к новой не относится: «5 %» у геля и
+          // «200 мг» у капсул — разные величины.
+          setDose('')
+        }}
+        onDose={setDose}
+      />
+
       <Field label="Дозировка, как на упаковке">
         <input value={dose} onChange={(e) => setDose(e.target.value)} placeholder="50 мг" />
       </Field>
-      <DoseChips doses={doses} value={dose} onPick={setDose} />
+
+      {form && <div className="muted" style={{ marginTop: 'calc(-1 * var(--space-2))' }}>Форма: {form}</div>}
 
       <div className="grid grid--two">
         <NumberField label="Осталось" value={left} onChange={setLeft} placeholder="30" min={0} max={999} start={30} size="compact" />

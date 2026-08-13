@@ -130,7 +130,7 @@ export function run() {
     measurements: mixed,
     medicines: [
       {
-        id: 'med-1', name: 'Лозартан', dose: '50 мг', inn: 'Лозартан', left: 12, perDay: null,
+        id: 'med-1', name: 'Лозартан', dose: '50 мг', inn: 'Лозартан', form: 'Таблетки покрытые пленочной оболочкой', left: 12, perDay: null,
         expires: Date.UTC(2027, 4, 1), note: 'утром', leftAt: Date.UTC(2026, 7, 3),
         times: ['08:00', '20:00'], perTime: 2, meal: 'after', autoDeduct: true,
         taken: [Date.UTC(2026, 7, 12, 5, 0), Date.UTC(2026, 7, 12, 17, 0)],
@@ -144,6 +144,7 @@ export function run() {
   check('в копии есть аптечка', restored.medicines.length === 2, JSON.stringify(restored.medicines))
   check('препарат восстановлен полностью', restored.medicines[0].name === 'Лозартан' && restored.medicines[0].left === 12)
   check('действующее вещество пережило копию', restored.medicines[0].inn === 'Лозартан')
+  check('форма выпуска пережила копию', restored.medicines[0].form === 'Таблетки покрытые пленочной оболочкой')
 
   // Расписание и автосписание — тоже введённые руками данные: без них
   // восстановленная аптечка молчит, а остаток перестаёт считаться.

@@ -24,6 +24,7 @@ import {
   effectiveLeft,
   isEstimated,
   runsOutAt,
+  shortForm,
   KEEP_INTAKES_DAYS,
 } from './build/api.mjs'
 
@@ -238,6 +239,12 @@ export function run() {
     runsOutAt(med({ left: 14, perDay: 1 }), now) === startOfDayTs(now) + 14 * DAY,
   )
   check('без расчёта даты нет', runsOutAt(med({ left: 14 }), now) === null)
+
+  // ── форма коротко ────────────────────────────────────────────────────────
+  check('от формы остаётся существительное', shortForm('Таблетки покрытые пленочной оболочкой') === 'таблетки')
+  check('запятая тоже граница', shortForm('Таблетки, покрытые оболочкой') === 'таблетки')
+  check('капли остаются каплями', shortForm('Капли глазные') === 'капли')
+  check('формы может не быть', shortForm(undefined) === '' && shortForm('') === '')
 
   return failures
 }

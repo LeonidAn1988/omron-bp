@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { describeDrug, searchDrugs, type Drug, type DrugBook } from '../logic/drugs'
+import { describeDrug, searchDrugs, variantsOf, type Drug, type DrugBook, type DrugVariant } from '../logic/drugs'
 
 /**
  * Поле названия препарата с подсказкой из реестра.
@@ -37,8 +37,11 @@ export function DrugPicker({
 }: {
   value: string
   onChange: (next: string) => void
-  /** Выбор из справочника: кроме названия отдаём международное наименование, форму и дозировки. */
-  onPick: (drug: Drug) => void
+  /**
+   * Выбор из справочника. Варианты отдаём уже с названиями форм: словарь форм
+   * живёт здесь, и форме препарата про его устройство знать незачем.
+   */
+  onPick: (drug: Drug, variants: DrugVariant[]) => void
 }) {
   const [book, setBook] = useState<DrugBook | null>(cached)
   const [open, setOpen] = useState(false)
@@ -115,7 +118,7 @@ export function DrugPicker({
   }, [visible, found.length])
 
   const choose = (drug: Drug) => {
-    onPick(drug)
+    onPick(drug, variantsOf(drug, book?.forms ?? []))
     setOpen(false)
     setActive(-1)
   }
@@ -177,7 +180,9 @@ export function DrugPicker({
                 onTouchStart={() => choose(drug)}
               >
                 <span className="suggest__name">{drug.n}</span>
-                {describeDrug(drug) && <span className="suggest__meta">{describeDrug(drug)}</span>}
+                {describeDrug(drug, book?.forms ?? []) && (
+                  <span className="suggest__meta">{describeDrug(drug, book?.forms ?? [])}</span>
+                )}
               </button>
             </li>
           ))}
@@ -193,22 +198,73 @@ export function DrugPicker({
   )
 }
 
-/** Дозировки препарата кнопками: набирать «12,5 мг» руками на телефоне мучительно. */
-export function DoseChips({ doses, value, onPick }: { doses: string[]; value: string; onPick: (dose: string) => void }) {
-  if (doses.length === 0) return null
+/**
+ * Форма выпуска и дозировка кнопками.
+ *
+ * Набирать «12,5 мг» руками на телефоне мучительно, а угадывать, в каких формах
+ * бывает препарат, — тем более. Форма спрашивается первой, потому что дозировки
+ * у форм разные: у геля «5 %», у капсул «200 мг», и общий список был бы смесью,
+ * из которой можно выбрать несуществующую пару.
+ *
+ * Когда форма одна, выбирать не из чего — её ставят молча, и человек видит
+ * сразу дозировки.
+ */
+export function VariantPicker({
+  variants,
+  form,
+  dose,
+  onForm,
+  onDose,
+}: {
+  variants: DrugVariant[]
+  form: string
+  dose: string
+  onForm: (form: string) => void
+  onDose: (dose: string) => void
+}) {
+  if (variants.length === 0) return null
+
+  const chosen = variants.find((v) => v.form === form)
+  const doses = chosen?.doses ?? (variants.length === 1 ? variants[0].doses : [])
+
   return (
-    <div className="chips" role="group" aria-label="Дозировки из реестра">
-      {doses.map((dose) => (
-        <button
-          key={dose}
-          type="button"
-          className="chip"
-          aria-pressed={value.trim() === dose}
-          onClick={() => onPick(dose)}
-        >
-          {dose}
-        </button>
-      ))}
-    </div>
+    <>
+      {variants.length > 1 && (
+        <div>
+          <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
+            Форма выпуска
+          </div>
+          <div className="chips" role="group" aria-label="Формы выпуска из реестра">
+            {variants.map((variant) => (
+              <button
+                key={variant.form}
+                type="button"
+                className="chip"
+                aria-pressed={variant.form === form}
+                onClick={() => onForm(variant.form)}
+              >
+                {variant.form}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {doses.length > 0 && (
+        <div className="chips" role="group" aria-label="Дозировки из реестра">
+          {doses.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className="chip"
+              aria-pressed={dose.trim() === item}
+              onClick={() => onDose(item)}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
   )
 }

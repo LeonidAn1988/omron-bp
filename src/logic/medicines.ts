@@ -296,3 +296,16 @@ export function undoTaken(medicine: Medicine, at: number): Medicine {
 export function setLeft(medicine: Medicine, value: number | null, now: number): Medicine {
   return { ...medicine, left: value === null ? null : Math.max(0, Math.round(value)), leftAt: now }
 }
+
+/**
+ * Форма коротко — для списка аптечки.
+ *
+ * Реестр пишет «Таблетки покрытые пленочной оболочкой», и в ежедневном списке
+ * это две строки мелкого текста, из которых человеку нужно одно слово: таблетки
+ * это, капли или гель. Полное название остаётся там, где важна точность, — в
+ * отчёте для врача и в форме правки.
+ */
+export function shortForm(form: string | undefined): string {
+  if (!form) return ''
+  return form.trim().split(/[\s,]+/)[0].toLowerCase()
+}

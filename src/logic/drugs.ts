@@ -16,16 +16,33 @@ export interface Drug {
   n: string
   /** Международное непатентованное наименование. Врач называет препарат им. */
   i?: string
-  /** Форма выпуска: таблетки, капсулы, раствор. */
-  f?: string
-  /** Дозировки, которые у этого препарата бывают. */
-  d?: string[]
+  /**
+   * Варианты выпуска: `[номер формы в словаре, дозировки]`.
+   *
+   * Один препарат выпускают в нескольких формах, и дозировки у них разные:
+   * у геля «5 %», у капсул «200 мг». Общий список дозировок был бы смесью,
+   * из которой человек выбрал бы несуществующую пару.
+   */
+  v?: [number, string[]][]
+}
+
+/** Форма выпуска с её дозировками — то же, что вариант, но уже с названием. */
+export interface DrugVariant {
+  form: string
+  doses: string[]
 }
 
 export interface DrugBook {
   /** Дата выгрузки реестра. Справочник устаревает, и это видно в интерфейсе. */
   date: string
+  /** Словарь форм. Названия повторяются тысячами раз, поэтому вынесены отдельно. */
+  forms: string[]
   items: Drug[]
+}
+
+/** Разворачивает варианты препарата в названия форм. */
+export function variantsOf(drug: Drug, forms: string[]): DrugVariant[] {
+  return (drug.v ?? []).map(([index, doses]) => ({ form: forms[index] ?? '', doses })).filter((v) => v.form !== '')
 }
 
 /**
@@ -71,7 +88,13 @@ export function searchDrugs(items: Drug[], query: string, limit = SUGGEST_LIMIT)
   return [...starts, ...inside].slice(0, limit)
 }
 
-/** Подпись под названием в подсказке: чем этот препарат является. */
-export function describeDrug(drug: Drug): string {
-  return [drug.i, drug.f].filter(Boolean).join(' · ')
+/**
+ * Подпись под названием в подсказке: чем этот препарат является.
+ *
+ * Форм бывает несколько, но в подсказке нужна одна — она даёт понять, о каком
+ * препарате речь. Остальные человек увидит, когда выберет.
+ */
+export function describeDrug(drug: Drug, forms: string[] = []): string {
+  const first = drug.v?.[0] !== undefined ? forms[drug.v[0][0]] : undefined
+  return [drug.i, first?.toLowerCase()].filter(Boolean).join(' · ')
 }

@@ -318,6 +318,7 @@ function parseMedicines(raw: unknown): Medicine[] {
       name: (m.name as string).trim(),
       dose: typeof m.dose === 'string' ? m.dose : '',
       inn: text(m.inn),
+      form: text(m.form),
       left: optionalNumber(m.left),
       perDay: optionalNumber(m.perDay),
       expires: optionalNumber(m.expires),
