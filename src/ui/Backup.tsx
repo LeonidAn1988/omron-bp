@@ -45,7 +45,8 @@ export function DataSafety({ status }: { status: BackupStatus }) {
           </div>
           {target && (
             <div className="muted" style={{ marginTop: 4 }}>
-              Сохраняется само в файл <b>{target}</b> при каждом изменении.
+              Сохраняется само в файл <b>{target}</b> при каждом изменении. От потери самого устройства это спасёт,
+              только если файл лежит в облачной папке.
             </div>
           )}
         </div>
