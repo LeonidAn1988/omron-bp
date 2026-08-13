@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import type { Medicine } from '../types'
 import {
+  daysToExpiry,
   dosesToday,
+  EXPIRY_SOON_DAYS,
   effectiveLeft,
   isEstimated,
   runsOutAt,
@@ -350,6 +352,20 @@ function MedicineRow({
   const perDay = perDayOf(medicine)
   const left = effectiveLeft(medicine, now)
   const estimated = isEstimated(medicine, now)
+  /** Просроченному препарату прогноз запаса не нужен: его не принимают. */
+  const showSupply = supply !== null && alert?.kind !== 'expired'
+
+  /**
+   * Что написать в строке предупреждения.
+   *
+   * Про запас теперь говорит полоса — цветом и датой, полнее любого текста.
+   * Значит строка свободна для следующего по важности, а это срок годности.
+   * Иначе истекающий в этом месяце срок молчал бы, пока препарат кончается.
+   */
+  const expiry = daysToExpiry(medicine, now)
+  const expirySoon: MedicineAlert | null =
+    expiry === null ? null : expiry < 0 ? { kind: 'expired', days: expiry } : expiry <= EXPIRY_SOON_DAYS ? { kind: 'expiring', days: expiry } : null
+  const shownAlert = alert && !(alert.kind === 'low' && showSupply) ? alert : expirySoon
 
   const schedule = medicine.times?.length
     ? medicine.times.join(', ')
@@ -408,11 +424,13 @@ function MedicineRow({
         <div className="pill__inn">{medicine.inn}</div>
       )}
 
-      {alert && (
-        <div className={`pill__alert pill__alert--${ALERT_TONE[alert.kind]}`}>{alertText(alert, medicine)}</div>
+      {shownAlert && (
+        <div className={`pill__alert pill__alert--${ALERT_TONE[shownAlert.kind]}`}>
+          {alertText(shownAlert, medicine)}
+        </div>
       )}
 
-      {supply !== null && alert?.kind !== 'expired' && <Supply days={supply} until={runsOutAt(medicine, now)} />}
+      {showSupply && <Supply days={supply!} until={runsOutAt(medicine, now)} />}
 
       <dl className="facts">
         <Fact label="Остаток">
@@ -442,7 +460,7 @@ function MedicineRow({
 
         {/* Срок не повторяем, когда о нём уже сказано предупреждением: одно и то
             же двумя способами в одной строке читается как две разные вещи. */}
-        {medicine.expires !== null && alert?.kind !== 'expired' && alert?.kind !== 'expiring' && (
+        {medicine.expires !== null && shownAlert?.kind !== 'expired' && shownAlert?.kind !== 'expiring' && (
           <Fact label="Годен до">{monthYear(medicine.expires)}</Fact>
         )}
       </dl>
