@@ -10,6 +10,17 @@ import {
   EXPIRY_SOON_DAYS,
   SUPPLY_SOON_DAYS,
   plural,
+  perDayOf,
+  perTimeOf,
+  projectedLeft,
+  parseTime,
+  formatTime,
+  normalizeTimes,
+  dosesToday,
+  pendingToday,
+  markTaken,
+  undoTaken,
+  KEEP_INTAKES_DAYS,
 } from './build/api.mjs'
 
 export function run() {
@@ -95,6 +106,91 @@ export function run() {
   check('25 дней', form(25) === 'дней')
   check('111 дней', form(111) === 'дней')
   check('0 дней', form(0) === 'дней')
+
+  // ── расписание ───────────────────────────────────────────────────────────
+  check('время разбирается', parseTime('08:30') === 510)
+  check('однозначные часы тоже', parseTime('8:05') === 485)
+  check('мусор не время', parseTime('25:00') === null && parseTime('08:70') === null && parseTime('утром') === null)
+  check('обратно с ведущим нулём', formatTime(510) === '08:30' && formatTime(5) === '00:05')
+  check(
+    'расписание сортируется и чистится',
+    JSON.stringify(normalizeTimes(['20:00', '8:00', '20:00', 'ерунда'])) === JSON.stringify(['08:00', '20:00']),
+  )
+
+  // ── суточный расход ──────────────────────────────────────────────────────
+  check('без расписания берётся ручное число', perDayOf(med({ perDay: 3 })) === 3)
+  check('с расписанием считается по нему', perDayOf(med({ times: ['08:00', '20:00'], perDay: 99 })) === 2)
+  check('две штуки за приём удваивают расход', perDayOf(med({ times: ['08:00', '20:00'], perTime: 2 })) === 4)
+  check('по умолчанию одна штука за приём', perTimeOf(med({})) === 1)
+
+  // ── расчётный остаток ────────────────────────────────────────────────────
+  check('без даты подтверждения остаток как есть', projectedLeft(med({ left: 30, perDay: 1 }), now) === 30)
+  check(
+    'за десять дней списалось десять штук',
+    projectedLeft(med({ left: 30, perDay: 1, leftAt: now - 10 * DAY }), now) === 20,
+  )
+  check(
+    'по два в день списывается вдвое быстрее',
+    projectedLeft(med({ left: 30, perDay: 2, leftAt: now - 10 * DAY }), now) === 10,
+  )
+  check(
+    'ниже нуля не уходит',
+    projectedLeft(med({ left: 5, perDay: 2, leftAt: now - 100 * DAY }), now) === 0,
+  )
+  check('в тот же день ничего не списывается', projectedLeft(med({ left: 30, perDay: 1, leftAt: now - 3600000 }), now) === 30)
+
+  check(
+    'предупреждение срабатывает по расчётному остатку',
+    medicineAlert(med({ left: 30, perDay: 1, leftAt: now - 25 * DAY }), now)?.kind === 'low',
+    'иначе «пора заказывать» не сработает никогда',
+  )
+  check(
+    '«закончился» только по подтверждённому остатку',
+    medicineAlert(med({ left: 30, perDay: 1, leftAt: now - 100 * DAY }), now)?.kind === 'low',
+    'сказать «кончился», когда пачка лежит в тумбочке, значит соврать',
+  )
+
+  // ── приёмы за сегодня ────────────────────────────────────────────────────
+  const утро = new Date(2026, 7, 13, 8, 0, 0).getTime()
+  const вечер = new Date(2026, 7, 13, 20, 0, 0).getTime()
+  const полдень = new Date(2026, 7, 13, 12, 0, 0).getTime()
+
+  const расписание = med({ times: ['08:00', '20:00'], left: 30 })
+  let слоты = dosesToday(расписание, полдень)
+  check('в расписании два приёма', слоты.length === 2)
+  check('утренний просрочен, вечерний ещё нет', слоты[0].overdue === true && слоты[1].overdue === false)
+  check('без расписания приёмов нет', dosesToday(med({ left: 10 }), полдень).length === 0)
+
+  const принят = markTaken(расписание, утро + 600000)
+  слоты = dosesToday(принят, полдень)
+  check('утренний приём отмечен', слоты[0].takenAt !== null && слоты[1].takenAt === null)
+  check('отметка не просрочена', слоты[0].overdue === false)
+  check('остаток списался на штуку', принят.left === 29)
+  check('дата подтверждения обновилась', принят.leftAt === утро + 600000)
+  check('исходный препарат не изменён', расписание.left === 30 && !расписание.taken)
+
+  const оба = markTaken(принят, вечер)
+  const слоты2 = dosesToday(оба, вечер + 60000)
+  check('обе отметки разошлись по приёмам', слоты2[0].takenAt !== null && слоты2[1].takenAt !== null)
+  check('остаток списался дважды', оба.left === 28)
+
+  check('счётчик неотмеченных', pendingToday([расписание], полдень) === 2)
+  check('после отметки счётчик уменьшился', pendingToday([принят], полдень) === 1)
+  check('препарат без расписания в счётчик не идёт', pendingToday([med({ left: 5 })], полдень) === 0)
+
+  const откат = undoTaken(оба, вечер)
+  check('ошибочная отметка снята', (откат.taken ?? []).includes(вечер) === false)
+  check('штуки вернулись в остаток', откат.left === 29)
+
+  const давний = markTaken(med({ left: 10, taken: [now - (KEEP_INTAKES_DAYS + 5) * DAY] }), now)
+  check(
+    'старые отметки не копятся',
+    (давний.taken ?? []).length === 1,
+    'история за годы раздувает резервную копию и никому не нужна',
+  )
+
+  check('две штуки за приём списываются вместе', markTaken(med({ left: 10, perTime: 2 }), now).left === 8)
+  check('остаток без счёта не ломает отметку', markTaken(med({ left: null }), now).left === null)
 
   return failures
 }

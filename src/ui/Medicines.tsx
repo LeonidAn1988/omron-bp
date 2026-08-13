@@ -2,13 +2,23 @@ import { useState } from 'react'
 import type { Medicine } from '../types'
 import {
   daysToExpiry,
+  dosesToday,
   expiryToMonth,
+  formatTime,
+  markTaken,
   medicineAlert,
   monthToExpiry,
+  normalizeTimes,
+  parseTime,
+  perDayOf,
+  projectedLeft,
   sortMedicines,
   supplyDays,
+  undoTaken,
   type MedicineAlert,
 } from '../logic/medicines'
+import { buildCalendar, countCalendarEvents } from '../logic/calendar'
+import { download } from '../logic/io'
 import { plural } from '../logic/plural'
 import { NumberField } from './NumberField'
 import { Banner, Field } from './bits'
@@ -101,6 +111,62 @@ export function MedicineNudge({ count, onOpen }: { count: number; onOpen: () => 
   )
 }
 
+const TIME_LABEL = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' })
+
+/**
+ * Что принять сегодня.
+ *
+ * Стоит первым, потому что это единственный вопрос, с которым человек открывает
+ * аптечку каждый день. Остальное — справочная часть, к ней обращаются раз в
+ * месяц.
+ */
+function TodayDoses({ medicines, onSave }: { medicines: Medicine[]; onSave: (item: Medicine) => Promise<void> }) {
+  const now = Date.now()
+  const rows = medicines
+    .map((m) => ({ medicine: m, slots: dosesToday(m, now) }))
+    .filter((r) => r.slots.length > 0)
+    .flatMap((r) => r.slots.map((slot) => ({ medicine: r.medicine, slot })))
+    .sort((a, b) => a.slot.time.localeCompare(b.slot.time))
+
+  if (rows.length === 0) return null
+
+  const left = rows.filter((r) => r.slot.takenAt === null).length
+
+  return (
+    <div className="card">
+      <div className="card__head">
+        <h2>Сегодня</h2>
+        <span className="muted">{left === 0 ? 'всё принято' : `осталось приёмов: ${left}`}</span>
+      </div>
+
+      <ul className="doses">
+        {rows.map(({ medicine, slot }) => (
+          <li key={`${medicine.id}-${slot.time}`} className="dose" data-done={slot.takenAt !== null ? 'true' : undefined}>
+            <span className="dose__time">{slot.time}</span>
+            <span className="dose__body">
+              <span className="dose__name">{medicine.name}</span>
+              {medicine.dose && <span className="dose__amount">{medicine.dose}</span>}
+              {slot.takenAt !== null && (
+                <span className="dose__done">принято в {TIME_LABEL.format(slot.takenAt)}</span>
+              )}
+              {slot.overdue && <span className="dose__late">время прошло</span>}
+            </span>
+            {slot.takenAt === null ? (
+              <button className="btn btn--primary" onClick={() => void onSave(markTaken(medicine, Date.now()))}>
+                Принял
+              </button>
+            ) : (
+              <button className="btn btn--sm" onClick={() => void onSave(undoTaken(medicine, slot.takenAt!))}>
+                Отменить
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
 export function Medicines({
   medicines,
   onSave,
@@ -115,9 +181,16 @@ export function Medicines({
 
   const now = Date.now()
   const rows = sortMedicines(medicines, now)
+  const events = countCalendarEvents(medicines)
+
+  const exportCalendar = () =>
+    void download('приём-лекарств.ics', buildCalendar(medicines, Date.now()), 'text/calendar')
 
   return (
-    <div className="card">
+    <>
+      <TodayDoses medicines={medicines} onSave={onSave} />
+
+      <div className="card">
       <div className="card__head">
         <h2>Аптечка</h2>
         {medicines.length > 0 && <span className="muted">препаратов: {medicines.length}</span>}
@@ -180,9 +253,26 @@ export function Medicines({
           >
             Добавить препарат
           </button>
+          {events > 0 && (
+            <button className="btn" onClick={exportCalendar}>
+              Напоминания в календарь
+            </button>
+          )}
         </div>
       )}
-    </div>
+
+      {events > 0 && (
+        <Banner tone="info">
+          <b>Напоминает календарь телефона, а не дневник.</b>
+          <div style={{ marginTop: 4 }}>
+            Браузер не умеет будить приложение по расписанию, поэтому приёмы выгружаются файлом в календарь — он и
+            звонит. Событий получится {events}. Если поменяете расписание, выгрузите заново: события с тем же временем
+            обновятся, а отменённые придётся убрать из календаря руками.
+          </div>
+        </Banner>
+      )}
+      </div>
+    </>
   )
 }
 
@@ -199,13 +289,17 @@ function MedicineRow({
 }) {
   const [confirming, setConfirming] = useState(false)
   const alert = medicineAlert(medicine, now)
-  const supply = supplyDays(medicine)
+  const supply = supplyDays(medicine, now)
   const expiry = daysToExpiry(medicine, now)
+  const perDay = perDayOf(medicine)
+  const expected = projectedLeft(medicine, now)
+  /** Остаток разошёлся с подтверждённым: показываем расчётный и говорим, что он расчётный. */
+  const drifted = expected !== null && medicine.left !== null && expected !== medicine.left
 
   // Факты в строку: то, что уже сказано предупреждением, здесь не повторяется.
   const facts = [
-    medicine.left !== null && `осталось ${medicine.left}`,
-    medicine.perDay !== null && `по ${medicine.perDay} в день`,
+    medicine.left !== null && (drifted ? `по расчёту осталось ~${expected}` : `осталось ${medicine.left}`),
+    medicine.times?.length ? medicine.times.join(', ') : perDay !== null && `по ${perDay} в день`,
     supply !== null && alert?.kind !== 'low' && `хватит на ${days(supply)}`,
     medicine.expires !== null && alert?.kind !== 'expired' && alert?.kind !== 'expiring' && expiry !== null
       ? `годен до конца ${monthYear(medicine.expires)}`
@@ -260,6 +354,77 @@ function MedicineRow({
   )
 }
 
+const MEALS: { key: Medicine['meal']; title: string }[] = [
+  { key: undefined, title: 'Неважно' },
+  { key: 'before', title: 'До еды' },
+  { key: 'after', title: 'После еды' },
+]
+
+/** Готовые времена: почти все схемы приёма укладываются в эти четыре. */
+const PRESETS = [
+  { time: '08:00', title: 'Утром' },
+  { time: '13:00', title: 'Днём' },
+  { time: '19:00', title: 'Вечером' },
+  { time: '22:00', title: 'На ночь' },
+]
+
+/**
+ * Время приёма кнопками плюс поле для своего.
+ *
+ * Набирать время руками на телефоне пожилому человеку тяжело, а четыре готовых
+ * значения покрывают почти все назначения. Своё время остаётся для остальных.
+ */
+function TimePicker({ times, onChange }: { times: string[]; onChange: (next: string[]) => void }) {
+  const [custom, setCustom] = useState('')
+
+  const toggle = (time: string) =>
+    onChange(normalizeTimes(times.includes(time) ? times.filter((t) => t !== time) : [...times, time]))
+
+  const addCustom = () => {
+    if (parseTime(custom) === null) return
+    onChange(normalizeTimes([...times, formatTime(parseTime(custom)!)]))
+    setCustom('')
+  }
+
+  const extra = times.filter((t) => !PRESETS.some((p) => p.time === t))
+
+  return (
+    <>
+      <div className="chips">
+        {PRESETS.map(({ time, title }) => (
+          <button key={time} type="button" className="chip" aria-pressed={times.includes(time)} onClick={() => toggle(time)}>
+            {title} <span className="muted">{time}</span>
+          </button>
+        ))}
+        {extra.map((time) => (
+          <button key={time} type="button" className="chip" aria-pressed onClick={() => toggle(time)}>
+            {time}
+          </button>
+        ))}
+      </div>
+
+      <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+        <input
+          type="time"
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          aria-label="Своё время приёма"
+          style={{ maxWidth: 150 }}
+        />
+        <button type="button" className="btn btn--sm" onClick={addCustom} disabled={parseTime(custom) === null}>
+          Добавить время
+        </button>
+      </div>
+
+      {times.length === 0 && (
+        <p className="muted" style={{ margin: 'var(--space-2) 0 0' }}>
+          Без расписания препарат просто лежит в аптечке: остаток считается по полю «В день», напоминаний нет.
+        </p>
+      )}
+    </>
+  )
+}
+
 /**
  * Форма препарата. Раскрывается на месте, как и правка измерения: модальное окно
  * на телефоне отбирает весь экран ради четырёх полей.
@@ -282,6 +447,9 @@ function MedicineForm({
   const [month, setMonth] = useState(medicine?.expires ? expiryToMonth(medicine.expires) : '')
   const [note, setNote] = useState(medicine?.note ?? '')
   const [inn, setInn] = useState(medicine?.inn ?? '')
+  const [times, setTimes] = useState<string[]>(normalizeTimes(medicine?.times ?? []))
+  const [perTime, setPerTime] = useState(String(medicine?.perTime ?? 1))
+  const [meal, setMeal] = useState<Medicine['meal']>(medicine?.meal)
   /** Дозировки выбранного из реестра препарата — показываем кнопками. */
   const [doses, setDoses] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
@@ -310,6 +478,13 @@ function MedicineForm({
         perDay: numberOrNull(perDay),
         expires: month ? monthToExpiry(month) : null,
         note: note.trim() || undefined,
+        times: times.length > 0 ? times : undefined,
+        perTime: times.length > 0 ? Number(perTime) || 1 : undefined,
+        meal: times.length > 0 ? meal : undefined,
+        // Правка остатка руками — это подтверждение: расчётной поправке
+        // отсчитывать заново не с чего.
+        leftAt: Date.now(),
+        taken: medicine?.taken,
       })
     } finally {
       setBusy(false)
@@ -360,6 +535,40 @@ function MedicineForm({
           decimals={1}
           size="compact"
         />
+      </div>
+
+      <div>
+        <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
+          Когда принимать
+        </div>
+        <TimePicker times={times} onChange={setTimes} />
+        {times.length > 0 && (
+          <div className="row" style={{ marginTop: 'var(--space-3)', alignItems: 'flex-end' }}>
+            <div style={{ maxWidth: 150 }}>
+              <NumberField
+                label="Штук за приём"
+                value={perTime}
+                onChange={setPerTime}
+                min={1}
+                max={10}
+                start={1}
+                size="compact"
+              />
+            </div>
+            <div className="segmented" role="group" aria-label="Отношение к еде">
+              {MEALS.map(({ key, title }) => (
+                <button
+                  key={title}
+                  type="button"
+                  aria-pressed={meal === key || (key === undefined && !meal)}
+                  onClick={() => setMeal(key)}
+                >
+                  {title}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <Field label="Годен до — месяц с упаковки">

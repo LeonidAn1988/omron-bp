@@ -23,7 +23,7 @@ import { Readings } from './ui/Readings'
 import { Medicines, MedicineNudge } from './ui/Medicines'
 import { Entry } from './ui/Entry'
 import { Sync } from './ui/Sync'
-import { countAlerts } from './logic/medicines'
+import { countAlerts, pendingToday } from './logic/medicines'
 import type { ImportResult } from './logic/io'
 import { applyTheme } from './ui/theme'
 import { useBackup } from './ui/useBackup'
@@ -199,8 +199,17 @@ export default function App() {
     [refreshMedicines],
   )
 
-  /** Сколько препаратов требуют внимания — для пометки на переключателе. */
+  /** Сколько препаратов требуют внимания — для плашки на обзоре. */
   const medicineAlerts = useMemo(() => countAlerts(medicines, Date.now()), [medicines])
+
+  /**
+   * Пометка на переключателе значит «есть на что посмотреть»: либо приём не
+   * отмечен, либо что-то кончается. Считать там нечего, важен сам факт.
+   */
+  const medicineMark = useMemo(
+    () => medicineAlerts > 0 || pendingToday(medicines, Date.now()) > 0,
+    [medicines, medicineAlerts],
+  )
 
   const backup = useBackup(measurements, medicines, settings, updateSettings, ready)
 
@@ -272,7 +281,7 @@ export default function App() {
       )}
       <button aria-pressed={diary === 'meds'} onClick={() => setDiary('meds')}>
         Аптечка
-        {medicineAlerts > 0 && <span className="segmented__mark" aria-hidden="true" />}
+        {medicineMark && <span className="segmented__mark" aria-hidden="true" />}
       </button>
     </div>
   )
@@ -471,6 +480,7 @@ export default function App() {
           targetSys={settings.targetSys}
           targetDia={settings.targetDia}
           period={period}
+          medicines={medicines}
           onPeriodChange={setPeriod}
         />
       )}

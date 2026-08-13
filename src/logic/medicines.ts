@@ -62,10 +62,48 @@ export function expiryToMonth(ts: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+/** Сколько дней хранить отметки о приёме. История за годы не нужна, а копию раздувает. */
+export const KEEP_INTAKES_DAYS = 60
+
+/** Штук за один приём. По умолчанию одна — так на упаковке и в назначении чаще всего. */
+export const perTimeOf = (medicine: Medicine): number => medicine.perTime ?? 1
+
+/**
+ * Сколько уходит в сутки.
+ *
+ * Если задано расписание, суточный расход считается по нему: держать отдельно
+ * список времён и число «в день» значит рано или поздно их разойтись.
+ */
+export function perDayOf(medicine: Medicine): number | null {
+  const times = medicine.times ?? []
+  if (times.length > 0) return times.length * perTimeOf(medicine)
+  return medicine.perDay
+}
+
+/**
+ * Остаток с поправкой на прошедшие дни.
+ *
+ * Подтверждённый остаток — это снимок на дату `leftAt`. Человек не правит его
+ * каждый день, поэтому по нему одному предупреждение «пора заказывать» не
+ * срабатывало никогда. Здесь считается ожидаемый остаток; он именно ожидаемый,
+ * и в интерфейсе подписан как расчётный, а не как факт.
+ */
+export function projectedLeft(medicine: Medicine, now: number): number | null {
+  const { left } = medicine
+  const perDay = perDayOf(medicine)
+  if (left === null) return null
+  if (!medicine.leftAt || perDay === null || perDay <= 0) return left
+  const days = Math.floor((startOfDay(now) - startOfDay(medicine.leftAt)) / DAY)
+  if (days <= 0) return left
+  return Math.max(0, left - days * perDay)
+}
+
 /** На сколько дней хватит остатка. `null` — нечего или не из чего считать. */
-export function supplyDays(medicine: Medicine): number | null {
-  if (medicine.left === null || medicine.perDay === null || medicine.perDay <= 0) return null
-  return Math.floor(medicine.left / medicine.perDay)
+export function supplyDays(medicine: Medicine, now?: number): number | null {
+  const perDay = perDayOf(medicine)
+  const left = now === undefined ? medicine.left : projectedLeft(medicine, now)
+  if (left === null || perDay === null || perDay <= 0) return null
+  return Math.floor(left / perDay)
 }
 
 /** Сколько дней до конца срока годности. Отрицательное — срок истёк. */
@@ -85,9 +123,11 @@ export function medicineAlert(medicine: Medicine, now: number): MedicineAlert | 
   const expiry = daysToExpiry(medicine, now)
   if (expiry !== null && expiry < 0) return { kind: 'expired', days: expiry }
 
+  // «Закончился» — только по подтверждённому остатку. Расчётный для этого не
+  // годится: сказать «кончился», когда пачка лежит в тумбочке, значит соврать.
   if (medicine.left !== null && medicine.left <= 0) return { kind: 'out', days: 0 }
 
-  const supply = supplyDays(medicine)
+  const supply = supplyDays(medicine, now)
   if (supply !== null && supply <= SUPPLY_SOON_DAYS) return { kind: 'low', days: supply }
 
   if (expiry !== null && expiry <= EXPIRY_SOON_DAYS) return { kind: 'expiring', days: expiry }
@@ -118,4 +158,104 @@ export function sortMedicines(items: Medicine[], now: number): Medicine[] {
 /** Сколько препаратов требуют внимания — для пометки на вкладке и плашки на обзоре. */
 export function countAlerts(items: Medicine[], now: number): number {
   return items.filter((m) => medicineAlert(m, now) !== null).length
+}
+
+// ── расписание и приём ─────────────────────────────────────────────────────
+
+/** Разбирает «08:30» в минуты от полуночи. `null` — не время. */
+export function parseTime(value: string): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim())
+  if (!match) return null
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (hours > 23 || minutes > 59) return null
+  return hours * 60 + minutes
+}
+
+/** Обратно: 510 → «08:30». Двузначные часы — чтобы строки сортировались как время. */
+export function formatTime(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+/** Расписание по возрастанию времени, без повторов и без мусора. */
+export function normalizeTimes(times: string[]): string[] {
+  const minutes = times
+    .map(parseTime)
+    .filter((m): m is number => m !== null)
+    .sort((a, b) => a - b)
+  return [...new Set(minutes)].map(formatTime)
+}
+
+/** Момент приёма сегодня: время плюс сегодняшняя дата. */
+export function doseAt(time: string, now: number): number | null {
+  const minutes = parseTime(time)
+  if (minutes === null) return null
+  return startOfDay(now) + minutes * 60_000
+}
+
+export interface DoseSlot {
+  time: string
+  /** Отметка о приёме, если он уже сделан сегодня. */
+  takenAt: number | null
+  /** Время приёма уже прошло, а отметки нет. */
+  overdue: boolean
+}
+
+/**
+ * Что сегодня по расписанию.
+ *
+ * Отметка привязывается к ближайшему приёму, а не к точному времени: человек
+ * принимает таблетку в 8:10 или в 7:40, и требовать попадания в минуту нельзя.
+ */
+export function dosesToday(medicine: Medicine, now: number): DoseSlot[] {
+  const times = normalizeTimes(medicine.times ?? [])
+  if (times.length === 0) return []
+
+  const dayStart = startOfDay(now)
+  const marks = (medicine.taken ?? []).filter((t) => t >= dayStart && t < dayStart + DAY).sort((a, b) => a - b)
+  const used = new Set<number>()
+
+  return times.map((time) => {
+    const planned = doseAt(time, now)!
+    let best: number | null = null
+    let bestGap = Infinity
+    for (const mark of marks) {
+      if (used.has(mark)) continue
+      const gap = Math.abs(mark - planned)
+      if (gap < bestGap) {
+        bestGap = gap
+        best = mark
+      }
+    }
+    if (best !== null) used.add(best)
+    return { time, takenAt: best, overdue: best === null && now > planned }
+  })
+}
+
+/** Сколько доз сегодня ещё не отмечено. Для пометки на переключателе. */
+export function pendingToday(items: Medicine[], now: number): number {
+  return items.reduce((sum, m) => sum + dosesToday(m, now).filter((d) => d.takenAt === null).length, 0)
+}
+
+/**
+ * Отметить приём: списать штуки с остатка и запомнить время.
+ *
+ * Возвращает новый препарат — исходный не меняется, чтобы React увидел
+ * изменение, а вызывающий код сам решил, сохранять его или нет.
+ */
+export function markTaken(medicine: Medicine, now: number): Medicine {
+  const horizon = now - KEEP_INTAKES_DAYS * DAY
+  const taken = [...(medicine.taken ?? []).filter((t) => t >= horizon), now].sort((a, b) => a - b)
+  const left = medicine.left === null ? null : Math.max(0, medicine.left - perTimeOf(medicine))
+  // Остаток пересчитан только что — расчётной поправке не с чего начинать заново.
+  return { ...medicine, taken, left, leftAt: now }
+}
+
+/** Снять ошибочную отметку и вернуть штуки в остаток. */
+export function undoTaken(medicine: Medicine, at: number): Medicine {
+  const taken = (medicine.taken ?? []).filter((t) => t !== at)
+  const left = medicine.left === null ? null : medicine.left + perTimeOf(medicine)
+  return { ...medicine, taken, left, leftAt: Date.now() }
 }

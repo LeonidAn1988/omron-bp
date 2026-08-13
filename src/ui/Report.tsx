@@ -1,9 +1,11 @@
-import { GLUCOSE_CONTEXT_LABELS, type BpReading, type GlucoseContext, type GlucoseReading } from '../types'
+import { GLUCOSE_CONTEXT_LABELS, type BpReading, type GlucoseContext, type GlucoseReading, type Medicine } from '../types'
 import { PERIODS, type GlucoseSummary, type PeriodKey, type Summary } from '../logic/stats'
 import { DAY_PART_LABELS, classify, classifyGlucose, glucoseCeiling, type DayPart, type GlucoseTargets } from '../logic/classify'
 import { Readings } from './Readings'
 import { GlucoseList } from './Glucose'
 import { CategoryBadge } from './bits'
+import { perDayOf } from '../logic/medicines'
+import { plural } from '../logic/plural'
 
 const DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
 const DAY_PART_ORDER: DayPart[] = ['morning', 'day', 'evening', 'night']
@@ -18,6 +20,12 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
+const MEAL_NOTE: Record<'before' | 'after' | 'any', string> = {
+  before: ', до еды',
+  after: ', после еды',
+  any: '',
+}
+
 export function Report({
   readings,
   summary,
@@ -30,6 +38,7 @@ export function Report({
   targetDia,
   period,
   onPeriodChange,
+  medicines,
 }: {
   readings: BpReading[]
   summary: Summary | null
@@ -42,6 +51,8 @@ export function Report({
   targetDia: number
   period: PeriodKey
   onPeriodChange: (next: PeriodKey) => void
+  /** Аптечка попадает в отчёт: на приёме врачу нужен список того, что человек принимает. */
+  medicines: Medicine[]
 }) {
   // Период — орган управления отчётом, поэтому стоит рядом с кнопкой печати,
   // а не в общей шапке приложения. Ограничений по периоду нет: «Всё время»
@@ -84,7 +95,7 @@ export function Report({
           <h2>Дневник самоконтроля</h2>
           <span className="muted">составлен {DATE.format(Date.now())}</span>
         </div>
-        <table style={{ maxWidth: 560 }}>
+        <table className="report-facts">
           <tbody>
             <Row label="Кого касается">{patient}</Row>
             <Row label="Период">
@@ -100,7 +111,7 @@ export function Report({
             <div className="card__head">
               <h2>Артериальное давление</h2>
             </div>
-            <table style={{ maxWidth: 560 }}>
+            <table className="report-facts">
               <tbody>
                 <Row label="Измерений">{summary.count}</Row>
                 <Row label="Среднее давление">
@@ -171,7 +182,7 @@ export function Report({
             <div className="card__head">
               <h2>Уровень глюкозы крови</h2>
             </div>
-            <table style={{ maxWidth: 560 }}>
+            <table className="report-facts">
               <tbody>
                 <Row label="Замеров">{glucoseSummary.count}</Row>
                 <Row label="Средний сахар">
@@ -230,6 +241,52 @@ export function Report({
         </>
       )}
 
+      {medicines.length > 0 && (
+        <div className="card">
+          <div className="card__head">
+            <h2>Что принимает</h2>
+            <span className="muted">со слов пациента</span>
+          </div>
+          {/* Три колонки, а не четыре: на узком экране четвёртая давала
+              горизонтальную прокрутку. Действующее вещество ушло под название —
+              на бумаге так тоже читается лучше. */}
+          <table className="report-drugs">
+            <thead>
+              <tr>
+                <th>Препарат</th>
+                <th>Дозировка</th>
+                <th>Схема приёма</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...medicines]
+                .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+                .map((item) => {
+                  const perDay = perDayOf(item)
+                  const inn = item.inn && item.inn.toLowerCase() !== item.name.toLowerCase() ? item.inn : null
+                  return (
+                    <tr key={item.id}>
+                      <td>
+                        {item.name}
+                        {inn && <div className="muted">{inn}</div>}
+                      </td>
+                      <td>{item.dose || '—'}</td>
+                      <td>
+                        {item.times?.length
+                          ? `${item.times.join(', ')}${MEAL_NOTE[item.meal ?? 'any']}`
+                          : perDay !== null
+                            ? `${perDay} ${plural(perDay, 'раз', 'раза', 'раз')} в сутки`
+                            : 'по потребности'}
+                        {item.note && <div className="muted">{item.note}</div>}
+                      </td>
+                    </tr>
+                  )
+                })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {summary && (
         <div className="card">
           <div className="card__head">
@@ -249,6 +306,11 @@ export function Report({
       )}
 
       <div className="muted" style={{ lineHeight: 1.6 }}>
+        {medicines.length > 0 && (
+          <>
+            Перечень препаратов внесён пациентом самостоятельно и не является выпиской из назначений.{' '}
+          </>
+        )}
         Данные давления выгружены из тонометра Omron RS7 Intelli IT (HEM-6232T) и дополнены записями, внесёнными
         вручную; даты и время соответствуют часам прибора. Категории давления приведены по классификации ESC/ESH для
         измерений в кабинете, порогом нормы для домашних измерений принято {targetSys}/{targetDia} мм рт. ст. Оценка

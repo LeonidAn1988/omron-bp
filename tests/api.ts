@@ -35,6 +35,8 @@ export { plural } from '../src/logic/plural'
 
 export { normalize, searchDrugs, describeDrug } from '../src/logic/drugs'
 
+export { buildCalendar, countCalendarEvents, foldLine, doseTitle } from '../src/logic/calendar'
+
 export {
   medicineAlert,
   supplyDays,
@@ -45,6 +47,17 @@ export {
   SUPPLY_SOON_DAYS,
   monthToExpiry,
   expiryToMonth,
+  perDayOf,
+  perTimeOf,
+  projectedLeft,
+  parseTime,
+  formatTime,
+  normalizeTimes,
+  dosesToday,
+  pendingToday,
+  markTaken,
+  undoTaken,
+  KEEP_INTAKES_DAYS,
 } from '../src/logic/medicines'
 
 export {

@@ -1155,6 +1155,113 @@ tbody tr:hover {
   margin-top: var(--space-4);
 }
 
+/* Сводные таблицы отчёта. Ширина задавалась только максимумом в 560px, и на
+   узком экране таблица распиралась содержимым за пределы карточки — страница
+   ехала вбок. Ограничение по месту плюс перенос длинных значений. */
+.report-facts {
+  width: 100%;
+  max-width: 560px;
+  border-collapse: collapse;
+}
+.report-facts td {
+  padding: var(--space-1) var(--space-3) var(--space-1) 0;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  /* Общее правило запрещает переносы в ячейках — там это верно для чисел и дат.
+     Здесь ячейки текстовые, и без переноса таблица распирала карточку. */
+  white-space: normal;
+}
+.report-facts td.wrap {
+  /* И минимальная ширина значения не даёт таблице сжаться на узком экране. */
+  min-width: 0;
+}
+.report-facts td:first-child {
+  width: 40%;
+}
+
+/* Список препаратов в отчёте врачу: обычная таблица, читается и на бумаге. */
+.report-drugs {
+  width: 100%;
+  border-collapse: collapse;
+}
+.report-drugs th,
+.report-drugs td {
+  padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.report-drugs th {
+  font-size: var(--fs-1);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+@media (max-width: 640px) {
+  .report-drugs {
+    font-size: var(--fs-1);
+  }
+}
+
+/* Приёмы на сегодня. Строка крупная и с одной кнопкой: это единственное
+   действие, которое человек совершает в аптечке ежедневно. */
+.doses {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dose {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+}
+.dose:first-child {
+  border-top: 0;
+}
+.dose[data-done='true'] .dose__time,
+.dose[data-done='true'] .dose__name {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.dose__time {
+  flex: 0 0 auto;
+  min-width: 3.5em;
+  font-size: var(--fs-3);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.dose__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+.dose__name {
+  font-weight: 600;
+}
+.dose__amount {
+  font-size: var(--fs-1);
+  color: var(--text-secondary);
+}
+.dose__done,
+.dose__late {
+  flex-basis: 100%;
+  font-size: var(--fs-1);
+}
+.dose__done {
+  color: var(--text-muted);
+}
+.dose__late {
+  color: var(--critical-text);
+  font-weight: 600;
+}
+.dose > .btn {
+  flex: 0 0 auto;
+}
+
 /* Подсказка из реестра лекарств. Список лежит поверх формы, а не раздвигает
    её: на телефоне раздвигание уводит поле из-под пальца. */
 .suggest {
