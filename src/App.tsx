@@ -276,6 +276,18 @@ export default function App() {
     if (item.section === 'glucose') return showGlucose
     return settings.sections[item.section]
   })
+
+  /**
+   * Если раздел спрятали прямо из-под ног, возвращаемся на обзор.
+   *
+   * Без этого человек остаётся на экране, которого больше нет в навигации:
+   * содержимое видно, а вернуться некуда — ни одна вкладка не подсвечена.
+   * То же при стартовом экране, указывающем на скрытый раздел.
+   */
+  const tabExists = visibleTabs.some((item) => item.key === tab) || TOOLS.some((item) => item.key === tab)
+  useEffect(() => {
+    if (!tabExists) setTab('overview')
+  }, [tabExists])
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? ''
   const patientName = settings.userNames[settings.activeUser] ?? `Пользователь ${settings.activeUser}`
 

@@ -68,7 +68,11 @@ export function Settings({
     }
   }
 
-  const visible = SECTIONS.filter((item) => settings.sections[item.key])
+  // Сахар в стартовые не предлагаем, пока дневник сахара выключен: раздела в
+  // навигации нет, и приложение открылось бы на несуществующей вкладке.
+  const visible = SECTIONS.filter(
+    (item) => settings.sections[item.key] && (item.key !== 'glucose' || settings.trackGlucose),
+  )
   const startOptions = [{ key: 'overview', title: 'Обзор' }, ...visible.map((i) => ({ key: i.key, title: i.title }))]
 
   return (
@@ -84,9 +88,13 @@ export function Settings({
               <input
                 type="checkbox"
                 checked={settings.sections[item.key]}
-                onChange={(event) =>
-                  patch({ sections: { ...settings.sections, [item.key]: event.target.checked } })
-                }
+                onChange={(event) => {
+                  const sections = { ...settings.sections, [item.key]: event.target.checked }
+                  // Стартовый экран не должен указывать на спрятанное: приложение
+                  // открылось бы на вкладке, которой нет в навигации.
+                  const startTab = !event.target.checked && settings.startTab === item.key ? 'overview' : settings.startTab
+                  patch({ sections, startTab })
+                }}
               />
               <span>
                 {item.title}
