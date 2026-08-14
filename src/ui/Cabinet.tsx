@@ -33,7 +33,7 @@ type Filter = 'all' | 'low' | 'expired'
 
 const FILTERS: { key: Filter; title: string }[] = [
   { key: 'all', title: 'Все' },
-  { key: 'low', title: 'Заканчиваются' },
+  { key: 'low', title: 'Кончаются' },
   { key: 'expired', title: 'Просрочены' },
 ]
 
