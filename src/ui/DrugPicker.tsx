@@ -1,5 +1,14 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { describeDrug, searchDrugs, variantsOf, type Drug, type DrugBook, type DrugVariant } from '../logic/drugs'
+import {
+  describeDrug,
+  filterByForm,
+  makersOf,
+  searchHits,
+  variantsOf,
+  type Drug,
+  type DrugBook,
+  type DrugVariant,
+} from '../logic/drugs'
 
 /**
  * Поле названия препарата с подсказкой из реестра.
@@ -30,18 +39,23 @@ async function loadBook(): Promise<DrugBook | null> {
   return loading
 }
 
+const FIELD_LABEL = { name: '', inn: 'по веществу', maker: 'по производителю' } as const
+
 export function DrugPicker({
   value,
+  group,
   onChange,
   onPick,
 }: {
   value: string
+  /** Группа формы: сужает поиск до таблеток, капель, мазей и так далее. */
+  group?: string
   onChange: (next: string) => void
   /**
    * Выбор из справочника. Варианты отдаём уже с названиями форм: словарь форм
    * живёт здесь, и форме препарата про его устройство знать незачем.
    */
-  onPick: (drug: Drug, variants: DrugVariant[]) => void
+  onPick: (drug: Drug, variants: DrugVariant[], makers: string[]) => void
 }) {
   const [book, setBook] = useState<DrugBook | null>(cached)
   const [open, setOpen] = useState(false)
@@ -72,7 +86,9 @@ export function DrugPicker({
     return () => document.removeEventListener('pointerdown', away)
   }, [open])
 
-  const found = book && touched ? searchDrugs(book.items, value) : []
+  const pool = book ? filterByForm(book.items, book.forms, group ?? '') : []
+  const hits = book && touched ? searchHits(pool, value, book.makers ?? []) : []
+  const found = hits.map((hit) => hit.drug)
   const visible = open && found.length > 0
 
   /**
@@ -118,7 +134,7 @@ export function DrugPicker({
   }, [visible, found.length])
 
   const choose = (drug: Drug) => {
-    onPick(drug, variantsOf(drug, book?.forms ?? []))
+    onPick(drug, variantsOf(drug, book?.forms ?? []), makersOf(drug, book?.makers ?? []))
     setOpen(false)
     setActive(-1)
   }
@@ -155,6 +171,11 @@ export function DrugPicker({
           placeholder="Лозартан"
           autoFocus
           autoComplete="off"
+          // Автозамена молча правит название препарата, и человек этого не
+          // замечает — частая жалоба в отзывах на приложения этого класса.
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           role="combobox"
           aria-expanded={visible}
           aria-controls={listId}
@@ -165,7 +186,7 @@ export function DrugPicker({
 
       {visible && (
         <ul className="suggest__list" id={listId} ref={listRef} role="listbox" aria-label="Препараты из реестра">
-          {found.map((drug, i) => (
+          {hits.map(({ drug, field }, i) => (
             <li key={drug.n} id={`${listId}-${i}`} role="option" aria-selected={i === active}>
               <button
                 type="button"
@@ -181,7 +202,12 @@ export function DrugPicker({
               >
                 <span className="suggest__name">{drug.n}</span>
                 {describeDrug(drug, book?.forms ?? []) && (
-                  <span className="suggest__meta">{describeDrug(drug, book?.forms ?? [])}</span>
+                  <span className="suggest__meta">
+                    {describeDrug(drug, book?.forms ?? [])}
+                    {/* Говорим, по какому полю нашлось: иначе непонятно, почему
+                        по запросу «ибупрофен» выпал «Нурофен». */}
+                    {field !== 'name' && <span className="suggest__why"> · найдено {FIELD_LABEL[field]}</span>}
+                  </span>
                 )}
               </button>
             </li>

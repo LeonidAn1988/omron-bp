@@ -38,3 +38,21 @@ export function TrashIcon() {
     </svg>
   )
 }
+
+/** Шеврон вправо: обещает переход на другой экран, а не раскрытие на месте. */
+export function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Стрелка назад — возврат к списку. */
+export function BackIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M15 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}

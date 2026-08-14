@@ -20,7 +20,9 @@ import { DayPartChart, GlucoseChart, PulseChart, TrendChart } from './ui/Charts'
 import { LatestAlert, SummaryTiles } from './ui/Summary'
 import { GlucoseEntry, GlucoseList, GlucoseTiles } from './ui/Glucose'
 import { Readings } from './ui/Readings'
-import { Medicines, MedicineNudge } from './ui/Medicines'
+import { MedicineNudge } from './ui/Medicines'
+import { Intake } from './ui/Intake'
+import { Cabinet } from './ui/Cabinet'
 import { Entry } from './ui/Entry'
 import { Sync } from './ui/Sync'
 import { countAlerts, pendingToday } from './logic/medicines'
@@ -32,17 +34,33 @@ import { Settings } from './ui/Settings'
 import { Report } from './ui/Report'
 import { Banner, Reveal } from './ui/bits'
 
-/** Короткая подпись — для нижней навигации на телефоне, где на пункт приходится ~70px. */
+/**
+ * Разделы нижней навигации.
+ *
+ * Раньше давление, сахар и лекарства прятались за сегментированным
+ * переключателем внутри «Записей» — до нужного дневника было два касания.
+ * Теперь каждый живёт своим пунктом. `section` связывает пункт с настройкой
+ * видимости: у одного пользователя все три дневника, у другого только лекарства.
+ *
+ * Короткая подпись — для нижней строки на телефоне, где на пункт приходится
+ * около 70px. Значков без подписей здесь нет намеренно: пожилые их не узнают.
+ */
 const TABS = [
-  { key: 'overview', label: 'Обзор', short: 'Обзор' },
-  { key: 'readings', label: 'Измерения', short: 'Записи' },
-  { key: 'sync', label: 'Синхронизация', short: 'Прибор' },
-  { key: 'report', label: 'Отчёт для врача', short: 'Отчёт' },
-  { key: 'settings', label: 'Настройки', short: 'Настройки' },
+  { key: 'overview', label: 'Обзор', short: 'Обзор', section: null },
+  { key: 'bp', label: 'Давление', short: 'Давление', section: 'bp' },
+  { key: 'glucose', label: 'Сахар', short: 'Сахар', section: 'glucose' },
+  { key: 'intake', label: 'Приём лекарств', short: 'Приём', section: 'intake' },
+  { key: 'cabinet', label: 'Аптечка', short: 'Аптечка', section: 'cabinet' },
 ] as const
 
-type TabKey = (typeof TABS)[number]['key']
-type DiaryKey = 'bp' | 'glucose' | 'meds'
+/** Разделы вне нижней строки: к ним обращаются редко, значок в шапке достаточен. */
+const TOOLS = [
+  { key: 'sync', label: 'Прибор' },
+  { key: 'report', label: 'Отчёт' },
+  { key: 'settings', label: 'Настройки' },
+] as const
+
+type TabKey = (typeof TABS)[number]['key'] | (typeof TOOLS)[number]['key']
 
 function PeriodPicker({ value, onChange }: { value: PeriodKey; onChange: (next: PeriodKey) => void }) {
   return (
@@ -62,7 +80,8 @@ export default function App() {
   const [settings, setSettings] = useState<SettingsData>(DEFAULT_SETTINGS)
   const [period, setPeriod] = useState<PeriodKey>('30d')
   const [tab, setTab] = useState<TabKey>('overview')
-  const [diary, setDiary] = useState<DiaryKey>('bp')
+  /** Стартовый экран из настроек применяется один раз, после загрузки данных. */
+  const started = useRef(false)
   const [ready, setReady] = useState(false)
   const [undo, setUndo] = useState<Measurement | null>(null)
   // ReturnType, а не number: в браузере таймер это число, в Node — объект.
@@ -74,6 +93,12 @@ export default function App() {
       setMedicines(pills)
       // Дневник сахара включается сам, если данные по нему уже есть.
       setSettings(loaded.trackGlucose || stored.some(isGlucose) ? { ...loaded, trackGlucose: true } : loaded)
+      // Стартовый экран применяется один раз при загрузке: дальше человек
+      // переключается сам, и возвращать его к «своему» экрану было бы навязчиво.
+      if (!started.current) {
+        started.current = true
+        if (loaded.startTab) setTab(loaded.startTab as TabKey)
+      }
       setReady(true)
     })
     return () => clearTimeout(undoTimer.current)
@@ -237,7 +262,20 @@ export default function App() {
 
   const latestBp = bpAll.length ? bpAll[bpAll.length - 1] : null
   const hasSecondUser = useMemo(() => measurements.some((m) => m.user !== 1), [measurements])
-  const showGlucose = settings.trackGlucose || glucoseAll.length > 0
+  const showGlucose = (settings.trackGlucose || glucoseAll.length > 0) && settings.sections.glucose
+
+  /**
+   * Видимые разделы нижней строки.
+   *
+   * Состав меняется только прямым действием в настройках — исчезающие и
+   * появляющиеся вкладки сбивают с толку сильнее, чем лишний пункт. «Обзор»
+   * скрыть нельзя: это точка возврата, когда всё остальное спрятано.
+   */
+  const visibleTabs = TABS.filter((item) => {
+    if (item.section === null) return true
+    if (item.section === 'glucose') return showGlucose
+    return settings.sections[item.section]
+  })
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? ''
   const patientName = settings.userNames[settings.activeUser] ?? `Пользователь ${settings.activeUser}`
 
@@ -264,39 +302,37 @@ export default function App() {
     </Reveal>
   )
 
-  /**
-   * Переключатель дневников. Аптечка живёт здесь, а не отдельной вкладкой:
-   * шестой пункт в нижней навигации сузил бы каждый до нечитаемого, а по смыслу
-   * это тот же раздел «что я вношу руками».
-   */
-  const diaryPicker = (
-    <div className="segmented segmented--fill no-print" role="group" aria-label="Дневник">
-      <button aria-pressed={diary === 'bp'} onClick={() => setDiary('bp')}>
-        Давление
-      </button>
-      {showGlucose && (
-        <button aria-pressed={diary === 'glucose'} onClick={() => setDiary('glucose')}>
-          Сахар
-        </button>
-      )}
-      <button aria-pressed={diary === 'meds'} onClick={() => setDiary('meds')}>
-        Аптечка
-        {medicineMark && <span className="segmented__mark" aria-hidden="true" />}
-      </button>
-    </div>
-  )
-
   return (
     <div className="app">
       <header className="topbar">
         <div className="topbar__title">
           <h1>Дневник здоровья</h1>
-          <span className="topbar__sub">давление и сахар</span>
+          <span className="topbar__sub">давление, сахар и лекарства</span>
         </div>
+
+        {/* Прибор, отчёт и настройки — редкие разделы. В нижней строке они
+            вытеснили бы ежедневные, а прятать ежедневное нельзя. Подпись у
+            каждого обязательна: значок без слова пожилой человек не узнаёт. */}
+        <nav className="tools no-print" aria-label="Служебные разделы">
+          {TOOLS.map((item) => (
+            <button
+              key={item.key}
+              className="tool"
+              aria-current={tab === item.key ? 'page' : undefined}
+              onClick={() => setTab(item.key)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </header>
 
-      <nav className="tabs" aria-label="Разделы дневника">
-        {TABS.map((item) => (
+      <nav
+        className="tabs"
+        aria-label="Разделы дневника"
+        style={{ ['--tab-count' as string]: visibleTabs.length }}
+      >
+        {visibleTabs.map((item) => (
           <button
             key={item.key}
             className="tab"
@@ -306,6 +342,7 @@ export default function App() {
           >
             <span className="tab__full">{item.label}</span>
             <span className="tab__short">{item.short}</span>
+            {item.key === 'intake' && medicineMark && <span className="tab__mark" aria-hidden="true" />}
           </button>
         ))}
       </nav>
@@ -320,10 +357,7 @@ export default function App() {
 
           <MedicineNudge
             count={medicineAlerts}
-            onOpen={() => {
-              setDiary('meds')
-              setTab('readings')
-            }}
+            onOpen={() => setTab('cabinet')}
           />
 
           {measurements.length === 0 ? (
@@ -393,49 +427,24 @@ export default function App() {
         </div>
       )}
 
-      {tab === 'readings' && (
+      {tab === 'bp' && (
         <div className="stack">
-          <div className="row">{diaryPicker}</div>
+          <Entry user={settings.activeUser} onAdd={handleAdd} />
+          {undoBanner}
+          <div className="card">
+            <div className="card__head">
+              <h2>История давления</h2>
+              <span className="muted">
+                {bpScoped.length} из {bpAll.length}
+              </span>
+            </div>
+            <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }}>
+              <PeriodPicker value={period} onChange={setPeriod} />
+            </div>
+            <Readings readings={bpScoped} onDelete={handleDelete} onUpdate={handleUpdate} />
+          </div>
 
-          {diary === 'meds' ? (
-            <Medicines medicines={medicines} onSave={handleSaveMedicine} onDelete={handleDeleteMedicine} />
-          ) : diary === 'bp' || !showGlucose ? (
-            <>
-              <Entry user={settings.activeUser} onAdd={handleAdd} />
-              {undoBanner}
-              <div className="card">
-                <div className="card__head">
-                  <h2>История давления</h2>
-                  <span className="muted">
-                    {bpScoped.length} из {bpAll.length}
-                  </span>
-                </div>
-                <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }}>
-                  <PeriodPicker value={period} onChange={setPeriod} />
-                </div>
-                <Readings readings={bpScoped} onDelete={handleDelete} onUpdate={handleUpdate} />
-              </div>
-            </>
-          ) : (
-            <>
-              <GlucoseEntry user={settings.activeUser} targets={glucoseTargets} onAdd={handleAdd} />
-              {undoBanner}
-              <div className="card">
-                <div className="card__head">
-                  <h2>История сахара</h2>
-                  <span className="muted">
-                    {glucoseScoped.length} из {glucoseAll.length}
-                  </span>
-                </div>
-                <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }}>
-                  <PeriodPicker value={period} onChange={setPeriod} />
-                </div>
-                <GlucoseList readings={glucoseScoped} targets={glucoseTargets} onDelete={handleDelete} onUpdate={handleUpdate} />
-              </div>
-            </>
-          )}
-
-          {!showGlucose && (
+          {!showGlucose && settings.sections.glucose && (
             <div className="card no-print">
               <div className="card__head">
                 <h2>Ведёте ещё и сахар?</h2>
@@ -448,7 +457,7 @@ export default function App() {
                 className="btn btn--primary"
                 onClick={() => {
                   updateSettings({ ...settings, trackGlucose: true })
-                  setDiary('glucose')
+                  setTab('glucose')
                 }}
               >
                 Включить дневник сахара
@@ -458,12 +467,45 @@ export default function App() {
         </div>
       )}
 
+      {tab === 'glucose' && (
+        <div className="stack">
+          <GlucoseEntry user={settings.activeUser} targets={glucoseTargets} onAdd={handleAdd} />
+          {undoBanner}
+          <div className="card">
+            <div className="card__head">
+              <h2>История сахара</h2>
+              <span className="muted">
+                {glucoseScoped.length} из {glucoseAll.length}
+              </span>
+            </div>
+            <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }}>
+              <PeriodPicker value={period} onChange={setPeriod} />
+            </div>
+            <GlucoseList
+              readings={glucoseScoped}
+              targets={glucoseTargets}
+              onDelete={handleDelete}
+              onUpdate={handleUpdate}
+            />
+          </div>
+        </div>
+      )}
+
+      {tab === 'intake' && <Intake medicines={medicines} onSave={handleSaveMedicine} />}
+
+      {tab === 'cabinet' && (
+        <>
+          {undoBanner}
+          <Cabinet medicines={medicines} onSave={handleSaveMedicine} onDelete={handleDeleteMedicine} />
+        </>
+      )}
+
       {tab === 'sync' && (
         <Sync
           pairingKey={settings.pairingKey}
           onImport={handleImport}
           onImportGlucose={handleImport}
-          onGoManual={() => setTab('readings')}
+          onGoManual={() => setTab('bp')}
           showGlucose={showGlucose}
         />
       )}

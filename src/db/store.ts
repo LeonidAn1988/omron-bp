@@ -21,6 +21,8 @@ export const DEFAULT_SETTINGS: Settings = {
   glucoseLow: 3.9,
   trackGlucose: false,
   theme: 'auto',
+  sections: { bp: true, glucose: true, intake: true, cabinet: true },
+  startTab: 'overview',
   backupLastAt: null,
   backupLastCount: 0,
 }
@@ -75,6 +77,9 @@ export async function loadSettings(): Promise<Settings> {
     ...DEFAULT_SETTINGS,
     ...(stored ?? {}),
     userNames: { ...DEFAULT_SETTINGS.userNames, ...(stored?.userNames ?? {}) },
+    // Разделы мержатся по полю: у копии, снятой до появления настройки, их нет,
+    // и без слияния все разделы разом пропали бы из навигации.
+    sections: { ...DEFAULT_SETTINGS.sections, ...(stored?.sections ?? {}) },
   }
 }
 

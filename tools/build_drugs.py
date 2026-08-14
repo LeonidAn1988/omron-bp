@@ -37,6 +37,7 @@ GRLS_HOST = 'https://grls.minzdrav.gov.ru/'
 UA = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
 
 # Колонки листа «Действующий». Шапка занимает пять строк, данные идут с шестой.
+COL_MAKER = 6
 COL_TRADE, COL_MNN, COL_FORMS, COL_GROUP = 8, 9, 10, 13
 FIRST_DATA_ROW = 6
 
@@ -55,6 +56,9 @@ DOSE_ONE = re.compile(
 
 # «14 шт.», «30 доз» — количество в упаковке, а не сила препарата.
 COUNT = re.compile(r'^\d+(?:[,.]\d+)?\s*(?:шт|доз|табл|капс)\.?$', re.I)
+
+# «(28 шт.)» в хвосте записи — итог на пачку, а не на блистер.
+PACK = re.compile(r'\((\d{1,4})\s*шт\.?\)', re.I)
 
 def fetch_zip() -> bytes:
     """Скачивает свежую выгрузку. Ссылка на странице одноразовая — берём её оттуда же."""
@@ -132,6 +136,34 @@ def normalize_form(text: str) -> str:
     return text[0].upper() + text[1:] if text else ''
 
 
+def parse_pack(entry: str) -> int | None:
+    """
+    Сколько штук в упаковке.
+
+    Реестр перечисляет вложенность от внутренней тары к внешней:
+    `14 шт. - блистеры (2 шт.) - пачки картонные (28 шт.)`. Нужен итог на пачку,
+    то есть **последнее** число в скобках. Первое — это блистер, и «купил
+    упаковку» на него дало бы вдвое меньше, чем на самом деле.
+    """
+    found = PACK.findall(entry)
+    if found:
+        return int(found[-1])
+    # Без вложенности упаковка описана прямо: «таблетки, 25 мг, 30 шт. - флаконы».
+    plain = re.search(r'(?<![(\d])(\d{1,4})\s*шт\.', entry)
+    return int(plain.group(1)) if plain else None
+
+
+def plausible_pack(value: int | None) -> int | None:
+    """
+    Отсев заведомо не бытовых упаковок.
+
+    В реестре рядом с домашними пачками лежат больничные короба на тысячи
+    таблеток. Предлагать «купил упаковку 6000 шт.» человеку с гипертонией
+    бессмысленно, а ошибиться кнопкой — значит испортить остаток.
+    """
+    return value if value is not None and 1 <= value <= 200 else None
+
+
 def parse_entry(entry: str) -> tuple[str, str | None]:
     """
     Разбирает одну запись упаковки.
@@ -163,12 +195,24 @@ def split_entries(raw: str) -> list[str]:
     Разбивает поле «Формы выпуска» на отдельные записи упаковки.
 
     Куски, начинающиеся с дефиса, — это хвосты упаковки от предыдущей записи
-    («- пачки картонные (30 шт.)»). Раньше они принимали вид отдельных форм, и
-    в справочнике заводились «формы выпуска» вроде «пачки картонные».
+    («- пачки картонные (30 шт.)»). Раньше они просто отбрасывались, и вместе с
+    ними терялось количество в упаковке: в записи
+    `25 мг, 14 шт. - блистеры (2 шт.)  - пачки картонные (28 шт.)`
+    итог на пачку стоит именно в хвосте, а до него оставались 14 таблеток
+    блистера и два блистера. Поэтому хвост не выбрасываем, а приклеиваем к своей
+    записи — форму и дозировку он всё равно не портит, они берутся из головы.
     """
     text = RX_NOISE.sub('', raw or '').strip(' ;/')
-    parts = [p.strip() for p in re.split(r'\s{2,}|;\s*', text)]
-    return [p for p in parts if p and not p.startswith('-')]
+    entries: list[str] = []
+    for part in (p.strip() for p in re.split(r'\s{2,}|;\s*', text)):
+        if not part:
+            continue
+        if part.startswith('-'):
+            if entries:
+                entries[-1] += ' ' + part
+            continue
+        entries.append(part)
+    return entries
 
 
 def is_substance(forms: str, group: str) -> bool:
@@ -212,27 +256,37 @@ def build(blob: bytes) -> dict:
         if mnn in ('~', '-'):
             mnn = ''
 
-        item = merged.setdefault(trade.lower(), {'n': trade, 'i': mnn, 'forms': {}})
+        item = merged.setdefault(
+            trade.lower(), {'n': trade, 'i': mnn, 'makers': set(), 'forms': {}}
+        )
         if not item['i'] and mnn:
             item['i'] = mnn
+
+        maker = str(row[COL_MAKER] or '').strip()
+        if maker and maker not in ('~', '-'):
+            item['makers'].add(maker)
 
         for entry in split_entries(raw_forms):
             form, dose = parse_entry(entry)
             if not form:
                 continue
-            doses = item['forms'].setdefault(form, set())
+            bucket = item['forms'].setdefault(form, {'doses': set(), 'packs': set()})
             if dose:
-                doses.add(dose)
+                bucket['doses'].add(dose)
+            pack = plausible_pack(parse_pack(entry))
+            if pack:
+                bucket['packs'].add(pack)
 
     book.close()
 
     forms_index: dict[str, int] = {}
+    makers_index: dict[str, int] = {}
     items = []
     for item in merged.values():
         variants = []
-        for form, doses in item['forms'].items():
+        for form, bucket in item['forms'].items():
             index = forms_index.setdefault(form, len(forms_index))
-            variants.append([index, sorted(doses, key=dose_key)[:14]])
+            variants.append([index, sorted(bucket['doses'], key=dose_key)[:14], sorted(bucket['packs'])[:6]])
         # Формы по частоте не отсортировать — сортируем по названию, чтобы
         # порядок был устойчив между сборками.
         variants.sort(key=lambda v: v[0])
@@ -242,11 +296,24 @@ def build(blob: bytes) -> dict:
             record['i'] = item['i']
         if variants:
             record['v'] = variants
+        # Производителей у одного наименования бывает десяток. Держим до трёх:
+        # человеку нужно узнать свою пачку, а не перечислить весь рынок.
+        makers = sorted(item['makers'])[:3]
+        if makers:
+            record['m'] = [makers_index.setdefault(name, len(makers_index)) for name in makers]
         items.append(record)
 
     items.sort(key=lambda x: x['n'].lower())
     forms = [name for name, _ in sorted(forms_index.items(), key=lambda kv: kv[1])]
-    return {'source': 'ГРЛС', 'rows': rows, 'skipped': skipped, 'forms': forms, 'items': items}
+    makers = [name for name, _ in sorted(makers_index.items(), key=lambda kv: kv[1])]
+    return {
+        'source': 'ГРЛС',
+        'rows': rows,
+        'skipped': skipped,
+        'forms': forms,
+        'makers': makers,
+        'items': items,
+    }
 
 
 def main() -> None:
@@ -274,6 +341,8 @@ def main() -> None:
     with_mnn = sum(1 for i in data['items'] if 'i' in i)
     with_form = sum(1 for i in data['items'] if i.get('v'))
     with_dose = sum(1 for i in data['items'] if any(v[1] for v in i.get('v', [])))
+    with_pack = sum(1 for i in data['items'] if any(len(v) > 2 and v[2] for v in i.get('v', [])))
+    with_maker = sum(1 for i in data['items'] if i.get('m'))
     multi = sum(1 for i in data['items'] if len(i.get('v', [])) > 1)
     total = len(data['items'])
     print(
@@ -282,8 +351,10 @@ def main() -> None:
         f'  с международным наименованием: {with_mnn} ({with_mnn / total:.1%})\n'
         f'  с формой выпуска: {with_form} ({with_form / total:.1%})\n'
         f'  с дозировками: {with_dose} ({with_dose / total:.1%})\n'
+        f'  с количеством в упаковке: {with_pack} ({with_pack / total:.1%})\n'
+        f'  с производителем: {with_maker} ({with_maker / total:.1%})\n'
         f'  с несколькими формами: {multi} ({multi / total:.1%})\n'
-        f'различных форм выпуска: {len(data["forms"])}\n'
+        f'различных форм выпуска: {len(data["forms"])}, производителей: {len(data["makers"])}\n'
         f'выгрузка от {stamp}, файл {out} — {out.stat().st_size / 1024:.0f} КБ',
         file=sys.stderr,
     )

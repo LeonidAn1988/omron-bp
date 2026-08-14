@@ -33,7 +33,18 @@ export {
 
 export { plural } from '../src/logic/plural'
 
-export { normalize, searchDrugs, describeDrug, variantsOf } from '../src/logic/drugs'
+export {
+  normalize,
+  searchDrugs,
+  searchHits,
+  describeDrug,
+  variantsOf,
+  makersOf,
+  formGroup,
+  filterByForm,
+  instructionUrl,
+  FORM_GROUPS,
+} from '../src/logic/drugs'
 
 export { buildCalendar, countCalendarEvents, foldLine, doseTitle } from '../src/logic/calendar'
 
@@ -64,6 +75,15 @@ export {
   shortForm,
   restockList,
   restockText,
+  displayAlert,
+  dosesOn,
+  dayStatus,
+  partOfDay,
+  markTakenAt,
+  addPack,
+  packsNeeded,
+  DAY_PARTS,
+  DAY_PART_TITLE,
   RESTOCK_DAYS,
   KEEP_INTAKES_DAYS,
 } from '../src/logic/medicines'

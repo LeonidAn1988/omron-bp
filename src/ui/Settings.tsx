@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import type { Measurement, Settings as SettingsData, ThemeChoice } from '../types'
+import type { Measurement, SectionKey, Settings as SettingsData, ThemeChoice } from '../types'
 import { DEFAULT_PAIRING_KEY } from '../ble/session'
 import { download, parseImportFile, toCsv, toJson, type ImportResult } from '../logic/io'
 import { Banner, Field } from './bits'
@@ -7,6 +7,20 @@ import { DataSafety } from './Backup'
 import type { BackupStatus } from './useBackup'
 
 const today = () => new Date().toISOString().slice(0, 10)
+
+/**
+ * Разделы, которые можно скрыть.
+ *
+ * У одного пользователя гипертония и диабет — ему нужны все три дневника.
+ * Другому нужны только лекарства, и два лишних пункта внизу он видит каждый
+ * день без всякой пользы.
+ */
+const SECTIONS: { key: SectionKey; title: string; hint: string }[] = [
+  { key: 'bp', title: 'Давление', hint: 'ввод, история и графики' },
+  { key: 'glucose', title: 'Сахар', hint: 'ввод, история и графики' },
+  { key: 'intake', title: 'Приём лекарств', hint: 'что принять сегодня' },
+  { key: 'cabinet', title: 'Аптечка', hint: 'что есть дома, сроки и остатки' },
+]
 
 const THEMES: { key: ThemeChoice; title: string }[] = [
   { key: 'auto', title: 'Как в системе' },
@@ -54,8 +68,57 @@ export function Settings({
     }
   }
 
+  const visible = SECTIONS.filter((item) => settings.sections[item.key])
+  const startOptions = [{ key: 'overview', title: 'Обзор' }, ...visible.map((i) => ({ key: i.key, title: i.title }))]
+
   return (
     <div className="stack">
+      <div className="card">
+        <div className="card__head">
+          <h2>Разделы</h2>
+        </div>
+
+        <div className="stack" style={{ gap: 'var(--space-3)' }}>
+          {SECTIONS.map((item) => (
+            <label className="badge" key={item.key}>
+              <input
+                type="checkbox"
+                checked={settings.sections[item.key]}
+                onChange={(event) =>
+                  patch({ sections: { ...settings.sections, [item.key]: event.target.checked } })
+                }
+              />
+              <span>
+                {item.title}
+                <span className="fact__note">{item.hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+
+        <p className="muted" style={{ margin: 'var(--space-4) 0 0' }}>
+          Скрытый раздел пропадает только из нижней строки. Записи остаются на месте и вернутся, как только вы включите
+          его обратно.
+        </p>
+
+        <div style={{ marginTop: 'var(--space-5)' }}>
+          <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
+            С чего открывать приложение
+          </div>
+          <div className="segmented segmented--fill" role="group" aria-label="Стартовый экран">
+            {startOptions.map((item) => (
+              <button
+                key={item.key}
+                aria-pressed={settings.startTab === item.key}
+                onClick={() => patch({ startTab: item.key })}
+              >
+                {item.title}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="card">
         <div className="card__head">
           <h2>Оформление</h2>

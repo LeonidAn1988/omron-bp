@@ -27,6 +27,13 @@ import {
   shortForm,
   restockList,
   restockText,
+  displayAlert,
+  dosesOn,
+  dayStatus,
+  partOfDay,
+  markTakenAt,
+  addPack,
+  packsNeeded,
   RESTOCK_DAYS,
   KEEP_INTAKES_DAYS,
 } from './build/api.mjs'
@@ -204,12 +211,14 @@ export function run() {
   const вручную = med({ left: 30, perDay: 1, leftAt: now - 10 * DAY })
   const авто = med({ left: 30, perDay: 1, leftAt: now - 10 * DAY, autoDeduct: true })
 
-  check('без автосписания показываем подтверждённый остаток', effectiveLeft(вручную, now) === 30)
-  check('с автосписанием показываем расчётный', effectiveLeft(авто, now) === 20)
-  check('без автосписания расчёт помечен как оценка', isEstimated(вручную, now) === false)
   check(
-    'с автосписанием число расходится с подтверждённым',
-    isEstimated(авто, now) === true,
+    'показываем расчётный остаток и без автосписания',
+    effectiveLeft(вручную, now) === 20 && effectiveLeft(авто, now) === 20,
+    'иначе число «6 шт.» стоит рядом с полосой «запас кончился»',
+  )
+  check(
+    'расхождение с подтверждённым помечено',
+    isEstimated(вручную, now) === true && isEstimated(авто, now) === true,
     'интерфейс обязан сказать, что это расчёт, а не пересчитанная упаковка',
   )
   check('свежий остаток оценкой не считается', isEstimated(med({ left: 30, perDay: 1, leftAt: now, autoDeduct: true }), now) === false)
@@ -294,6 +303,78 @@ export function run() {
   check('количество дописано', текст.includes('— 30 шт.'))
   check('вещество не дублирует название', !текст.split('\n')[1].includes('(Лозартан)'))
   check('без количества строка не обрывается', текст.split('\n')[1] === 'Лозартан, 50 мг')
+
+  // ── части суток ──────────────────────────────────────────────────────────
+  check('до полудня — утро', partOfDay('08:00') === 'morning' && partOfDay('11:59') === 'morning')
+  check('полдень уже день', partOfDay('12:00') === 'day' && partOfDay('16:59') === 'day')
+  check('с пяти вечер', partOfDay('17:00') === 'evening' && partOfDay('21:59') === 'evening')
+  check('с десяти ночь', partOfDay('22:00') === 'night' && partOfDay('23:59') === 'night')
+  check('полночь — утро', partOfDay('00:00') === 'morning')
+  check('мусор не часть суток', partOfDay('нет') === null)
+
+  // ── приёмы за произвольный день ──────────────────────────────────────────
+  const вчера = now - DAY
+  const завтра = now + DAY
+  const режим = med({ times: ['08:00', '20:00'], left: 30 })
+
+  check('вчерашние приёмы существуют', dosesOn(режим, вчера, now).length === 2)
+  check('вчерашние просрочены', dosesOn(режим, вчера, now).every((s) => s.overdue))
+  check('завтрашние не просрочены', dosesOn(режим, завтра, now).every((s) => !s.overdue))
+  check(
+    'приём привязан к своему дню',
+    new Date(dosesOn(режим, вчера, now)[0].time === '08:00' ? вчера : now).getDate() === new Date(вчера).getDate(),
+  )
+
+  // ── отметка задним числом ────────────────────────────────────────────────
+  const планВчера = startOfDayTs(вчера) + 8 * 60 * 60 * 1000
+  const отмеченВчера = markTakenAt(режим, планВчера, now)
+  check('отметка встала на вчерашнее время', (отмеченВчера.taken ?? [])[0] === планВчера, 'а не на «сейчас»')
+  check('вчерашний приём считается отмеченным', dosesOn(отмеченВчера, вчера, now)[0].takenAt === планВчера)
+  check('остаток списался', отмеченВчера.left === 29)
+  check(
+    'сегодняшние приёмы отметкой за вчера не задеты',
+    dosesOn(отмеченВчера, now, now).every((s) => s.takenAt === null),
+  )
+
+  // ── состояние дня ────────────────────────────────────────────────────────
+  check('день без расписания пуст', dayStatus([med({ left: 5 })], now, now) === 'empty')
+  check('будущий день', dayStatus([режим], завтра, now) === 'future')
+  check('вчера без отметок — пропуски', dayStatus([режим], вчера, now) === 'missed')
+  const всёВчера = markTakenAt(markTakenAt(режим, планВчера, now), startOfDayTs(вчера) + 20 * 3600000, now)
+  check('вчера всё отмечено', dayStatus([всёВчера], вчера, now) === 'done')
+  const тольковечер = med({ times: ['23:59'], left: 10 })
+  check(
+    'сегодня время ещё не пришло — ждём, а не пропустили',
+    dayStatus([тольковечер], now, now) === 'pending',
+    '«пропустил» и «ещё не время» — разные вещи',
+  )
+
+  // ── что показывать: полоса или предупреждение ────────────────────────────
+  const кончается = med({ left: 4, perDay: 1, expires: now + 400 * DAY })
+  const п1 = displayAlert(кончается, now)
+  check(
+    'про запас говорит полоса, а не текст',
+    п1.showSupply === true && п1.alert === null,
+    'иначе «Хватит на 4 дня» стоит дважды подряд',
+  )
+  const иИстекает = med({ left: 4, perDay: 1, expires: now + 10 * DAY })
+  const п2 = displayAlert(иИстекает, now)
+  check(
+    'освободившаяся строка отдана сроку годности',
+    п2.alert?.kind === 'expiring' && п2.showSupply === true,
+    'иначе истекающий срок молчит, пока препарат кончается',
+  )
+  const просрочен = displayAlert(med({ left: 30, perDay: 1, expires: now - DAY }), now)
+  check('у просроченного полосы запаса нет', просрочен.showSupply === false && просрочен.alert?.kind === 'expired')
+
+  // ── упаковка ─────────────────────────────────────────────────────────────
+  check('упаковка прибавляется к остатку', addPack(med({ left: 4, packSize: 30 }), now).left === 34)
+  check('пустой остаток становится упаковкой', addPack(med({ left: null, packSize: 30 }), now).left === 30)
+  check('без размера упаковки ничего не меняется', addPack(med({ left: 4 }), now).left === 4)
+  check('дата подтверждения обновилась', addPack(med({ left: 4, packSize: 30 }), now).leftAt === now)
+  check('пачек берём с округлением вверх', packsNeeded(med({ packSize: 30 }), 31) === 2)
+  check('ровно упаковка — одна пачка', packsNeeded(med({ packSize: 30 }), 30) === 1)
+  check('без размера упаковки пачки не считаем', packsNeeded(med({}), 30) === null)
 
   return failures
 }

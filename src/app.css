@@ -805,6 +805,7 @@ input[type='radio'] {
   background: var(--hover);
 }
 .chip[aria-pressed='true'] {
+  border-color: transparent;
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
@@ -1536,33 +1537,225 @@ tbody tr:hover {
   color: var(--text-muted);
 }
 
-/* Дозировки кнопками: набирать «12,5 мг» на телефоне мучительно. */
-.chips {
+/* ── служебные разделы в шапке ──────────────────────────────────────────── */
+
+/* Значков без подписей здесь нет: пожилой человек их не узнаёт, а угадывать
+   назначение кнопки в приложении о здоровье — плохая идея. */
+.tools {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  margin-top: calc(-1 * var(--space-2));
+  gap: var(--space-1);
 }
-.chip {
+.tool {
   min-height: var(--tap);
   padding: 0 var(--space-3);
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  background: var(--surface);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--fs-1);
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
-.chip:hover {
+.tool:hover {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+.tool[aria-current='page'] {
+  background: var(--accent-quiet);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Пометка «есть неотмеченные приёмы». Не цифра: считать нечего, важен факт. */
+.tab {
+  position: relative;
+}
+.tab__mark {
+  position: absolute;
+  top: 6px;
+  right: calc(50% - 22px);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+/* ── лента дней ─────────────────────────────────────────────────────────── */
+
+/* Прошлые дни здесь равноправны с сегодняшним: главная жалоба на приложения
+   этого класса — нельзя вернуться и отметить вчерашнюю дозу. */
+.daystrip {
+  display: flex;
+  gap: var(--space-2);
+  /* Без этого лента не сжимается: у флекс-элемента min-width по умолчанию
+     равен содержимому, а содержимого здесь на два месяца вперёд — страница
+     разъезжалась на четыре тысячи пикселей. */
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  padding: var(--space-2) 0;
+  scrollbar-width: none;
+}
+.daystrip::-webkit-scrollbar {
+  display: none;
+}
+.daystrip__day {
+  /* Якорь для подписи скринридера: без него она позиционируется относительно
+     страницы, вылезает из ленты прокрутки и растягивает документ вбок. */
+  position: relative;
+  flex: 0 0 auto;
+  scroll-snap-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 52px;
+  min-height: var(--tap);
+  padding: var(--space-2) var(--space-1) var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+.daystrip__day:hover {
   background: var(--hover);
 }
-.chip[aria-pressed='true'] {
-  border-color: transparent;
+.daystrip__day[data-today='true'] .daystrip__date {
+  color: var(--accent);
+}
+.daystrip__day[aria-selected='true'] {
   background: var(--accent);
   color: var(--accent-ink);
+}
+.daystrip__day[aria-selected='true'] .daystrip__date {
+  color: var(--accent-ink);
+}
+.daystrip__weekday {
+  font-size: var(--fs-0);
+}
+.daystrip__date {
+  font-size: var(--fs-3);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* Точка состояния. Цвет не единственный носитель смысла: рядом лежит подпись
+   для скринридера, а «пропущено» и «ещё не время» разведены по цветам. */
+.daystrip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+.daystrip__day[data-status='done'] .daystrip__dot {
+  background: var(--good);
+}
+.daystrip__day[data-status='missed'] .daystrip__dot {
+  background: var(--critical-text);
+}
+.daystrip__day[data-status='pending'] .daystrip__dot {
+  background: var(--warning);
+}
+
+.intake__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.intake__head h2 {
+  margin: 0;
+  font-size: var(--fs-4);
+}
+.intake[data-done='true'] .card__head h2 {
+  color: var(--text-secondary);
+}
+
+/* ── строка списка аптечки ──────────────────────────────────────────────── */
+
+/* Вся строка — одна цель нажатия. Две цели в одной карточке (открыть и
+   раскрыть) дают промахи, особенно у пожилых. */
+.pill__open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pill__open .pill__head {
+  align-items: center;
+}
+.pill__open svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+}
+.pill__open:hover svg {
+  color: var(--accent);
+}
+.pill__sub {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-1);
+  color: var(--text-secondary);
+}
+
+/* ── экран препарата ────────────────────────────────────────────────────── */
+
+.detail {
+  margin: 0;
+}
+.detail__row {
+  display: grid;
+  grid-template-columns: minmax(110px, 38%) 1fr;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+}
+.detail__row:first-child {
+  border-top: 0;
+}
+.detail__row dt {
+  color: var(--text-muted);
+  font-size: var(--fs-1);
+}
+.detail__row dd {
+  margin: 0;
   font-weight: 600;
+  overflow-wrap: break-word;
+}
+
+/* Ссылка, выглядящая кнопкой, обязана вести себя как кнопка по размеру цели. */
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-decoration: none;
+}
+
+/* Только для скринридера: подпись состояния дня, которую не передаёт точка. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ── журнал BLE ─────────────────────────────────────────────────────────── */
@@ -1708,7 +1901,7 @@ kbd {
     inset: auto 0 0 0;
     z-index: 30;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(var(--tab-count, 5), 1fr);
     gap: 0;
     padding: var(--space-1) var(--space-1) calc(var(--space-1) + env(safe-area-inset-bottom));
     background: var(--surface);

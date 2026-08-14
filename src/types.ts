@@ -106,6 +106,13 @@ export interface Medicine {
   expires: number | null
   note?: string
 
+  /** Производитель или держатель регистрационного удостоверения. Из реестра. */
+  maker?: string
+  /** Сколько штук в упаковке. Нужно кнопке «Купил упаковку» и списку покупок. */
+  packSize?: number
+  /** Номер регистрационного удостоверения — по нему ищется официальная инструкция. */
+  regNumber?: string
+
   /**
    * Когда остаток подтверждали последний раз.
    *
@@ -146,6 +153,23 @@ export interface Medicine {
 /** Оформление. «Как в системе» — значение по умолчанию, оно же поведение до этой настройки. */
 export type ThemeChoice = 'auto' | 'light' | 'dark'
 
+/**
+ * Разделы нижней навигации.
+ *
+ * Отец ведёт все три дневника, сыну нужны только лекарства. Состав панели —
+ * личная настройка: он меняется прямым действием и никогда сам по себе.
+ * Появляющиеся и исчезающие вкладки сбивают с толку сильнее, чем лишний пункт.
+ */
+export interface SectionVisibility {
+  bp: boolean
+  glucose: boolean
+  intake: boolean
+  cabinet: boolean
+}
+
+/** Ключи разделов приложения. Обзор и настройки скрыть нельзя. */
+export type SectionKey = keyof SectionVisibility
+
 export interface Settings {
   /** Ключ сопряжения, 32 hex-символа. */
   pairingKey: string
@@ -170,6 +194,11 @@ export interface Settings {
 
   /** Светлая или тёмная тема. */
   theme: ThemeChoice
+
+  /** Какие разделы показывать в нижней навигации. */
+  sections: SectionVisibility
+  /** С какого экрана открывается приложение. */
+  startTab: string
 
   /** Когда сделана последняя резервная копия. null — не делалась. */
   backupLastAt: number | null

@@ -101,13 +101,13 @@ export function projectedLeft(medicine: Medicine, now: number): number | null {
 /**
  * Остаток, который показываем человеку.
  *
- * При автосписании расчётный остаток и есть ответ: человек согласился, что
- * назначенное принимается, и оговорка «по расчёту» ему только мешает. Без
- * автосписания правдой остаётся подтверждённое число, а расчёт идёт рядом
- * пометкой.
+ * Всегда расчётный, независимо от автосписания. Полоса запаса и предупреждения
+ * и так считаются по расчёту — если рядом показывать подтверждённое число,
+ * получается противоречие: «6 шт.» и тут же «запас кончился». Что число
+ * расчётное, видно по знаку «примерно» и подписи рядом.
  */
 export function effectiveLeft(medicine: Medicine, now: number): number | null {
-  return medicine.autoDeduct ? projectedLeft(medicine, now) : medicine.left
+  return projectedLeft(medicine, now)
 }
 
 /** Показанное число — оценка, а не подтверждённый факт. */
@@ -219,6 +219,34 @@ export function doseAt(time: string, now: number): number | null {
   return startOfDay(now) + minutes * 60_000
 }
 
+/**
+ * Части суток.
+ *
+ * Границы не «дизайнерские», а бытовые: человек мыслит «утренние таблетки», а не
+ * «приём в 08:00». Карточка на часть суток даёт крупные цели нажатия и совпадает
+ * с тем, как назначение проговаривает врач.
+ */
+export type DayPart = 'morning' | 'day' | 'evening' | 'night'
+
+export const DAY_PARTS: DayPart[] = ['morning', 'day', 'evening', 'night']
+
+export const DAY_PART_TITLE: Record<DayPart, string> = {
+  morning: 'Утро',
+  day: 'День',
+  evening: 'Вечер',
+  night: 'Ночь',
+}
+
+/** Утро до 12, день до 17, вечер до 22, дальше ночь. */
+export function partOfDay(time: string): DayPart | null {
+  const minutes = parseTime(time)
+  if (minutes === null) return null
+  if (minutes < 12 * 60) return 'morning'
+  if (minutes < 17 * 60) return 'day'
+  if (minutes < 22 * 60) return 'evening'
+  return 'night'
+}
+
 export interface DoseSlot {
   time: string
   /** Отметка о приёме, если он уже сделан сегодня. */
@@ -234,15 +262,26 @@ export interface DoseSlot {
  * принимает таблетку в 8:10 или в 7:40, и требовать попадания в минуту нельзя.
  */
 export function dosesToday(medicine: Medicine, now: number): DoseSlot[] {
+  return dosesOn(medicine, now, now)
+}
+
+/**
+ * Приёмы за произвольный день.
+ *
+ * `day` задаёт сутки, `now` — текущий момент: просроченным приём считается
+ * только относительно настоящего времени, иначе вчерашние приёмы выглядели бы
+ * просроченными даже там, где отметка стоит.
+ */
+export function dosesOn(medicine: Medicine, day: number, now: number): DoseSlot[] {
   const times = normalizeTimes(medicine.times ?? [])
   if (times.length === 0) return []
 
-  const dayStart = startOfDay(now)
+  const dayStart = startOfDay(day)
   const marks = (medicine.taken ?? []).filter((t) => t >= dayStart && t < dayStart + DAY).sort((a, b) => a - b)
   const used = new Set<number>()
 
   return times.map((time) => {
-    const planned = doseAt(time, now)!
+    const planned = dayStart + parseTime(time)! * 60_000
     let best: number | null = null
     let bestGap = Infinity
     for (const mark of marks) {
@@ -256,6 +295,38 @@ export function dosesToday(medicine: Medicine, now: number): DoseSlot[] {
     if (best !== null) used.add(best)
     return { time, takenAt: best, overdue: best === null && now > planned }
   })
+}
+
+export type DayStatus = 'future' | 'done' | 'missed' | 'pending' | 'empty'
+
+/**
+ * Состояние дня для ленты дат.
+ *
+ * `missed` — время приёма прошло, а отметки нет; `pending` — день сегодняшний и
+ * что-то ещё впереди. Разделять их важно: «пропустил» и «ещё не время» для
+ * человека совсем разные вещи, и красить их одинаково нельзя.
+ */
+export function dayStatus(items: Medicine[], day: number, now: number): DayStatus {
+  const slots = items.flatMap((m) => dosesOn(m, day, now))
+  if (slots.length === 0) return 'empty'
+  if (startOfDay(day) > startOfDay(now)) return 'future'
+  if (slots.every((s) => s.takenAt !== null)) return 'done'
+  return slots.some((s) => s.overdue) ? 'missed' : 'pending'
+}
+
+/**
+ * Отметить приём за прошедший день.
+ *
+ * Время ставится плановое, а не текущее: отмечая вчерашний восьмичасовой приём
+ * в полдень следующего дня, человек сообщает, что принял его вчера утром.
+ * Записать «сейчас» значило бы соврать в собственных же данных.
+ */
+export function markTakenAt(medicine: Medicine, plannedTs: number, now: number): Medicine {
+  const horizon = now - KEEP_INTAKES_DAYS * DAY
+  const taken = [...(medicine.taken ?? []).filter((t) => t >= horizon), plannedTs].sort((a, b) => a - b)
+  if (medicine.autoDeduct) return { ...medicine, taken }
+  const left = medicine.left === null ? null : Math.max(0, medicine.left - perTimeOf(medicine))
+  return { ...medicine, taken, left, leftAt: now }
 }
 
 /** Сколько доз сегодня ещё не отмечено. Для пометки на переключателе. */
@@ -371,4 +442,51 @@ export function restockText(list: RestockItem[]): string {
       return `${parts.join(', ')}${inn}${count}`
     })
     .join('\n')
+}
+
+/**
+ * Прибавить упаковку к остатку.
+ *
+ * Пересчитывать пачку в уме и набирать число после каждой покупки человек не
+ * станет, а несписанный остаток врёт. Размер упаковки берётся из справочника.
+ */
+export function addPack(medicine: Medicine, now: number): Medicine {
+  if (!medicine.packSize) return medicine
+  return { ...medicine, left: (medicine.left ?? 0) + medicine.packSize, leftAt: now }
+}
+
+/** Сколько упаковок купить: в аптеке спрашивают пачками, а не таблетками. */
+export function packsNeeded(medicine: Medicine, need: number | null): number | null {
+  if (need === null || !medicine.packSize || medicine.packSize <= 0) return null
+  return Math.ceil(need / medicine.packSize)
+}
+
+/**
+ * Что показать в строке предупреждения и рисовать ли полосу запаса.
+ *
+ * Правило одно на все экраны, и живёт оно здесь, а не в разметке: пока оно
+ * дублировалось в списке и в карточке, полоса «Хватит на 3 дня» и точно такое
+ * же предупреждение стояли друг под другом.
+ *
+ * Про запас говорит полоса — цветом и датой, полнее любого текста. Строка
+ * предупреждения тогда свободна для следующего по важности, а это срок
+ * годности: истекающий в этом месяце препарат иначе молчал бы, пока кончается.
+ */
+export function displayAlert(medicine: Medicine, now: number): { alert: MedicineAlert | null; showSupply: boolean } {
+  const main = medicineAlert(medicine, now)
+  const supply = supplyDays(medicine, now)
+  const showSupply = supply !== null && main?.kind !== 'expired'
+
+  const expiry = daysToExpiry(medicine, now)
+  const expirySoon: MedicineAlert | null =
+    expiry === null
+      ? null
+      : expiry < 0
+        ? { kind: 'expired', days: expiry }
+        : expiry <= EXPIRY_SOON_DAYS
+          ? { kind: 'expiring', days: expiry }
+          : null
+
+  const alert = main && !(main.kind === 'low' && showSupply) ? main : expirySoon
+  return { alert, showSupply }
 }
