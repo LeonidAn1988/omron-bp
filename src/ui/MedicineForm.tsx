@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Medicine } from '../types'
 import { expiryToMonth, formatTime, monthToExpiry, normalizeTimes, parseTime } from '../logic/medicines'
-import { FORM_GROUPS, type Drug, type DrugVariant } from '../logic/drugs'
+import { formGroup as formGroupOf, FORM_GROUPS, type Drug, type DrugVariant } from '../logic/drugs'
 import { NumberField } from './NumberField'
 import { Field } from './bits'
 import { DrugPicker, VariantPicker } from './DrugPicker'
@@ -204,7 +204,10 @@ export function MedicineForm({
           setMaker(drugMakers[0] ?? '')
           // Форма одна — выбирать не из чего, ставим молча. Заодно подставляем
           // единственную дозировку: спрашивать про выбор из одного незачем.
-          const only = picked.length === 1 ? picked[0] : null
+          // При выбранной группе подставляем форму из неё: человек уже сказал,
+          // что ищет мазь, спрашивать его о том же второй раз незачем.
+          const inGroup = group ? picked.filter((v) => formGroupOf(v.form) === group) : picked
+          const only = inGroup.length === 1 ? inGroup[0] : picked.length === 1 ? picked[0] : null
           setForm(only?.form ?? '')
           setPacks(only?.packs ?? [])
           if (only?.doses.length === 1) setDose(only.doses[0])

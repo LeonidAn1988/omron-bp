@@ -239,8 +239,16 @@ function PartCard({
             <span className="dose__body">
               <span className="dose__name">{row.medicine.name}</span>
               {row.medicine.dose && <span className="dose__amount">{row.medicine.dose}</span>}
+              {/* Отметка и её отмена стоят одной строкой под названием, а не в
+                  колонке действий: широкая кнопка выдавливала название в три
+                  строки, и отмеченная строка была вдвое выше остальных. */}
               {row.takenAt !== null && (
-                <span className="dose__done">✓ принято в {TIME_LABEL.format(row.takenAt)}</span>
+                <span className="dose__done">
+                  ✓ принято в {TIME_LABEL.format(row.takenAt)}
+                  <button className="dose__undo" onClick={() => void onSave(undoTaken(row.medicine, row.takenAt!))}>
+                    убрать отметку
+                  </button>
+                </span>
               )}
               {row.overdue && row.takenAt === null && <span className="dose__late">● время прошло</span>}
             </span>
@@ -255,11 +263,7 @@ function PartCard({
               >
                 Принял
               </button>
-            ) : (
-              <button className="btn btn--sm" onClick={() => void onSave(undoTaken(row.medicine, row.takenAt!))}>
-                Убрать отметку
-              </button>
-            )}
+            ) : null}
           </li>
         ))}
       </ul>

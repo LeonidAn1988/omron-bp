@@ -158,12 +158,16 @@ export function searchDrugs(items: Drug[], query: string, limit = SUGGEST_LIMIT)
 /**
  * Подпись под названием в подсказке: чем этот препарат является.
  *
- * Форм бывает несколько, но в подсказке нужна одна — она даёт понять, о каком
- * препарате речь. Остальные человек увидит, когда выберет.
+ * Форм бывает несколько, но в подсказке нужна одна. Когда задан фильтр, берётся
+ * форма из выбранной группы, а не первая попавшаяся: искали мазь, а подпись
+ * сообщала «капсулы» — то есть про другой препарат из той же коробки.
  */
-export function describeDrug(drug: Drug, forms: string[] = []): string {
-  const first = drug.v?.[0] !== undefined ? forms[drug.v[0][0]] : undefined
-  return [drug.i, first?.toLowerCase()].filter(Boolean).join(' · ')
+export function describeDrug(drug: Drug, forms: string[] = [], group = ''): string {
+  const variants = drug.v ?? []
+  const match = group ? variants.find(([index]) => formGroup(forms[index] ?? '') === group) : undefined
+  const chosen = match ?? variants[0]
+  const form = chosen ? forms[chosen[0]] : undefined
+  return [drug.i, form?.toLowerCase()].filter(Boolean).join(' · ')
 }
 
 /**

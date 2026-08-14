@@ -1376,10 +1376,15 @@ tbody tr:hover {
 .dose:first-child {
   border-top: 0;
 }
+/* Приглушаем принятую строку, но время не зачёркиваем: перечёркнутый час
+   читается как ошибка, а он верный — просто доза уже принята. */
 .dose[data-done='true'] .dose__time,
-.dose[data-done='true'] .dose__name {
+.dose[data-done='true'] .dose__name,
+.dose[data-done='true'] .dose__amount {
   color: var(--text-muted);
-  text-decoration: line-through;
+}
+.dose[data-done='true'] .dose__name {
+  font-weight: 400;
 }
 .dose__time {
   flex: 0 0 auto;
@@ -1409,7 +1414,28 @@ tbody tr:hover {
   font-size: var(--fs-1);
 }
 .dose__done {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
   color: var(--text-muted);
+}
+/* Отмена — текстом, а не кнопкой во всю ширину: действие редкое, и место
+   рядом с названием ему уступать незачем. Цель по высоте всё равно полная. */
+.dose__undo {
+  min-height: var(--tap);
+  padding: 0 var(--space-2);
+  margin: -10px 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-1);
+  cursor: pointer;
+}
+.dose__undo:hover {
+  background: var(--hover);
 }
 .dose__late {
   color: var(--critical-text);

@@ -201,9 +201,9 @@ export function DrugPicker({
                 onTouchStart={() => choose(drug)}
               >
                 <span className="suggest__name">{drug.n}</span>
-                {describeDrug(drug, book?.forms ?? []) && (
+                {describeDrug(drug, book?.forms ?? [], group ?? '') && (
                   <span className="suggest__meta">
-                    {describeDrug(drug, book?.forms ?? [])}
+                    {describeDrug(drug, book?.forms ?? [], group ?? '')}
                     {/* Говорим, по какому полю нашлось: иначе непонятно, почему
                         по запросу «ибупрофен» выпал «Нурофен». */}
                     {field !== 'name' && <span className="suggest__why"> · найдено {FIELD_LABEL[field]}</span>}
