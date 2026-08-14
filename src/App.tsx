@@ -83,12 +83,27 @@ export default function App() {
   /** Стартовый экран из настроек применяется один раз, после загрузки данных. */
   const started = useRef(false)
   const [ready, setReady] = useState(false)
+  /** Хранилище не ответило. Молчать нельзя: экран «Загрузка…» висел бы вечно. */
+  const [storageFailed, setStorageFailed] = useState(false)
   const [undo, setUndo] = useState<Measurement | null>(null)
   // ReturnType, а не number: в браузере таймер это число, в Node — объект.
   const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
-    Promise.all([getAllMeasurements(), loadSettings(), getAllMedicines()]).then(([stored, loaded, pills]) => {
+    /**
+     * Хранилище может не ответить вовсе: другая вкладка держит обновление схемы,
+     * браузер вытеснил базу, приватный режим запретил её. Запрос при этом не
+     * падает, а просто молчит — без срока приложение остаётся на «Загрузка…»
+     * навсегда, и человек думает, что потерял все записи.
+     */
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('хранилище не ответило')), 8000),
+    )
+
+    Promise.race([
+      Promise.all([getAllMeasurements(), loadSettings(), getAllMedicines()]),
+      timeout,
+    ]).then(([stored, loaded, pills]) => {
       setMeasurements(stored)
       setMedicines(pills)
       // Дневник сахара включается сам, если данные по нему уже есть.
@@ -100,7 +115,7 @@ export default function App() {
         if (loaded.startTab) setTab(loaded.startTab as TabKey)
       }
       setReady(true)
-    })
+    }).catch(() => setStorageFailed(true))
     return () => clearTimeout(undoTimer.current)
   }, [])
 
@@ -290,6 +305,34 @@ export default function App() {
   }, [tabExists])
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? ''
   const patientName = settings.userNames[settings.activeUser] ?? `Пользователь ${settings.activeUser}`
+
+  if (storageFailed) {
+    return (
+      <div className="app">
+        <header className="topbar">
+          <div className="topbar__title">
+            <h1>Дневник здоровья</h1>
+          </div>
+        </header>
+        <div className="card">
+          <div className="card__head">
+            <h2>Не удалось открыть хранилище</h2>
+          </div>
+          <p style={{ margin: '0 0 var(--space-4)' }}>
+            Браузер не отдал сохранённые записи. Чаще всего это значит, что дневник открыт ещё в одной вкладке и она
+            держит базу — закройте лишние вкладки и попробуйте снова.
+          </p>
+          <p className="muted" style={{ margin: '0 0 var(--space-4)' }}>
+            Записи при этом никуда не делись. Если повторится и после перезапуска браузера — восстановите дневник из
+            резервной копии: приложение читает её обычным файлом.
+          </p>
+          <button className="btn btn--primary" onClick={() => window.location.reload()}>
+            Попробовать снова
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (!ready) {
     return (
