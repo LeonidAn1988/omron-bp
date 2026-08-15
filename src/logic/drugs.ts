@@ -11,11 +11,32 @@
  * как есть.
  */
 
+/**
+ * Что это по документам: обычное лекарство, БАД или гомеопатия.
+ *
+ * Различие не косметическое. Лекарство доказывало действие на клинических
+ * испытаниях, БАД — не лекарство и лечебного действия не заявляет, гомеопатия
+ * зарегистрирована как лекарство, но действующего вещества в проверяемом
+ * количестве не содержит. Человек, ведущий дневник давления, вправе знать, что
+ * из его списка чем является — особенно если несёт этот список врачу.
+ *
+ * Пометки нет у обычного лекарства: их подавляющее большинство, и лишнее поле
+ * на каждой записи стоило бы справочнику лишних килобайт.
+ */
+export type DrugKind = 1 | 2
+
+export const KIND_LABEL: Record<DrugKind, string> = {
+  1: 'БАД',
+  2: 'гомеопатия',
+}
+
 export interface Drug {
   /** Торговое наименование, как в реестре. */
   n: string
   /** Международное непатентованное наименование. Врач называет препарат им. */
   i?: string
+  /** 1 — БАД, 2 — гомеопатия. Пусто — обычное лекарство. */
+  k?: DrugKind
   /**
    * Варианты выпуска: `[номер формы в словаре, дозировки, размеры упаковки]`.
    *
@@ -43,6 +64,38 @@ export interface DrugBook {
   /** Словарь производителей — по той же причине. */
   makers: string[]
   items: Drug[]
+}
+
+/**
+ * Склейка двух справочников в один.
+ *
+ * Лекарства и БАДы лежат в разных государственных реестрах и собираются двумя
+ * генераторами, но человеку, который набирает «омега», знать про это ведомство
+ * незачем — поиск обязан быть один.
+ *
+ * Словари форм и производителей у файлов свои, поэтому номера второго
+ * сдвигаются на длину первого: без сдвига «капсулы» из БАДов показались бы
+ * «таблетками» из лекарств.
+ */
+export function mergeBooks(base: DrugBook, extra: DrugBook | null): DrugBook {
+  if (!extra) return base
+  const formShift = base.forms.length
+  const makerShift = base.makers.length
+
+  const shifted = extra.items.map((drug) => ({
+    ...drug,
+    v: drug.v?.map(([form, doses, packs]) => [form + formShift, doses, packs] as [number, string[], number[]?]),
+    m: drug.m?.map((index) => index + makerShift),
+  }))
+
+  return {
+    // Дата на виду одна, и честнее показать более старую из двух: справочник
+    // не свежее самой залежавшейся своей половины.
+    date: [base.date, extra.date].filter(Boolean).sort()[0] ?? base.date,
+    forms: [...base.forms, ...extra.forms],
+    makers: [...base.makers, ...extra.makers],
+    items: [...base.items, ...shifted].sort((a, b) => a.n.localeCompare(b.n, 'ru')),
+  }
 }
 
 /** Разворачивает варианты препарата в названия форм. */
@@ -103,6 +156,49 @@ export function normalize(value: string): string {
     .trim()
 }
 
+/**
+ * Приведённые названия, посчитанные один раз.
+ *
+ * После слияния двух реестров в справочнике 35 тысяч наименований, и полный
+ * проход случается на каждом нажатии клавиши — по запросу с малым числом
+ * совпадений выхода раньше конца нет. Замер до кэша: 30 мс на настольной
+ * машине, то есть заметное залипание ввода на телефоне пятилетней давности.
+ *
+ * `WeakMap` по объекту препарата, а не отдельный индекс: справочник может быть
+ * пересобран (лекарства, потом лекарства с добавками), и старые записи должны
+ * уходить из памяти сами.
+ */
+const normalizedName = new WeakMap<Drug, string>()
+const normalizedInn = new WeakMap<Drug, string>()
+const normalizedMakers = new WeakMap<string[], string[]>()
+
+function nameOf(drug: Drug): string {
+  let value = normalizedName.get(drug)
+  if (value === undefined) {
+    value = normalize(drug.n)
+    normalizedName.set(drug, value)
+  }
+  return value
+}
+
+function innOf(drug: Drug): string {
+  let value = normalizedInn.get(drug)
+  if (value === undefined) {
+    value = drug.i ? normalize(drug.i) : ''
+    normalizedInn.set(drug, value)
+  }
+  return value
+}
+
+function makersOfIndex(makers: string[]): string[] {
+  let value = normalizedMakers.get(makers)
+  if (value === undefined) {
+    value = makers.map(normalize)
+    normalizedMakers.set(makers, value)
+  }
+  return value
+}
+
 /** Сколько подсказок показываем. Больше — список не помещается и его перестают читать. */
 export const SUGGEST_LIMIT = 8
 
@@ -133,13 +229,14 @@ export function searchHits(
   if (needle.length < 2) return []
 
   const buckets: DrugHit[][] = [[], [], [], []]
+  const makerIndex = makersOfIndex(makers)
 
   for (const item of items) {
-    const name = normalize(item.n)
+    const name = nameOf(item)
     if (name.startsWith(needle)) buckets[0].push({ drug: item, field: 'name' })
     else if (name.includes(needle)) buckets[1].push({ drug: item, field: 'name' })
-    else if (item.i && normalize(item.i).includes(needle)) buckets[2].push({ drug: item, field: 'inn' })
-    else if ((item.m ?? []).some((index) => normalize(makers[index] ?? '').includes(needle)))
+    else if (innOf(item).includes(needle)) buckets[2].push({ drug: item, field: 'inn' })
+    else if ((item.m ?? []).some((index) => (makerIndex[index] ?? '').includes(needle)))
       buckets[3].push({ drug: item, field: 'maker' })
 
     // Раньше выхода нет: точные совпадения могут встретиться в конце реестра,

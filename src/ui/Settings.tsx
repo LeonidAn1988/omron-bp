@@ -16,6 +16,7 @@ const today = () => new Date().toISOString().slice(0, 10)
  * день без всякой пользы.
  */
 const SECTIONS: { key: SectionKey; title: string; hint: string }[] = [
+  { key: 'overview', title: 'Обзор', hint: 'сводка давления и сахара' },
   { key: 'bp', title: 'Давление', hint: 'ввод, история и графики' },
   { key: 'glucose', title: 'Сахар', hint: 'ввод, история и графики' },
   { key: 'intake', title: 'Приём лекарств', hint: 'что принять сегодня' },
@@ -73,7 +74,9 @@ export function Settings({
   const visible = SECTIONS.filter(
     (item) => settings.sections[item.key] && (item.key !== 'glucose' || settings.trackGlucose),
   )
-  const startOptions = [{ key: 'overview', title: 'Обзор' }, ...visible.map((i) => ({ key: i.key, title: i.title }))]
+  const startOptions = visible.map((i) => ({ key: i.key, title: i.title }))
+  /** Последний включённый раздел не отдаём: без него от приложения ничего не остаётся. */
+  const locked = visible.length === 1 ? visible[0].key : null
 
   return (
     <div className="stack">
@@ -88,17 +91,27 @@ export function Settings({
               <input
                 type="checkbox"
                 checked={settings.sections[item.key]}
+                disabled={locked === item.key}
                 onChange={(event) => {
                   const sections = { ...settings.sections, [item.key]: event.target.checked }
                   // Стартовый экран не должен указывать на спрятанное: приложение
-                  // открылось бы на вкладке, которой нет в навигации.
-                  const startTab = !event.target.checked && settings.startTab === item.key ? 'overview' : settings.startTab
+                  // открылось бы на вкладке, которой нет в навигации. Замена —
+                  // первый оставшийся раздел, а не «Обзор»: его тоже могли скрыть.
+                  const rest = SECTIONS.filter(
+                    (s) => sections[s.key] && (s.key !== 'glucose' || settings.trackGlucose),
+                  )
+                  const startTab =
+                    !event.target.checked && settings.startTab === item.key
+                      ? (rest[0]?.key ?? settings.startTab)
+                      : settings.startTab
                   patch({ sections, startTab })
                 }}
               />
               <span>
                 {item.title}
-                <span className="fact__note">{item.hint}</span>
+                <span className="fact__note">
+                  {locked === item.key ? 'последний раздел — скрыть его нельзя' : item.hint}
+                </span>
               </span>
             </label>
           ))}

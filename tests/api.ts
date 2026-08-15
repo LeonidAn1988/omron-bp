@@ -43,7 +43,9 @@ export {
   formGroup,
   filterByForm,
   instructionUrl,
+  mergeBooks,
   FORM_GROUPS,
+  KIND_LABEL,
 } from '../src/logic/drugs'
 
 export { buildCalendar, countCalendarEvents, foldLine, doseTitle } from '../src/logic/calendar'
@@ -82,6 +84,7 @@ export {
   markTakenAt,
   addPack,
   packsNeeded,
+  adherence,
   DAY_PARTS,
   DAY_PART_TITLE,
   RESTOCK_DAYS,

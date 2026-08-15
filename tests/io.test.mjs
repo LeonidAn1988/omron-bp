@@ -136,12 +136,15 @@ export function run() {
         taken: [Date.UTC(2026, 7, 12, 5, 0), Date.UTC(2026, 7, 12, 17, 0)],
       },
       { id: 'med-2', name: 'Метформин', dose: '850 мг', left: null, perDay: null, expires: null },
+      { id: 'med-3', name: 'Омега-3', dose: '', kind: 1, left: null, perDay: null, expires: null },
     ],
     settings: { targetSys: 135, targetDia: 85, activeUser: 1, trackGlucose: true },
   }
   const restored = parseJson(toJson(snapshot))
   check('в копии есть измерения', restored.measurements.length === 5)
-  check('в копии есть аптечка', restored.medicines.length === 2, JSON.stringify(restored.medicines))
+  check('в копии есть аптечка', restored.medicines.length === 3, JSON.stringify(restored.medicines))
+  check('пометка БАДа пережила копию', restored.medicines[2].kind === 1)
+  check('у обычного лекарства пометки не появилось', restored.medicines[0].kind === undefined)
   check('препарат восстановлен полностью', restored.medicines[0].name === 'Лозартан' && restored.medicines[0].left === 12)
   check('действующее вещество пережило копию', restored.medicines[0].inn === 'Лозартан')
   check('форма выпуска пережила копию', restored.medicines[0].form === 'Таблетки покрытые пленочной оболочкой')
@@ -164,7 +167,7 @@ export function run() {
       format: 'omron-bp/v3',
       measurements: [],
       medicines: [
-        { id: 'x', name: 'Тест', times: ['08:00', 'вечером', 25, null], perTime: 'два', meal: 'иногда', autoDeduct: 'да', taken: ['вчера', 5] },
+        { id: 'x', name: 'Тест', kind: 7, times: ['08:00', 'вечером', 25, null], perTime: 'два', meal: 'иногда', autoDeduct: 'да', taken: ['вчера', 5] },
       ],
     }),
   ).medicines[0]
@@ -173,6 +176,11 @@ export function run() {
   check('незнакомое отношение к еде отброшено', кривое.meal === undefined)
   check('автосписание включается только настоящим true', кривое.autoDeduct === undefined)
   check('нечисловые отметки отброшены', JSON.stringify(кривое.taken) === JSON.stringify([5]))
+  check(
+    'незнакомый вид препарата отброшен',
+    кривое.kind === undefined,
+    'иначе интерфейс не знает, как назвать пометку, и рисует пустую плашку',
+  )
   check('пустые поля препарата остались пустыми', restored.medicines[1].left === null && restored.medicines[1].expires === null)
   check('в копии есть настройки', restored.settings?.targetSys === 135)
 

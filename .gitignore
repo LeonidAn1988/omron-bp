@@ -10,3 +10,6 @@ tools/out/
 .DS_Store
 *.local
 .vite/
+
+# следы python-сборщиков
+tools/__pycache__/

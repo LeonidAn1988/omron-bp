@@ -215,6 +215,20 @@ def split_entries(raw: str) -> list[str]:
     return entries
 
 
+def is_homeopathic(forms: str, group: str) -> bool:
+    """
+    Гомеопатия зарегистрирована как лекарство и лежит в том же реестре, но
+    лекарством в обычном смысле не является: доказанного действующего вещества
+    в ней нет. Человек имеет право это знать, поэтому препарат помечается, а не
+    выбрасывается — выбрасывать значит решать за него.
+
+    Признак стоит в двух местах и не всегда в обоих сразу: у одних он в форме
+    выпуска («гранулы гомеопатические»), у других — только в фармгруппе
+    («гомеопатическое средство»), поэтому проверяются оба.
+    """
+    return 'гомеопат' in forms.lower() or 'гомеопат' in group.lower()
+
+
 def is_substance(forms: str, group: str) -> bool:
     """
     Фармацевтическая субстанция — сырьё для производства, а не то, что лежит в
@@ -247,7 +261,8 @@ def build(blob: bytes) -> dict:
             continue
 
         raw_forms = str(row[COL_FORMS] or '')
-        if is_substance(raw_forms, str(row[COL_GROUP] or '')):
+        raw_group = str(row[COL_GROUP] or '')
+        if is_substance(raw_forms, raw_group):
             skipped += 1
             continue
         rows += 1
@@ -257,10 +272,12 @@ def build(blob: bytes) -> dict:
             mnn = ''
 
         item = merged.setdefault(
-            trade.lower(), {'n': trade, 'i': mnn, 'makers': set(), 'forms': {}}
+            trade.lower(), {'n': trade, 'i': mnn, 'makers': set(), 'forms': {}, 'homeo': False}
         )
         if not item['i'] and mnn:
             item['i'] = mnn
+        if is_homeopathic(raw_forms, raw_group):
+            item['homeo'] = True
 
         maker = str(row[COL_MAKER] or '').strip()
         if maker and maker not in ('~', '-'):
@@ -292,6 +309,11 @@ def build(blob: bytes) -> dict:
         variants.sort(key=lambda v: v[0])
 
         record: dict = {'n': item['n']}
+        # 1 — БАД (собирается другим генератором), 2 — гомеопатия. Обычное
+        # лекарство метки не несёт: их подавляющее большинство, и лишнее поле
+        # на каждой записи стоило бы справочнику лишних килобайт.
+        if item['homeo']:
+            record['k'] = 2
         if item['i']:
             record['i'] = item['i']
         if variants:
@@ -344,6 +366,7 @@ def main() -> None:
     with_pack = sum(1 for i in data['items'] if any(len(v) > 2 and v[2] for v in i.get('v', [])))
     with_maker = sum(1 for i in data['items'] if i.get('m'))
     multi = sum(1 for i in data['items'] if len(i.get('v', [])) > 1)
+    homeo = sum(1 for i in data['items'] if i.get('k') == 2)
     total = len(data['items'])
     print(
         f'строк реестра: {data["rows"]}, пропущено субстанций: {data["skipped"]}\n'
@@ -354,6 +377,7 @@ def main() -> None:
         f'  с количеством в упаковке: {with_pack} ({with_pack / total:.1%})\n'
         f'  с производителем: {with_maker} ({with_maker / total:.1%})\n'
         f'  с несколькими формами: {multi} ({multi / total:.1%})\n'
+        f'  помечено гомеопатией: {homeo}\n'
         f'различных форм выпуска: {len(data["forms"])}, производителей: {len(data["makers"])}\n'
         f'выгрузка от {stamp}, файл {out} — {out.stat().st_size / 1024:.0f} КБ',
         file=sys.stderr,

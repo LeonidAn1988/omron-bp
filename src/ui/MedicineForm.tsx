@@ -5,6 +5,7 @@ import { formGroup as formGroupOf, FORM_GROUPS, type Drug, type DrugVariant } fr
 import { NumberField } from './NumberField'
 import { Field } from './bits'
 import { DrugPicker, VariantPicker } from './DrugPicker'
+import { substanceLabel } from './Medicines'
 
 /**
  * Заведение и правка препарата.
@@ -108,6 +109,8 @@ export function MedicineForm({
   const [inn, setInn] = useState(medicine?.inn ?? '')
   const [form, setForm] = useState(medicine?.form ?? '')
   const [maker, setMaker] = useState(medicine?.maker ?? '')
+  /** БАД или гомеопатия — из справочника. Обычное лекарство пометки не несёт. */
+  const [kind, setKind] = useState<Medicine['kind']>(medicine?.kind)
   const [packSize, setPackSize] = useState(medicine?.packSize ? String(medicine.packSize) : '')
   const [packs, setPacks] = useState<number[]>([])
   /** Группа формы сужает поиск: человек держит коробку и знает, таблетки это или мазь. */
@@ -142,6 +145,7 @@ export function MedicineForm({
         inn: inn.trim() || undefined,
         form: form.trim() || undefined,
         maker: maker.trim() || undefined,
+        kind,
         packSize: Number(packSize) > 0 ? Number(packSize) : undefined,
         left: numberOrNull(left),
         perDay: numberOrNull(perDay),
@@ -194,6 +198,7 @@ export function MedicineForm({
           setInn('')
           setForm('')
           setMaker('')
+          setKind(undefined)
           setVariants([])
           setPacks([])
         }}
@@ -202,6 +207,7 @@ export function MedicineForm({
           setInn(drug.i ?? '')
           setVariants(picked)
           setMaker(drugMakers[0] ?? '')
+          setKind(drug.k)
           // Форма одна — выбирать не из чего, ставим молча. Заодно подставляем
           // единственную дозировку: спрашивать про выбор из одного незачем.
           // При выбранной группе подставляем форму из неё: человек уже сказал,
@@ -216,7 +222,7 @@ export function MedicineForm({
 
       {inn && inn.toLowerCase() !== name.trim().toLowerCase() && (
         <div className="muted" style={{ marginTop: 'calc(-1 * var(--space-2))' }}>
-          Действующее вещество: <b>{inn}</b>
+          {substanceLabel(kind)}: <b>{inn}</b>
         </div>
       )}
 

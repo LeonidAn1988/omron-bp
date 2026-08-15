@@ -1315,7 +1315,8 @@ tbody tr:hover {
 }
 
 /* Список препаратов в отчёте врачу: обычная таблица, читается и на бумаге. */
-.report-drugs {
+.report-drugs,
+.report-adherence {
   width: 100%;
   border-collapse: collapse;
   /* Фиксированная раскладка вместо переноса «где придётся»: та ломала слова
@@ -1335,8 +1336,25 @@ tbody tr:hover {
 .report-drugs td:nth-child(2) {
   width: 30%;
 }
+/* Три колонки. Средняя шире крайней правой: в ней не только «39 из 41», но и
+   подпись «пропущено 2», которая при равных долях рвалась на «пропущен/о». */
+.report-adherence th:nth-child(1),
+.report-adherence td:nth-child(1) {
+  width: 48%;
+}
+.report-adherence th:nth-child(2),
+.report-adherence td:nth-child(2) {
+  width: 31%;
+}
+.report-adherence th:nth-child(3),
+.report-adherence td:nth-child(3) {
+  width: 21%;
+}
+
 .report-drugs th,
-.report-drugs td {
+.report-drugs td,
+.report-adherence th,
+.report-adherence td {
   padding: var(--space-2) var(--space-3) var(--space-2) 0;
   border-bottom: 1px solid var(--border);
   text-align: left;
@@ -1348,13 +1366,25 @@ tbody tr:hover {
      влезает целиком, а не любое подходящее место. */
   overflow-wrap: break-word;
 }
-.report-drugs th {
+/* Длинные слова переносим по правилам языка, а не наугад.
+   «Оциллококцину/м» и «гомеопатич/еские» читаются как опечатка: разрыв без
+   дефиса ничего не обещает. Со `hyphens` браузер ставит дефис и рвёт по слогам,
+   а `break-word` остаётся запасным путём для слова, которое не переносится
+   вовсе. Работает благодаря `lang="ru"` на документе — без него у браузера нет
+   правил переноса. Заголовки не трогаем: они короткие и рваться не должны. */
+.report-drugs td,
+.report-adherence td {
+  hyphens: auto;
+}
+.report-drugs th,
+.report-adherence th {
   font-size: var(--fs-1);
   font-weight: 600;
   color: var(--text-secondary);
 }
 @media (max-width: 640px) {
-  .report-drugs {
+  .report-drugs,
+  .report-adherence {
     font-size: var(--fs-1);
   }
 }
@@ -1561,6 +1591,42 @@ tbody tr:hover {
   margin-top: 2px;
   font-size: var(--fs-1);
   color: var(--text-muted);
+}
+
+/* ── пометка «БАД» и «гомеопатия» ───────────────────────────────────────── */
+
+/* Спокойная, а не тревожная: это факт из реестра, а не предупреждение об
+   опасности. Красный тон здесь читался бы как «не принимайте», чего
+   приложение не говорит и говорить не вправе.
+
+   Рамка, а не заливка: пометка стоит внутри строки рядом с названием, и
+   плотная плашка перетягивала бы взгляд с самого препарата. */
+.kind-tag {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 1px 7px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 999px;
+  /* fs-1, а не fs-0: двенадцатый кегль в этом наборе отдан числам на осях
+     графиков, читаемый текст ниже тринадцати не опускается. */
+  font-size: var(--fs-1);
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  /* Обычный регистр: в верхнем «БАД» и «ГОМЕОПАТИЯ» кричат одинаково громко,
+     хотя одно слово втрое длиннее. */
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.suggest__kind {
+  margin-left: var(--space-2);
+  font-size: var(--fs-1);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.suggest__kind::before {
+  content: '· ';
 }
 
 /* ── служебные разделы в шапке ──────────────────────────────────────────── */

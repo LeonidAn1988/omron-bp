@@ -46,7 +46,7 @@ import { Banner, Reveal } from './ui/bits'
  * около 70px. Значков без подписей здесь нет намеренно: пожилые их не узнают.
  */
 const TABS = [
-  { key: 'overview', label: 'Обзор', short: 'Обзор', section: null },
+  { key: 'overview', label: 'Обзор', short: 'Обзор', section: 'overview' },
   { key: 'bp', label: 'Давление', short: 'Давление', section: 'bp' },
   { key: 'glucose', label: 'Сахар', short: 'Сахар', section: 'glucose' },
   { key: 'intake', label: 'Приём лекарств', short: 'Приём', section: 'intake' },
@@ -283,26 +283,31 @@ export default function App() {
    * Видимые разделы нижней строки.
    *
    * Состав меняется только прямым действием в настройках — исчезающие и
-   * появляющиеся вкладки сбивают с толку сильнее, чем лишний пункт. «Обзор»
-   * скрыть нельзя: это точка возврата, когда всё остальное спрятано.
+   * появляющиеся вкладки сбивают с толку сильнее, чем лишний пункт. Скрыть
+   * можно любой раздел, включая обзор: он собран из сводок давления и сахара и
+   * при выключенных дневниках пуст.
+   *
+   * Пустым список стать не должен — настройки не отдают последний раздел. Но
+   * файл резервной копии приходит снаружи, и если в нём выключено всё, лучше
+   * показать обзор, чем приложение без единой вкладки.
    */
-  const visibleTabs = TABS.filter((item) => {
-    if (item.section === null) return true
-    if (item.section === 'glucose') return showGlucose
-    return settings.sections[item.section]
-  })
+  const shownTabs = TABS.filter((item) =>
+    item.section === 'glucose' ? showGlucose : settings.sections[item.section],
+  )
+  const visibleTabs = shownTabs.length > 0 ? shownTabs : TABS.filter((item) => item.key === 'overview')
 
   /**
-   * Если раздел спрятали прямо из-под ног, возвращаемся на обзор.
+   * Если раздел спрятали прямо из-под ног, уходим на первый оставшийся.
    *
    * Без этого человек остаётся на экране, которого больше нет в навигации:
    * содержимое видно, а вернуться некуда — ни одна вкладка не подсвечена.
    * То же при стартовом экране, указывающем на скрытый раздел.
    */
   const tabExists = visibleTabs.some((item) => item.key === tab) || TOOLS.some((item) => item.key === tab)
+  const fallbackTab = visibleTabs[0].key
   useEffect(() => {
-    if (!tabExists) setTab('overview')
-  }, [tabExists])
+    if (!tabExists) setTab(fallbackTab)
+  }, [tabExists, fallbackTab])
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? ''
   const patientName = settings.userNames[settings.activeUser] ?? `Пользователь ${settings.activeUser}`
 

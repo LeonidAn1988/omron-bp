@@ -34,6 +34,7 @@ import {
   markTakenAt,
   addPack,
   packsNeeded,
+  adherence,
   RESTOCK_DAYS,
   KEEP_INTAKES_DAYS,
 } from './build/api.mjs'
@@ -375,6 +376,70 @@ export function run() {
   check('пачек берём с округлением вверх', packsNeeded(med({ packSize: 30 }), 31) === 2)
   check('ровно упаковка — одна пачка', packsNeeded(med({ packSize: 30 }), 30) === 1)
   check('без размера упаковки пачки не считаем', packsNeeded(med({}), 30) === null)
+
+  // ── соблюдение режима: цифра уходит врачу, врать ей нельзя ───────────────
+  const день0 = startOfDayTs(now)
+  const в = (сдвиг, час) => день0 + сдвиг * DAY + час * 3_600_000
+  const дважды = ['08:00', '20:00']
+
+  const всёОтмечено = med({
+    id: 'a',
+    times: дважды,
+    taken: [в(-2, 8), в(-2, 20), в(-1, 8), в(-1, 20), в(0, 8)],
+  })
+  const полный = adherence([всёОтмечено], now - 7 * DAY, now)
+  check(
+    'вечерний приём сегодня ещё не наступил и в счёт не идёт',
+    полный.planned === 5 && полный.taken === 5 && полный.rate === 1,
+    `получилось ${полный.taken}/${полный.planned}`,
+  )
+  check(
+    'счёт идёт с первой отметки, а не с начала периода',
+    полный.from === startOfDayTs(в(-2, 8)),
+    'иначе препарат, заведённый вчера, отчитывается за весь месяц',
+  )
+
+  const спропуском = med({ id: 'b', times: дважды, taken: [в(-2, 8), в(-2, 20), в(-1, 8), в(0, 8)] })
+  const частичный = adherence([спропуском], now - 7 * DAY, now)
+  check(
+    'пропущенный вечерний приём виден',
+    частичный.planned === 5 && частичный.taken === 4,
+    `получилось ${частичный.taken}/${частичный.planned}`,
+  )
+
+  const сСписанием = adherence(
+    [med({ id: 'c', times: дважды, autoDeduct: true, taken: [в(-1, 8)] })],
+    now - 7 * DAY,
+    now,
+  )
+  check(
+    'автосписание в долю не идёт',
+    сСписанием.skipped === 1 && сСписанием.rows.length === 0 && сСписанием.rate === null,
+    'у него отметок нет по устройству, а не по нерадивости',
+  )
+
+  const безРасписания = adherence([med({ id: 'd' })], now - 7 * DAY, now)
+  check('препарат по потребности не учитывается', безРасписания.skipped === 1 && безРасписания.rows.length === 0)
+
+  const ниОдной = adherence([med({ id: 'e', times: дважды })], now - 7 * DAY, now)
+  check(
+    'препарат без отметок вынесен отдельно, а не записан в нули',
+    ниОдной.unmarked.length === 1 && ниОдной.rows.length === 0 && ниОдной.rate === null,
+    'иначе «0%» читается как «не принимает», хотя человек просто не отмечал',
+  )
+
+  check(
+    'период длиннее срока хранения отметок урезан',
+    adherence([всёОтмечено], now - 365 * DAY, now).clipped === true,
+  )
+  check('короткий период не урезается', adherence([всёОтмечено], now - 10 * DAY, now).clipped === false)
+
+  const общий = adherence([всёОтмечено, спропуском], now - 7 * DAY, now)
+  check(
+    'доли складываются по дозам, а не усредняются по препаратам',
+    общий.planned === 10 && общий.taken === 9,
+    `получилось ${общий.taken}/${общий.planned}`,
+  )
 
   return failures
 }

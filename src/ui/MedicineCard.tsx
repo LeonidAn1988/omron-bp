@@ -15,7 +15,7 @@ import { plural } from '../logic/plural'
 import { NumberField } from './NumberField'
 import { Banner } from './bits'
 import { BackIcon, PencilIcon, TrashIcon } from './icons'
-import { alertText, ALERT_TONE, monthYear, Supply } from './Medicines'
+import { alertText, ALERT_TONE, KindTag, monthYear, substanceLabel, Supply } from './Medicines'
 
 /**
  * Экран одного препарата.
@@ -80,7 +80,10 @@ export function MedicineCard({
 
       <div className="card">
         <div className="card__head">
-          <h2>{medicine.name}</h2>
+          <h2>
+            {medicine.name}
+            <KindTag kind={medicine.kind} />
+          </h2>
           {medicine.dose && <span className="muted">{medicine.dose}</span>}
         </div>
 
@@ -152,11 +155,32 @@ export function MedicineCard({
           <Row label="Приём" value={schedule} note={medicine.meal === 'before' ? 'до еды' : medicine.meal === 'after' ? 'после еды' : undefined} />
           <Row label="Годен до" value={medicine.expires === null ? '' : monthYear(medicine.expires)} />
           <Row label="Форма выпуска" value={medicine.form ?? ''} />
-          <Row label="Действующее вещество" value={medicine.inn ?? ''} />
+          <Row label={substanceLabel(medicine.kind)} value={medicine.inn ?? ''} />
           <Row label="Производитель" value={medicine.maker ?? ''} />
           <Row label="В упаковке" value={medicine.packSize ? `${medicine.packSize} шт.` : ''} />
           {medicine.note && <Row label="Примечание" value={medicine.note} />}
         </dl>
+
+        {/* Один абзац фактов, без назиданий: что человеку принимать — его дело,
+            наше дело — не выдавать одно за другое. */}
+        {medicine.kind === 1 && (
+          <Banner tone="info">
+            <b>Это БАД, а не лекарство.</b>
+            <div style={{ marginTop: 4 }}>
+              Добавки регистрируются как пищевая продукция: лечебного действия они не заявляют и клинических испытаний,
+              как лекарства, не проходят. Назначенные препараты БАД не заменяет.
+            </div>
+          </Banner>
+        )}
+        {medicine.kind === 2 && (
+          <Banner tone="info">
+            <b>Это гомеопатическое средство.</b>
+            <div style={{ marginTop: 4 }}>
+              Оно зарегистрировано как лекарство, но действующего вещества в проверяемом количестве не содержит.
+              Назначенные препараты им не заменяют.
+            </div>
+          </Banner>
+        )}
 
         <div className="row" style={{ marginTop: 'var(--space-5)' }}>
           <button className="btn" onClick={onEdit}>

@@ -4,10 +4,13 @@ import { DAY_PART_LABELS, classify, classifyGlucose, glucoseCeiling, type DayPar
 import { Readings } from './Readings'
 import { GlucoseList } from './Glucose'
 import { CategoryBadge } from './bits'
-import { perDayOf } from '../logic/medicines'
+import { adherence, KEEP_INTAKES_DAYS, perDayOf } from '../logic/medicines'
+import { KIND_LABEL } from '../logic/drugs'
 import { plural } from '../logic/plural'
 
 const DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' })
+const DAY_MS = 24 * 60 * 60 * 1000
 const DAY_PART_ORDER: DayPart[] = ['morning', 'day', 'evening', 'night']
 const GLUCOSE_ORDER: GlucoseContext[] = ['fasting', 'before-meal', 'after-meal', 'bedtime', 'night']
 
@@ -24,6 +27,99 @@ const MEAL_NOTE: Record<'before' | 'after' | 'any', string> = {
   before: ', до еды',
   after: ', после еды',
   any: '',
+}
+
+/**
+ * Соблюдение режима приёма.
+ *
+ * Врач видит, что человек принимает, но не видит, принимает ли на самом деле.
+ * Отметки о приёме дают ответ, и он часто важнее самого списка: давление
+ * держится плохо не потому, что таблетка слабая, а потому, что её пьют через
+ * раз.
+ *
+ * Цифра подаётся вместе с оговорками, а не после них: врач может изменить
+ * лечение, прочитав «56%», поэтому в том же абзаце сказано, что неотмеченная
+ * доза не значит непринятая, и с какого дня вообще шёл счёт.
+ */
+function Adherence({ medicines, from, now }: { medicines: Medicine[]; from: number; now: number }) {
+  const report = adherence(medicines, from, now)
+  if (report.rows.length === 0 && report.unmarked.length === 0) return null
+
+  const percent = report.rate === null ? null : Math.round(report.rate * 100)
+
+  return (
+    <div className="card">
+      <div className="card__head">
+        <h2>Соблюдение режима приёма</h2>
+        <span className="muted">по отметкам в приложении</span>
+      </div>
+
+      {percent !== null && (
+        <table className="report-facts">
+          <tbody>
+            <Row label="Отмечено">
+              <b>{percent}%</b> — {report.taken} {plural(report.taken, 'приём', 'приёма', 'приёмов')} из{' '}
+              {report.planned} по расписанию
+            </Row>
+            <Row label="Учтено с">
+              {DAY_MONTH.format(report.from)}
+              {report.clipped && ` · отметки хранятся ${KEEP_INTAKES_DAYS} дней, поэтому срок короче периода отчёта`}
+            </Row>
+          </tbody>
+        </table>
+      )}
+
+      {/* Три колонки, а не четыре. Отдельный столбец пропусков не влезал:
+          заголовок «Пропущено» рвался посреди слова — «Пропу/щено». Само число
+          при этом никуда не делось, оно читается из «39 из 41» и продублировано
+          подписью. */}
+      {report.rows.length > 0 && (
+        <table className="report-adherence" style={{ marginTop: 'var(--space-4)' }}>
+          <thead>
+            <tr>
+              <th>Препарат</th>
+              <th>Принято</th>
+              <th>Доля</th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.rows.map((row) => (
+              <tr key={row.medicine.id}>
+                <td>
+                  {row.medicine.name}
+                  <div className="muted">с {DAY_MONTH.format(row.from)}</div>
+                </td>
+                <td>
+                  {row.taken} из {row.planned}
+                  {row.planned > row.taken && <div className="muted">пропущено {row.planned - row.taken}</div>}
+                </td>
+                <td>{row.planned > 0 ? `${Math.round((row.taken / row.planned) * 100)}%` : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <div className="muted" style={{ marginTop: 'var(--space-4)', lineHeight: 1.6 }}>
+        {report.unmarked.length > 0 && (
+          <>
+            Без отметок за срок: {report.unmarked.map((m) => m.name).join(', ')} — в долю не{' '}
+            {plural(report.unmarked.length, 'вошёл', 'вошли', 'вошли')}: не принимали или не отмечали, приложению это
+            неразличимо.{' '}
+          </>
+        )}
+        {report.skipped > 0 && (
+          <>
+            Не {plural(report.skipped, 'учтён', 'учтены', 'учтены')} {report.skipped}{' '}
+            {plural(report.skipped, 'препарат', 'препарата', 'препаратов')} без расписания или со списанием по
+            расписанию.{' '}
+          </>
+        )}
+        Счёт по каждому препарату идёт со дня первой отметки. Пропуск означает неотмеченную дозу, а не доказанно
+        непринятую.
+      </div>
+    </div>
+  )
 }
 
 export function Report({
@@ -77,6 +173,10 @@ export function Report({
   }
 
   const span = summary ?? glucoseSummary!
+  // Начало периода отчёта. «Всё время» отдаём нулём — соблюдение режима само
+  // урежет срок до горизонта хранения отметок и об этом скажет.
+  const periodDays = PERIODS.find((p) => p.key === period)?.days ?? null
+  const periodFrom = periodDays === null ? 0 : Date.now() - periodDays * DAY_MS
 
   return (
     <div className="stack">
@@ -268,6 +368,10 @@ export function Report({
                     <tr key={item.id}>
                       <td>
                         {item.name}
+                        {/* Врачу это нужнее всех: список «что принимает» без
+                            пометки уравнивает назначенный препарат с добавкой
+                            из аптеки у дома. */}
+                        {item.kind && <span className="kind-tag">{KIND_LABEL[item.kind]}</span>}
                         {inn && <div className="muted">{inn}</div>}
                       </td>
                       <td>
@@ -289,6 +393,8 @@ export function Report({
           </table>
         </div>
       )}
+
+      {medicines.length > 0 && <Adherence medicines={medicines} from={periodFrom} now={Date.now()} />}
 
       {summary && (
         <div className="card">
@@ -312,6 +418,12 @@ export function Report({
         {medicines.length > 0 && (
           <>
             Перечень препаратов внесён пациентом самостоятельно и не является выпиской из назначений.{' '}
+            {medicines.some((m) => m.kind) && (
+              <>
+                Пометкой «БАД» отмечены биологически активные добавки к пище, пометкой «гомеопатия» — гомеопатические
+                средства; сведения взяты из государственных реестров по названию препарата.{' '}
+              </>
+            )}
           </>
         )}
         Данные давления выгружены из тонометра Omron RS7 Intelli IT (HEM-6232T) и дополнены записями, внесёнными

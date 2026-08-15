@@ -320,6 +320,9 @@ function parseMedicines(raw: unknown): Medicine[] {
       inn: text(m.inn),
       form: text(m.form),
       maker: text(m.maker),
+      // Вид препарата — только 1 или 2, иначе пусто: неизвестное число
+      // означало бы пометку, которой интерфейс не знает, как назвать.
+      kind: m.kind === 1 || m.kind === 2 ? m.kind : undefined,
       packSize: optionalNumber(m.packSize) ?? undefined,
       left: optionalNumber(m.left),
       perDay: optionalNumber(m.perDay),

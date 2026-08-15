@@ -13,7 +13,7 @@ import { buildCalendar, countCalendarEvents } from '../logic/calendar'
 import { download } from '../logic/io'
 import { Banner } from './bits'
 import { ChevronIcon } from './icons'
-import { alertText, ALERT_TONE, MedicineNudge, Restock, shortFormOf, Supply } from './Medicines'
+import { alertText, ALERT_TONE, KindTag, MedicineNudge, Restock, shortFormOf, Supply } from './Medicines'
 import { MedicineCard } from './MedicineCard'
 import { MedicineForm } from './MedicineForm'
 
@@ -206,6 +206,7 @@ function CabinetRow({ medicine, now, onOpen }: { medicine: Medicine; now: number
         <span className="pill__head">
           <span className="pill__title">
             <span className="pill__name">{medicine.name}</span>
+            <KindTag kind={medicine.kind} />
             {medicine.dose && <span className="pill__dose">{medicine.dose}</span>}
           </span>
           <ChevronIcon />

@@ -21,7 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   glucoseLow: 3.9,
   trackGlucose: false,
   theme: 'auto',
-  sections: { bp: true, glucose: true, intake: true, cabinet: true },
+  sections: { overview: true, bp: true, glucose: true, intake: true, cabinet: true },
   startTab: 'overview',
   backupLastAt: null,
   backupLastCount: 0,

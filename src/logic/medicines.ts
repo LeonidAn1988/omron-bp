@@ -329,6 +329,102 @@ export function markTakenAt(medicine: Medicine, plannedTs: number, now: number):
   return { ...medicine, taken, left, leftAt: now }
 }
 
+/** Соблюдение режима по одному препарату. */
+export interface MedicineAdherence {
+  medicine: Medicine
+  /** Приёмов по расписанию за учтённый срок. */
+  planned: number
+  /** Из них отмечено. */
+  taken: number
+  /** С какого дня считали именно этот препарат. */
+  from: number
+}
+
+export interface AdherenceReport {
+  /** Начало учтённого срока — общее, по самому раннему препарату. */
+  from: number
+  planned: number
+  taken: number
+  /** Доля отмеченных, 0..1. `null` — считать не из чего. */
+  rate: number | null
+  rows: MedicineAdherence[]
+  /** Препараты по расписанию, у которых нет ни одной отметки. */
+  unmarked: Medicine[]
+  /** Препараты без расписания или со списанием по расписанию: отметок у них не бывает. */
+  skipped: number
+  /** Запрошенный период оказался длиннее срока хранения отметок и был урезан. */
+  clipped: boolean
+}
+
+/**
+ * Соблюдение режима приёма за период.
+ *
+ * Врачу это полезнее списка препаратов: давление держится плохо не потому, что
+ * лекарство слабое, а потому, что его принимают через раз. Отметки о приёме
+ * уже собираются — грех не показать.
+ *
+ * Три границы, без которых цифра врёт, а врач по ней меняет лечение:
+ *
+ * 1. Отметки хранятся `KEEP_INTAKES_DAYS` дней. Запрос «за всё время» посчитал
+ *    бы годовое расписание против двух месяцев отметок и выдал бы 5%.
+ * 2. Препараты с автосписанием исключены: там отметок нет по устройству, а не
+ *    по нерадивости.
+ * 3. Каждый препарат считается от первой своей отметки. Когда препарат завели
+ *    неделю назад, месячное расписание до него не относится: приложение о нём
+ *    ещё не знало. Препараты без единой отметки в долю не идут вовсе и
+ *    перечисляются отдельно — «не отмечал» и «не принимал» это разные вещи, и
+ *    решать, какая из них верна, приложение не вправе.
+ */
+export function adherence(items: Medicine[], from: number, now: number): AdherenceReport {
+  const horizon = startOfDay(now) - (KEEP_INTAKES_DAYS - 1) * DAY
+  const start = Math.max(startOfDay(from), horizon)
+  const clipped = startOfDay(from) < horizon
+
+  const rows: MedicineAdherence[] = []
+  const unmarked: Medicine[] = []
+  let skipped = 0
+
+  for (const medicine of items) {
+    if (!medicine.times?.length || medicine.autoDeduct) {
+      skipped += 1
+      continue
+    }
+    const marks = (medicine.taken ?? []).filter((t) => t >= start)
+    if (marks.length === 0) {
+      unmarked.push(medicine)
+      continue
+    }
+
+    const since = startOfDay(Math.min(...marks))
+    let planned = 0
+    let taken = 0
+    for (let day = since; day <= startOfDay(now); day += DAY) {
+      for (const slot of dosesOn(medicine, day, now)) {
+        // Приём, до которого ещё не дошло время, не пропущен и в счёт не идёт.
+        if (slot.takenAt === null && !slot.overdue) continue
+        planned += 1
+        if (slot.takenAt !== null) taken += 1
+      }
+    }
+    rows.push({ medicine, planned, taken, from: since })
+  }
+
+  const planned = rows.reduce((sum, row) => sum + row.planned, 0)
+  const taken = rows.reduce((sum, row) => sum + row.taken, 0)
+  rows.sort((a, b) => a.medicine.name.localeCompare(b.medicine.name, 'ru'))
+
+  return {
+    from: rows.length ? Math.min(...rows.map((r) => r.from)) : start,
+    planned,
+    taken,
+    rate: planned > 0 ? taken / planned : null,
+    rows,
+    unmarked,
+    skipped,
+    clipped,
+  }
+}
+
 /** Сколько доз сегодня ещё не отмечено. Для пометки на переключателе. */
 export function pendingToday(items: Medicine[], now: number): number {
   return items.reduce((sum, m) => sum + dosesToday(m, now).filter((d) => d.takenAt === null).length, 0)

@@ -3,8 +3,10 @@ import {
   describeDrug,
   filterByForm,
   makersOf,
+  mergeBooks,
   searchHits,
   variantsOf,
+  KIND_LABEL,
   type Drug,
   type DrugBook,
   type DrugVariant,
@@ -23,20 +25,52 @@ import {
  */
 
 let cached: DrugBook | null = null
-let loading: Promise<DrugBook | null> | null = null
+let loading: Promise<void> | null = null
+/** Кому сообщить, когда доедет вторая половина справочника. */
+const waiting = new Set<(book: DrugBook | null) => void>()
 
-async function loadBook(): Promise<DrugBook | null> {
-  if (cached) return cached
+const fetchBook = (name: string): Promise<DrugBook | null> =>
+  fetch(new URL(name, document.baseURI))
+    .then((r) => (r.ok ? (r.json() as Promise<DrugBook>) : null))
+    .catch(() => null)
+
+/**
+ * Справочник в два приёма: сначала лекарства, следом БАДы.
+ *
+ * Файлов два, потому что реестра два — лекарства ведёт Минздрав, добавки
+ * санитарная служба, — а поиск обязан быть один, и человеку про ведомства
+ * знать незачем.
+ *
+ * Ждать оба разом нельзя: вместе они под восемьсот килобайт, и на медленной
+ * сети подсказка молчала бы всё это время. Поэтому лекарства показываются, как
+ * только приехали, а добавки подмешиваются к ним следом. Если добавки не
+ * доехали вовсе, поиск работает по лекарствам: половина справочника лучше
+ * пустого поля.
+ */
+function loadBook(notify: (book: DrugBook | null) => void): () => void {
+  // Подписываемся всегда, даже когда что-то уже есть: между приездом лекарств
+  // и приездом добавок форму могли открыть заново, и без подписки такое поле
+  // так и осталось бы без БАДов до перезагрузки страницы.
+  waiting.add(notify)
+  if (cached) notify(cached)
+
+  const announce = () => waiting.forEach((listener) => listener(cached))
   if (!loading) {
-    loading = fetch(new URL('drugs.json', document.baseURI))
-      .then((r) => (r.ok ? (r.json() as Promise<DrugBook>) : null))
-      .then((book) => {
-        cached = book
-        return book
+    loading = fetchBook('drugs.json')
+      .then((drugs) => {
+        cached = drugs
+        announce()
+        return fetchBook('supplements.json')
       })
-      .catch(() => null)
+      .then((supplements) => {
+        cached = cached ? mergeBooks(cached, supplements) : supplements
+        announce()
+      })
+      .catch(() => {})
   }
-  return loading
+  return () => {
+    waiting.delete(notify)
+  }
 }
 
 const FIELD_LABEL = { name: '', inn: 'по веществу', maker: 'по производителю' } as const
@@ -65,15 +99,9 @@ export function DrugPicker({
   const boxRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
 
-  useEffect(() => {
-    let alive = true
-    void loadBook().then((loaded) => {
-      if (alive) setBook(loaded)
-    })
-    return () => {
-      alive = false
-    }
-  }, [])
+  // Отписка возвращена самим loadBook: без неё пришедшие следом добавки
+  // дёргали бы состояние уже размонтированного поля.
+  useEffect(() => loadBook(setBook), [])
 
   // Клик мимо закрывает подсказку. Без этого на телефоне она перекрывает
   // соседние поля и остаётся висеть.
@@ -200,7 +228,12 @@ export function DrugPicker({
                 }}
                 onTouchStart={() => choose(drug)}
               >
-                <span className="suggest__name">{drug.n}</span>
+                <span className="suggest__name">
+                  {drug.n}
+                  {/* Вид стоит у самого названия, а не в подписи: человек
+                      выбирает строку по названию и мимо подписи проскакивает. */}
+                  {drug.k && <span className="suggest__kind">{KIND_LABEL[drug.k]}</span>}
+                </span>
                 {describeDrug(drug, book?.forms ?? [], group ?? '') && (
                   <span className="suggest__meta">
                     {describeDrug(drug, book?.forms ?? [], group ?? '')}

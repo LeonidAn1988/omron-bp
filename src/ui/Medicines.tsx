@@ -9,6 +9,7 @@ import {
   SUPPLY_SOON_DAYS,
   type MedicineAlert,
 } from '../logic/medicines'
+import { KIND_LABEL } from '../logic/drugs'
 import { plural } from '../logic/plural'
 import { canShareFile, download, shareFile } from '../logic/io'
 import { Banner } from './bits'
@@ -47,6 +48,34 @@ export const monthYear = (ts: number): string => {
 
 /** Форма коротко: в списке нужно одно слово — таблетки это, капли или гель. */
 export const shortFormOf = shortForm
+
+/**
+ * Пометка «БАД» или «гомеопатия».
+ *
+ * Стоит рядом с названием везде, где препарат назван: в списке, на его экране и
+ * в отчёте врачу. Это не осуждение и не запрет — человек волен принимать что
+ * хочет, — но и молчать нельзя: БАД лечебного действия не заявляет, а
+ * гомеопатия действующего вещества в проверяемом количестве не содержит. Тот,
+ * кто ведёт дневник давления, имеет право видеть разницу в своём же списке.
+ */
+export function KindTag({ kind }: { kind: Medicine['kind'] }) {
+  if (!kind) return null
+  return (
+    <span className="kind-tag" data-kind={kind}>
+      {KIND_LABEL[kind]}
+    </span>
+  )
+}
+
+/**
+ * Как назвать поле состава.
+ *
+ * У лекарства это действующее вещество из реестра, у БАДа — то, источником чего
+ * он объявлен. Называть второе действующим веществом нельзя: у БАДа его нет по
+ * определению, и подпись обещала бы лечебное действие, которого он не заявляет.
+ */
+export const substanceLabel = (kind: Medicine['kind']): string =>
+  kind === 1 ? 'Источник' : 'Действующее вещество'
 
 const days = (n: number): string => `${n} ${plural(n, 'день', 'дня', 'дней')}`
 
