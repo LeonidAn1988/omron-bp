@@ -125,12 +125,27 @@ interface Slot {
 export function Intake({
   medicines,
   onSave,
+  toRoot = 0,
 }: {
   medicines: Medicine[]
   onSave: (item: Medicine) => Promise<void>
+  /** Меняется, когда человек нажал на уже активную вкладку: вернуться на сегодня. */
+  toRoot?: number
 }) {
   const [now, setNow] = useState(() => Date.now())
   const [selected, setSelected] = useState(() => Date.now())
+
+  // Уйдя листать прошлую неделю, вернуться к сегодняшнему дню человек будет
+  // именно нажатием на вкладку — искать «Сегодня» в ленте из шести десятков
+  // дней он не станет.
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
+    setSelected(Date.now())
+  }, [toRoot])
 
   // Время идёт: без обновления «пора принять» не станет «время прошло», пока
   // человек не перезайдёт. Раз в минуту достаточно и не греет телефон.

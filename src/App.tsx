@@ -80,6 +80,8 @@ export default function App() {
   const [settings, setSettings] = useState<SettingsData>(DEFAULT_SETTINGS)
   const [period, setPeriod] = useState<PeriodKey>('30d')
   const [tab, setTab] = useState<TabKey>('overview')
+  /** Растёт при повторном нажатии на активную вкладку — сигнал разделу вернуться в начало. */
+  const [rootSignal, setRootSignal] = useState(0)
   /** Стартовый экран из настроек применяется один раз, после загрузки данных. */
   const started = useRef(false)
   const [ready, setReady] = useState(false)
@@ -398,7 +400,15 @@ export default function App() {
             className="tab"
             aria-current={tab === item.key ? 'page' : undefined}
             aria-label={item.label}
-            onClick={() => setTab(item.key)}
+            onClick={() => {
+              // Повторное нажатие по своей же вкладке возвращает раздел в
+              // начало: из карточки препарата — к списку, из формы — назад. Так
+              // ведут себя нижние панели в iOS и Android, и человек, зашедший
+              // вглубь, жмёт именно сюда. Без этого вкладка подсвечена, а экран
+              // всё тот же, и выход приходится искать.
+              if (item.key === tab) setRootSignal((value) => value + 1)
+              setTab(item.key)
+            }}
           >
             <span className="tab__full">{item.label}</span>
             <span className="tab__short">{item.short}</span>
@@ -551,12 +561,17 @@ export default function App() {
         </div>
       )}
 
-      {tab === 'intake' && <Intake medicines={medicines} onSave={handleSaveMedicine} />}
+      {tab === 'intake' && <Intake medicines={medicines} onSave={handleSaveMedicine} toRoot={rootSignal} />}
 
       {tab === 'cabinet' && (
         <>
           {undoBanner}
-          <Cabinet medicines={medicines} onSave={handleSaveMedicine} onDelete={handleDeleteMedicine} />
+          <Cabinet
+            medicines={medicines}
+            onSave={handleSaveMedicine}
+            onDelete={handleDeleteMedicine}
+            toRoot={rootSignal}
+          />
         </>
       )}
 

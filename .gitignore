@@ -13,3 +13,6 @@ tools/out/
 
 # следы python-сборщиков
 tools/__pycache__/
+
+# логи Percy
+.percy/

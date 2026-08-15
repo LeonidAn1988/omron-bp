@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Medicine } from '../types'
 import {
   displayAlert,
@@ -41,10 +41,13 @@ export function Cabinet({
   medicines,
   onSave,
   onDelete,
+  toRoot = 0,
 }: {
   medicines: Medicine[]
   onSave: (item: Medicine) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  /** Меняется, когда человек нажал на уже активную вкладку: вернуться к списку. */
+  toRoot?: number
 }) {
   const [openId, setOpenId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -52,6 +55,19 @@ export function Cabinet({
   const [filter, setFilter] = useState<Filter>('all')
   /** Куда вернуть список после экрана препарата: терять место при возврате нельзя. */
   const scrollRef = useRef(0)
+
+  // Возврат к списку по нажатию на свою же вкладку. Фильтр при этом остаётся:
+  // человек просил вернуться из карточки, а не сбросить всё, что настроил.
+  const first = useRef(true)
+  useEffect(() => {
+    if (first.current) {
+      first.current = false
+      return
+    }
+    setOpenId(null)
+    setEditingId(null)
+    setAdding(false)
+  }, [toRoot])
 
   const now = Date.now()
   const opened = medicines.find((item) => item.id === openId) ?? null

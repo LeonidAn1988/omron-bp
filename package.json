@@ -12,13 +12,16 @@
     "typecheck": "tsc --noEmit",
     "test": "node tests/run.mjs",
     "drugs": "python3 tools/build_drugs.py --out public/drugs.json",
-    "supplements": "python3 tools/build_supplements.py --out public/supplements.json"
+    "supplements": "python3 tools/build_supplements.py --out public/supplements.json",
+    "visual": "bash tools/visual.sh"
   },
   "dependencies": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@percy/cli": "^1.32.6",
+    "@percy/playwright": "^1.1.2",
     "@types/node": "^26.2.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
@@ -26,6 +29,7 @@
     "@vitejs/plugin-basic-ssl": "^2.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "fake-indexeddb": "^6.2.5",
+    "playwright": "^1.62.1",
     "typescript": "^5.7.3",
     "vite": "^6.1.0"
   }
