@@ -16,3 +16,14 @@ tools/__pycache__/
 
 # логи Percy
 .percy/
+
+# Android: сборочный мусор и локальные пути. Сам каталог android/ в репозитории
+# нужен — там манифест, значки и версии. Ключ подписи не коммитить никогда.
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/public/
+android/app/release/
+*.keystore
+*.jks

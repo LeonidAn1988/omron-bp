@@ -16,10 +16,13 @@
     "visual": "bash tools/visual.sh"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
     "@percy/cli": "^1.32.6",
     "@percy/playwright": "^1.1.2",
     "@types/node": "^26.2.0",
