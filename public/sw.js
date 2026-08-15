@@ -10,7 +10,7 @@
  * её нужно, когда меняется не код (он версионируется хэшем сам), а неизменные
  * по имени файлы рядом — справочники.
  */
-const CACHE = 'omron-bp-v2'
+const CACHE = 'omron-bp-v3'
 
 /**
  * Файлы, у которых имя не меняется, а содержимое меняется: справочники
@@ -43,8 +43,24 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return
 
   if (request.mode === 'navigate') {
+    /**
+     * Страницу берём из сети и обязательно **мимо HTTP-кэша браузера**.
+     *
+     * Без `cache: 'no-cache'` обновление не доезжало до человека: GitHub Pages
+     * отдаёт `index.html` с `max-age=600`, обычный `fetch` брал его из кэша
+     * браузера, оттуда приходила старая страница со ссылкой на старый бандл, а
+     * старый бандл лежал уже в нашем кэше. Итог — перезагрузка страницы десять
+     * минут не помогала, и выкаченное исправление человек не получал.
+     *
+     * `no-cache` не значит «не кэшировать»: браузер спрашивает сервер, изменился
+     * ли файл, и при неизменном получает короткий ответ 304. Трафика это почти
+     * не добавляет, а свежесть гарантирует.
+     *
+     * Новый запрос по адресу, а не `new Request(request, …)`: у навигационного
+     * запроса режим `navigate`, и конструктор Request с ним падает.
+     */
     event.respondWith(
-      fetch(request)
+      fetch(request.url, { cache: 'no-cache', credentials: 'same-origin' })
         .then((response) => {
           const copy = response.clone()
           caches.open(CACHE).then((cache) => cache.put(request, copy))
