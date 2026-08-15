@@ -278,23 +278,48 @@ export function dosesOn(medicine: Medicine, day: number, now: number): DoseSlot[
 
   const dayStart = startOfDay(day)
   const marks = (medicine.taken ?? []).filter((t) => t >= dayStart && t < dayStart + DAY).sort((a, b) => a - b)
-  const used = new Set<number>()
+  const planned = times.map((time) => dayStart + parseTime(time)! * 60_000)
 
-  return times.map((time) => {
-    const planned = dayStart + parseTime(time)! * 60_000
-    let best: number | null = null
-    let bestGap = Infinity
-    for (const mark of marks) {
-      if (used.has(mark)) continue
-      const gap = Math.abs(mark - planned)
-      if (gap < bestGap) {
-        bestGap = gap
-        best = mark
-      }
-    }
-    if (best !== null) used.add(best)
-    return { time, takenAt: best, overdue: best === null && now > planned }
+  /**
+   * Раскладываем отметки по приёмам, начиная с самых близких пар.
+   *
+   * Раньше разбор шёл по приёмам подряд, и каждый забирал ближайшую **свободную**
+   * отметку. При двух приёмах в день и единственной вечерней отметке утренний
+   * приём разбирался первым, свободна была только вечерняя отметка — и она
+   * доставалась утру. Человек нажимал «принял» на вечернем препарате, а
+   * отмечался утренний, которого он не принимал. Препараты с одним приёмом в
+   * день не страдали: там нечего было забирать, поэтому дефект выглядел
+   * выборочным.
+   *
+   * Теперь сначала рассматриваются все пары «приём — отметка» и разбираются от
+   * самой близкой к самой далёкой. Вечерняя отметка совпадает с вечерним
+   * приёмом точно, эта пара идёт первой и забирает обе стороны; утро остаётся
+   * пустым, как и было на самом деле.
+   *
+   * Отметки различаются по номеру, а не по времени: две отметки на одну и ту же
+   * минуту — разные события, и склеивать их нельзя.
+   */
+  const pairs: { slot: number; mark: number; gap: number }[] = []
+  planned.forEach((at, slot) => {
+    marks.forEach((mark, index) => pairs.push({ slot, mark: index, gap: Math.abs(mark - at) }))
   })
+  // При равном расстоянии порядок задаётся явно, иначе раскладка зависела бы от
+  // устойчивости сортировки в конкретном движке.
+  pairs.sort((a, b) => a.gap - b.gap || a.slot - b.slot || a.mark - b.mark)
+
+  const takenBySlot: (number | null)[] = times.map(() => null)
+  const usedMarks = new Set<number>()
+  for (const pair of pairs) {
+    if (takenBySlot[pair.slot] !== null || usedMarks.has(pair.mark)) continue
+    takenBySlot[pair.slot] = marks[pair.mark]
+    usedMarks.add(pair.mark)
+  }
+
+  return times.map((time, slot) => ({
+    time,
+    takenAt: takenBySlot[slot],
+    overdue: takenBySlot[slot] === null && now > planned[slot],
+  }))
 }
 
 export type DayStatus = 'future' | 'done' | 'missed' | 'pending' | 'empty'
