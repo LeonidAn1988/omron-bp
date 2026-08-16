@@ -22,6 +22,61 @@
         /* приватный режим может запретить хранилище — тогда остаётся системная тема */
       }
     </script>
+    <!-- Спасение от пустого экрана.
+
+         Имена собранных файлов содержат хэш и меняются с каждой выкаткой, а
+         старые удаляются. Если браузер или служебный работник отдаст
+         устаревший index.html, тот сошлётся на файл, которого на сервере уже
+         нет, — и человек увидит не старую версию, а белый экран. Для дневника,
+         который обещает сохранность записей, это выглядит как потеря всего.
+
+         Поэтому: не загрузился скрипт — один раз чистим кэши, снимаем
+         служебного работника и перезагружаемся. Метка в sessionStorage
+         страхует от вечного круга, если дело окажется не в кэше. -->
+    <script>
+      window.addEventListener(
+        'error',
+        function (event) {
+          var node = event.target
+          if (!node || node.tagName !== 'SCRIPT' || node === event.currentTarget) return
+          // Без сети чистить кэш нельзя: он единственное, из чего приложение
+          // вообще может подняться. Эта поломка бывает только на связи —
+          // страница приходит устаревшая, а файлы к ней с сервера уже убраны.
+          if (navigator.onLine === false) return
+          try {
+            if (sessionStorage.getItem('omron-recovery')) return
+            sessionStorage.setItem('omron-recovery', '1')
+          } catch (e) {
+            return
+          }
+          var done = function () {
+            location.reload()
+          }
+          var cleared = window.caches
+            ? caches.keys().then(function (keys) {
+                return Promise.all(
+                  keys.map(function (key) {
+                    return caches.delete(key)
+                  }),
+                )
+              })
+            : Promise.resolve()
+          cleared
+            .then(function () {
+              if (!navigator.serviceWorker) return
+              return navigator.serviceWorker.getRegistrations().then(function (list) {
+                return Promise.all(
+                  list.map(function (item) {
+                    return item.unregister()
+                  }),
+                )
+              })
+            })
+            .then(done, done)
+        },
+        true,
+      )
+    </script>
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <!-- iOS не понимает SVG на домашнем экране: без этой строки значок там
          подставлялся чужой, а приложение само советует добавить его на экран —
