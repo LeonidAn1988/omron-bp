@@ -27,3 +27,6 @@ android/app/src/main/assets/public/
 android/app/release/
 *.keystore
 *.jks
+
+# исходники значков собираются генератором tools/icons.py
+assets/

@@ -13,7 +13,8 @@
     "test": "node tests/run.mjs",
     "drugs": "python3 tools/build_drugs.py --out public/drugs.json",
     "supplements": "python3 tools/build_supplements.py --out public/supplements.json",
-    "visual": "bash tools/visual.sh"
+    "visual": "bash tools/visual.sh",
+    "icons": "python3 tools/icons.py && npx capacitor-assets generate --android"
   },
   "dependencies": {
     "@capacitor-community/bluetooth-le": "^8.3.0",
@@ -26,6 +27,7 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.5.0",
     "@percy/cli": "^1.32.6",
     "@percy/playwright": "^1.1.2",
