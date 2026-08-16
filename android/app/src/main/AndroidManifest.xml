@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <application
         android:allowBackup="true"
@@ -35,7 +36,60 @@
         </provider>
     </application>
 
-    <!-- Permissions -->
+    <!-- Разрешения -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+        Bluetooth Low Energy: чтение измерений с тонометра.
+
+        Android 12 и новее. `neverForLocation` — обещание системе, что мы не
+        выводим местоположение человека из результатов сканирования. Без него у
+        дневника давления запрашивался бы доступ к геолокации, а это пугает и
+        вызывает отказ. Взамен система отфильтровывает часть маячков; для
+        прибора, объявляющего свой сервис, это не помеха, но проверить на живом
+        тонометре обязательно: если он перестанет находиться, причина здесь.
+    -->
+    <uses-permission
+        android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!--
+        Android 11 и старше. Там разрешения на устройства поблизости ещё нет, а
+        сканирование без доступа к местоположению возвращает пустой список —
+        причём мало выдать разрешение, должна быть включена и сама служба
+        геолокации. Ограничены `maxSdkVersion`, чтобы на современных телефонах
+        не запрашиваться вовсе.
+    -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+
+    <!--
+        Геолокацию объявляем сами и с ограничением по версии.
+
+        Плагин BLE просит обе — и точную, и приблизительную — без всякого предела,
+        потому что рассчитан на любые сценарии. Нам она нужна ровно для одного:
+        на Android 11 и старше без неё не работает сканирование. На Android 12+
+        мы обещали системе `neverForLocation`, и незакрытое разрешение это
+        обещание перечёркивало бы: в карточке магазина дневник давления выглядел
+        бы приложением, которое следит за перемещениями.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" android:maxSdkVersion="30" />
+
+    <!--
+        Ничего из железа не требуем обязательным.
+
+        Разрешения тянут за собой неявные требования: из-за Bluetooth и
+        геолокации магазин счёл бы приложение несовместимым с устройствами без
+        радиомодуля или без GPS и просто не показал бы его там. Между тем
+        дневник, ввод руками, графики и отчёт врачу работают на таком устройстве
+        полностью — не работает только выгрузка с прибора.
+    -->
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+    <uses-feature android:name="android.hardware.location" android:required="false" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>
