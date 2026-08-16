@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { Measurement, SectionKey, Settings as SettingsData, ThemeChoice } from '../types'
 import { DEFAULT_PAIRING_KEY } from '../ble/session'
 import { download, parseImportFile, toCsv, toJson, type ImportResult } from '../logic/io'
+import { platform } from '../platform/ports'
 import { Banner, Field } from './bits'
 import { DataSafety } from './Backup'
 import type { BackupStatus } from './useBackup'
@@ -329,8 +330,10 @@ export function Settings({
           </button>
         )}
         <div className="muted" style={{ marginTop: 10 }}>
-          Данные хранятся только в этом браузере и никуда не отправляются. Очистка истории браузера или режим инкогнито
-          их удалят — держите резервную копию.
+          Данные хранятся только на этом устройстве и никуда не отправляются.{' '}
+          {platform().kind === 'native'
+            ? 'Удаление приложения или очистка его данных их сотрут — держите резервную копию.'
+            : 'Очистка истории браузера или режим инкогнито их удалят — держите резервную копию.'}
         </div>
       </div>
 

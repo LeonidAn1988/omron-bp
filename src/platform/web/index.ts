@@ -13,6 +13,7 @@ import { webFiles } from './files'
 import { webBackup } from './backup'
 
 export const webPlatform: Platform = {
+  kind: 'web',
   bluetooth: webBluetooth,
   storage: webStorage,
   files: webFiles,

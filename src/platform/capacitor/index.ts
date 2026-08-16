@@ -33,6 +33,7 @@ const capacitorStorage: StoragePort = {
 }
 
 export const capacitorPlatform: Platform = {
+  kind: 'native',
   bluetooth: capacitorBluetooth,
   storage: capacitorStorage,
   files: capacitorFiles,
