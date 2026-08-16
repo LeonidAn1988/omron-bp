@@ -79,10 +79,28 @@ export function Sync({
 
   useEffect(() => {
     if (!supported) return
-    isBluetoothEnabled().then((enabled) => setRadioOff(enabled === false))
+    const check = () => {
+      void isBluetoothEnabled().then((enabled) => setRadioOff(enabled === false))
+    }
+    check()
     getKnownDevices().then((known) => {
       if (known.length === 1) setDevice(known[0])
     })
+
+    /**
+     * Состояние радиомодуля перепроверяется при возвращении в приложение.
+     *
+     * Раньше здесь стоял единственный вопрос при открытии экрана, а человеку
+     * предлагалось «обновить страницу». В установленном приложении обновлять
+     * нечего — страницы нет; человек уходит включать Bluetooth в настройках и
+     * возвращается к тому же предупреждению. Теперь оно исчезает само.
+     */
+    document.addEventListener('visibilitychange', check)
+    window.addEventListener('focus', check)
+    return () => {
+      document.removeEventListener('visibilitychange', check)
+      window.removeEventListener('focus', check)
+    }
   }, [supported])
 
   // Итог появляется под кнопками, но на телефоне может оказаться ниже сгиба.
@@ -187,7 +205,9 @@ export function Sync({
 
   return (
     <div className="stack">
-      {radioOff && <Banner tone="warning">Bluetooth на этом устройстве выключен — включите его и обновите страницу.</Banner>}
+      {radioOff && (
+        <Banner tone="warning">Bluetooth выключен. Включите его — приложение заметит это само.</Banner>
+      )}
 
       <div className="card">
         <div className="card__head">

@@ -75,6 +75,14 @@ function loadBook(notify: (book: DrugBook | null) => void): () => void {
 
 const FIELD_LABEL = { name: '', inn: 'по веществу', maker: 'по производителю' } as const
 
+/** «14 августа 2026» — дата выгрузки реестра словами. */
+const BOOK_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+
+function bookDate(iso: string): string {
+  const parsed = Date.parse(iso)
+  return Number.isNaN(parsed) ? iso : BOOK_DATE.format(parsed)
+}
+
 export function DrugPicker({
   value,
   group,
@@ -248,9 +256,14 @@ export function DrugPicker({
         </ul>
       )}
 
+      {/* Дату выгрузки показываем именно здесь, а не в настройках: она нужна
+          ровно в ту секунду, когда препарат не нашёлся. Справочник стареет, и
+          «его нет в реестре» и «реестру полгода» — разные объяснения, между
+          которыми человек вправе выбирать сам. */}
       {book && touched && value.trim().length >= 2 && found.length === 0 && (
         <div className="muted" style={{ marginTop: 'var(--space-1)' }}>
           В реестре не нашлось — впишите название с упаковки, так тоже правильно.
+          {book.date && <> Справочник обновлён {bookDate(book.date)}.</>}
         </div>
       )}
     </div>
