@@ -17,6 +17,8 @@ export const webFiles: FilePort = {
     link.click()
     // Освобождаем не сразу: Safari успевает начать скачивание только после кадра.
     setTimeout(() => URL.revokeObjectURL(url), 1000)
+    // Скачивание в браузере отменить нельзя — файл ушёл в загрузки.
+    return true
   },
 
   canShare() {

@@ -50,7 +50,10 @@ export const capacitorFiles: FilePort = {
    * телефона, иначе пропадёт вместе с ним.
    */
   async save(filename, content, mime) {
-    await this.share(filename, content, mime)
+    // Ответ обязателен: человек мог закрыть окно, и тогда файла нет. Раньше
+    // здесь стояло молчаливое `await` — приложение записывало «копия сделана»
+    // на отменённое действие.
+    return capacitorFiles.share(filename, content, mime)
   },
 
   canShare() {

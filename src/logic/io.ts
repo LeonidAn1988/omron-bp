@@ -79,8 +79,11 @@ export function toJson(snapshot: Snapshot | Measurement[]): string {
   )
 }
 
-/** Как именно файл попадёт к пользователю, решает платформа. */
-export function download(filename: string, content: string, mime: string): Promise<void> {
+/**
+ * Отдать файл человеку. Как именно — решает платформа: в браузере скачиванием,
+ * на телефоне системным окном. `false` — он отказался, и файла нет.
+ */
+export function download(filename: string, content: string, mime: string): Promise<boolean> {
   return platform().files.save(filename, content, mime)
 }
 

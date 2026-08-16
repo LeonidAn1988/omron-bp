@@ -140,8 +140,11 @@ export function useBackup(
   const saveNow = useCallback(async () => {
     setBusy(true)
     try {
-      await download(backupFilename(Date.now()), snapshot(), 'application/json')
-      markDone(latest.current.measurements.length + latest.current.medicines.length)
+      const saved = await download(backupFilename(Date.now()), snapshot(), 'application/json')
+      // Отметку ставим только при подтверждённом сохранении — ровно как в
+      // shareNow ниже. На телефоне «сохранить» проходит через системное окно, и
+      // отказ от него означает, что копии нет.
+      if (saved) markDone(latest.current.measurements.length + latest.current.medicines.length)
     } finally {
       setBusy(false)
     }
