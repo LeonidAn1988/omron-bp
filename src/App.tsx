@@ -277,7 +277,18 @@ export default function App() {
       if (minutes === null) return
       const planned = day + minutes * 60_000
       const now = Date.now()
-      for (const medicine of medicines) {
+
+      // Аптечка читается из хранилища, а не берётся из состояния экрана.
+      //
+      // Это не перестраховка. Нажатие «Принял» на заблокированном экране
+      // запускает приложение с нуля, и система отдаёт удержанное событие
+      // раньше, чем успевает прочитаться база: в состоянии в этот момент
+      // пустой список, цикл не делает ни одного оборота, отметка не ставится,
+      // а следом приходят три повтора «приём не отмечен». То есть главный
+      // сценарий, ради которого кнопка и делалась, молча не работал.
+      const cabinet = await getAllMedicines()
+
+      for (const medicine of cabinet) {
         if (!normalizeTimes(medicine.times ?? []).includes(slot)) continue
         const dose = dosesOn(medicine, day, now).find((item) => item.time === slot)
         if (dose && dose.takenAt !== null) continue
@@ -286,7 +297,7 @@ export default function App() {
       await refreshMedicines()
       setTab('intake')
     },
-    [medicines, refreshMedicines],
+    [refreshMedicines],
   )
 
   useReminders({

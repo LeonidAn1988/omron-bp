@@ -67,6 +67,17 @@ const ACTION_TYPE = 'omron-dose'
 const SNOOZE_MIN = 15
 
 /**
+ * Отложенные напоминания живут в своём диапазоне идентификаторов и **не
+ * снимаются** пересборкой набора.
+ *
+ * Иначе выходило так: человек нажал «Отложить», приложение от этого нажатия
+ * запустилось, пересобрало набор — и первым делом сняло всё ожидающее, включая
+ * только что отложенное. Просьба «напомни через пятнадцать минут» исчезала в
+ * ту же секунду, в которую была высказана.
+ */
+const SNOOZE_BASE = 900_000
+
+/**
  * Мелодия, выбранная в последний раз. Нужна отложенному напоминанию: оно
  * создаётся в ответ на нажатие, когда настроек под рукой нет, а прийти обязано
  * тем же звуком, что и остальные — иначе человек его не узнает.
@@ -108,7 +119,7 @@ function toPermission(display: string): ReminderPermission {
  * Удаление не косметика: иначе в системных настройках уведомлений копятся
  * четыре одинаковых по названию канала, и человек правит громкость не у того.
  */
-async function ensureChannel(soundId: string) {
+async function ensureChannel(soundId: string, cleanup = true) {
   const wanted = channelId(soundId)
   await LocalNotifications.createChannel({
     id: wanted,
@@ -122,6 +133,11 @@ async function ensureChannel(soundId: string) {
     vibration: true,
     ...(soundId === 'system' ? {} : { sound: `${soundId}.wav` }),
   })
+
+  // Уборка лишних каналов — только когда мелодию выбрал человек. Из обработчика
+  // «Отложить» её звать нельзя: там выбранная мелодия неизвестна, и уборка
+  // снесла бы канал вместе с громкостью, которую человек себе выставил.
+  if (!cleanup) return
 
   const { channels } = await LocalNotifications.listChannels()
   for (const channel of channels) {
@@ -167,6 +183,18 @@ export const capacitorReminders: RemindersPort = {
   async schedule(reminders: Reminder[], soundId: string) {
     await this.cancelAll()
     if (!reminders.length) return
+
+    // Убираем из шторки то, что уже показано, но в новом наборе не значится:
+    // отмеченный приём иначе оставляет стопку карточек, и человек смотрит на
+    // напоминание о том, что он уже сделал.
+    try {
+      const { notifications: показанные } = await LocalNotifications.getDeliveredNotifications()
+      const нужные = new Set(reminders.map((item) => item.id))
+      const лишние = показанные.filter((item) => item.id < SNOOZE_BASE && !нужные.has(item.id))
+      if (лишние.length) await LocalNotifications.removeDeliveredNotifications({ notifications: лишние })
+    } catch {
+      // Не смертельно: карточка в шторке переживаема, а падать из-за неё нельзя.
+    }
 
     await ensureChannel(soundId)
     lastSound = soundId
@@ -215,8 +243,11 @@ export const capacitorReminders: RemindersPort = {
 
   async cancelAll() {
     const { notifications } = await LocalNotifications.getPending()
-    if (!notifications.length) return
-    await LocalNotifications.cancel({ notifications: notifications.map(({ id }) => ({ id })) })
+    // Отложенные не трогаем: человек попросил напомнить попозже, и пересборка
+    // набора — не повод забыть об этой просьбе.
+    const наши = notifications.filter(({ id }) => id < SNOOZE_BASE)
+    if (!наши.length) return
+    await LocalNotifications.cancel({ notifications: наши.map(({ id }) => ({ id })) })
   },
 
   async scheduled() {
@@ -234,16 +265,20 @@ export const capacitorReminders: RemindersPort = {
       if (event.actionId === 'snooze') {
         // Откладывание — целиком забота платформы: приложению незачем знать,
         // что человек попросил напомнить попозже, набор от этого не меняется.
-        void ensureChannel(lastSound).then(() =>
+        // Канал берём тот же, в котором пришло исходное уведомление: своей
+        // мелодии обработчик не знает, а на холодном старте `lastSound` ещё
+        // не восстановлен и указал бы на системный звук.
+        const канал = event.notification.channelId ?? channelId(lastSound)
+        void ensureChannel(канал.startsWith(CHANNEL_PREFIX) ? канал.slice(CHANNEL_PREFIX.length) : lastSound, false).then(() =>
           LocalNotifications.schedule({
             notifications: [
               {
                 // Свой диапазон идентификаторов: отложенное не должно затирать
-                // штатные напоминания и не должно ими затираться.
-                id: 900_000 + (event.notification.id % 100_000),
+                // штатные напоминания и не снимается пересборкой набора.
+                id: SNOOZE_BASE + (event.notification.id % 100_000),
                 title: event.notification.title,
                 body: event.notification.body ?? '',
-                channelId: channelId(lastSound),
+                channelId: канал,
                 actionTypeId: ACTION_TYPE,
                 extra: event.notification.extra,
                 isExactNotification: false,

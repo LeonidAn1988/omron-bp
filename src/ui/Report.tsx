@@ -1,3 +1,4 @@
+import { platform } from '../platform/ports'
 import { GLUCOSE_CONTEXT_LABELS, type BpReading, type GlucoseContext, type GlucoseReading, type Medicine } from '../types'
 import { PERIODS, type GlucoseSummary, type PeriodKey, type Summary } from '../logic/stats'
 import { DAY_PART_LABELS, classify, classifyGlucose, glucoseCeiling, type DayPart, type GlucoseTargets } from '../logic/classify'
@@ -181,7 +182,7 @@ export function Report({
   return (
     <div className="stack">
       <div className="row no-print">
-        <button className="btn btn--primary" onClick={() => window.print()}>
+        <button className="btn btn--primary" onClick={() => void platform().files.print('Отчёт врачу')}>
           Печать или сохранение в PDF
         </button>
         {picker}

@@ -7,6 +7,7 @@
  */
 import {
   HORIZON_DAYS,
+  MAX_REMINDERS,
   REPEATS,
   REPEAT_INTERVAL_MIN,
   buildReminders,
@@ -134,6 +135,26 @@ export function run() {
     buildReminders([med({ times: ['08:00'], taken: [момент(8, 0, -1)] })], now, { repeat: false, horizonDays: 2 })
       .length === 2,
   )
+
+
+  // ── потолок на число будильников ─────────────────────────────────────────
+  //
+  // Android держит не больше пятисот ожидающих будильников на приложение и
+  // лишние отбрасывает молча. Плотное расписание в потолок упирается.
+  {
+    const часы = Array.from({ length: 10 }, (_, i) => `${String(6 + i).padStart(2, '0')}:00`)
+    const плотно = buildReminders([med({ id: 'a', times: часы })], now, { repeat: true, horizonDays: 14 })
+    check(
+      'набор не перерастает системный предел',
+      плотно.length === MAX_REMINDERS,
+      `получилось ${плотно.length} при потолке ${MAX_REMINDERS}`,
+    )
+    check('обрезается хвост, а не начало', плотно[0].at < плотно[плотно.length - 1].at)
+    check(
+      'ближайшие сутки уцелели полностью',
+      плотно.filter((r) => r.day === начало(0)).length > 0,
+    )
+  }
 
   // ── идентификаторы ───────────────────────────────────────────────────────
   const много = buildReminders(

@@ -52,6 +52,7 @@ export { buildCalendar, countCalendarEvents, foldLine, doseTitle } from '../src/
 
 export {
   HORIZON_DAYS,
+  MAX_REMINDERS,
   REPEATS,
   REPEAT_INTERVAL_MIN,
   buildReminders,

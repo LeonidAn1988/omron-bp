@@ -6,7 +6,11 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.provider.Settings;
+import android.webkit.WebView;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -93,6 +97,42 @@ public class SystemSettings extends Plugin {
             result.put("restricted", null);
         }
         call.resolve(result);
+    }
+
+    /**
+     * Системная печать текущей страницы — она же «Сохранить в PDF».
+     *
+     * `window.print()` внутри WebView не делает ничего: диалога печати у него
+     * нет. Между тем отчёт врачу — то, ради чего дневник и ведут, и кнопка,
+     * которая молча ничего не делает, здесь хуже отсутствующей.
+     *
+     * Android умеет напечатать содержимое WebView штатно, и в системном
+     * диалоге среди принтеров есть «Сохранить в PDF» — то самое, что нужно,
+     * чтобы отправить отчёт файлом.
+     *
+     * Печать обязана запускаться из главного потока: WebView из другого потока
+     * трогать нельзя.
+     */
+    @PluginMethod
+    public void printPage(PluginCall call) {
+        String jobName = call.getString("jobName", "Отчёт");
+        getActivity().runOnUiThread(() -> {
+            try {
+                WebView webView = getBridge().getWebView();
+                PrintManager manager = (PrintManager) getContext().getSystemService(Context.PRINT_SERVICE);
+                if (webView == null || manager == null) {
+                    call.reject("печать недоступна на этом устройстве");
+                    return;
+                }
+                PrintDocumentAdapter adapter = webView.createPrintDocumentAdapter(jobName);
+                manager.print(jobName, adapter, new PrintAttributes.Builder().build());
+                JSObject result = new JSObject();
+                result.put("started", true);
+                call.resolve(result);
+            } catch (Exception error) {
+                call.reject("не удалось открыть печать", error);
+            }
+        });
     }
 
     /**

@@ -7,6 +7,7 @@
  * отдаётся системному «поделиться» по его адресу.
  */
 
+import { registerPlugin } from '@capacitor/core'
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 import type { FilePort } from '../ports'
@@ -39,6 +40,18 @@ async function writeToCache(filename: string, content: string): Promise<string> 
   return uri
 }
 
+/**
+ * Свой нативный плагин: системная печать содержимого WebView.
+ *
+ * Тот же плагин, что открывает системные экраны в напоминаниях, — описан здесь
+ * отдельно и узко, ровно тем методом, который нужен файлам.
+ */
+interface SystemSettingsPrint {
+  printPage(options: { jobName: string }): Promise<{ started: boolean }>
+}
+
+const SystemSettings = registerPlugin<SystemSettingsPrint>('SystemSettings')
+
 export const capacitorFiles: FilePort = {
   /**
    * «Сохранить» на телефоне — это тоже «поделиться».
@@ -70,6 +83,18 @@ export const capacitorFiles: FilePort = {
       const message = error instanceof Error ? error.message : String(error)
       if (/cancel/i.test(message)) return false
       throw error
+    }
+  },
+
+  async print(jobName: string) {
+    try {
+      // `window.print()` внутри WebView не делает ничего — диалога печати у
+      // него нет. Android печатает содержимое WebView штатно, и в списке
+      // принтеров есть «Сохранить в PDF»: именно так отчёт уходит врачу.
+      const { started } = await SystemSettings.printPage({ jobName })
+      return started
+    } catch {
+      return false
     }
   },
 }
