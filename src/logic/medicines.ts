@@ -90,12 +90,45 @@ export function perDayOf(medicine: Medicine): number | null {
  */
 export function projectedLeft(medicine: Medicine, now: number): number | null {
   const { left } = medicine
-  const perDay = perDayOf(medicine)
   if (left === null) return null
-  if (!medicine.leftAt || perDay === null || perDay <= 0) return left
-  const days = Math.floor((startOfDay(now) - startOfDay(medicine.leftAt)) / DAY)
-  if (days <= 0) return left
-  return Math.max(0, left - days * perDay)
+  const at = medicine.leftAt
+  if (!at) return left
+
+  const times = normalizeTimes(medicine.times ?? [])
+
+  // Без расписания приёмы не пересчитать — остаётся дневная норма.
+  if (times.length === 0) {
+    const perDay = perDayOf(medicine)
+    if (perDay === null || perDay <= 0) return left
+    const days = Math.floor((startOfDay(now) - startOfDay(at)) / DAY)
+    return days <= 0 ? left : Math.max(0, left - days * perDay)
+  }
+
+  // С расписанием считаем поштучно, а не сутками. Разница не косметическая:
+  // при подённом счёте отметка приёма сбрасывала точку отсчёта, и показанный
+  // остаток подскакивал вверх — человек, не отмечавший неделю, нажимал
+  // «принял» и видел, что таблеток стало больше.
+  const per = perTimeOf(medicine)
+  let spent = 0
+  for (let day = startOfDay(at); day <= startOfDay(now); day += DAY) {
+    for (const slot of dosesOn(medicine, day, now)) {
+      const planned = day + parseTime(slot.time)! * 60_000
+      // До подтверждения остатка — уже внутри подтверждённого числа.
+      if (planned <= at) continue
+      // Ещё не наступило — не потрачено.
+      if (planned > now) continue
+      if (slot.takenAt !== null) {
+        // Отметка сама списала штуки; при автосписании — наоборот, отметка
+        // остаток не трогает, и списывает как раз расчёт.
+        if (medicine.autoDeduct) spent += per
+        continue
+      }
+      // Неотмеченный прошедший приём считаем принятым: нажимать «принял»
+      // трижды в день согласится не всякий, а несписанный остаток врёт.
+      spent += per
+    }
+  }
+  return Math.max(0, left - spent)
 }
 
 /**
@@ -376,7 +409,16 @@ export function markTakenAt(medicine: Medicine, plannedTs: number, now: number):
   const horizon = now - KEEP_INTAKES_DAYS * DAY
   const taken = [...(medicine.taken ?? []).filter((t) => t >= horizon), plannedTs].sort((a, b) => a - b)
   if (medicine.autoDeduct) return { ...medicine, taken }
-  const left = medicine.left === null ? null : Math.max(0, medicine.left - perTimeOf(medicine))
+
+  // Отметка — это подтверждение: «на сейчас у меня столько». Поэтому за основу
+  // берётся расчётный остаток, а не подтверждённый: иначе всё, что израсходовано
+  // за дни без отметок, теряется, и число прыгает вверх.
+  const base = projectedLeft(medicine, now)
+  // Списывать штуки нужно только тогда, когда расчёт эту дозу ещё не посчитал:
+  // прошедший приём после подтверждения он уже учёл, и второе списание было бы
+  // двойным.
+  const учтено = !!medicine.leftAt && plannedTs > medicine.leftAt && plannedTs <= now
+  const left = base === null ? null : Math.max(0, base - (учтено ? 0 : perTimeOf(medicine)))
   return { ...medicine, taken, left, leftAt: now }
 }
 
@@ -499,11 +541,18 @@ export function markTaken(medicine: Medicine, now: number): Medicine {
 }
 
 /** Снять ошибочную отметку и вернуть штуки в остаток. */
+/**
+ * Снять отметку о приёме.
+ *
+ * Остаток при этом не меняется — и это осознанно. Снятая отметка не означает,
+ * что таблетка вернулась в упаковку: чаще всего человек отметил не тот приём и
+ * тут же отметит верный. Возвращать штуки «на всякий случай» опаснее, чем не
+ * возвращать: завышенный остаток отодвигает предупреждение «пора заказывать», а
+ * кончившееся лекарство от давления — это не неудобство. Настоящее число всегда
+ * можно ввести руками.
+ */
 export function undoTaken(medicine: Medicine, at: number): Medicine {
-  const taken = (medicine.taken ?? []).filter((t) => t !== at)
-  if (medicine.autoDeduct) return { ...medicine, taken }
-  const left = medicine.left === null ? null : medicine.left + perTimeOf(medicine)
-  return { ...medicine, taken, left, leftAt: Date.now() }
+  return { ...medicine, taken: (medicine.taken ?? []).filter((t) => t !== at) }
 }
 
 /**
