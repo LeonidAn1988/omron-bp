@@ -145,6 +145,24 @@ export const capacitorReminders: RemindersPort = {
 
   sounds: () => SOUNDS,
 
+  async exactTiming() {
+    try {
+      const { exact_alarm: состояние } = await LocalNotifications.checkExactNotificationSetting()
+      return состояние === 'granted'
+    } catch {
+      return null
+    }
+  },
+
+  async requestExactTiming() {
+    try {
+      const { exact_alarm: состояние } = await LocalNotifications.changeExactNotificationSetting()
+      return состояние === 'granted'
+    } catch {
+      return null
+    }
+  },
+
   async schedule(reminders: Reminder[], soundId: string) {
     await this.cancelAll()
     if (!reminders.length) return
@@ -152,6 +170,12 @@ export const capacitorReminders: RemindersPort = {
     await ensureChannel(soundId)
     lastSound = soundId
     await registerActions()
+
+    // Точное время — только если человек уже разрешил. Спрашивать отсюда
+    // нельзя: плагин уводит в системный экран без объяснений, посреди
+    // сохранения настроек. Разрешение просится отдельно, в разделе настроек,
+    // где рядом написано зачем.
+    const exact = (await this.exactTiming()) === true
     await LocalNotifications.schedule({
       notifications: reminders.map((item) => ({
         id: item.id,
@@ -164,18 +188,20 @@ export const capacitorReminders: RemindersPort = {
         extra: { slot: item.slot, day: item.day, step: item.step },
         // Два флага, и оба выяснены на живом телефоне, а не по документации.
         //
-        // `isExactNotification: false` — прямой отказ от точного будильника.
-        // По умолчанию плагин считает уведомление точным и, не найдя
-        // разрешения, уводит человека в системный экран «Будильники и
-        // напоминания». Разрешение мы сняли сознательно, поэтому экрана нет —
-        // и вызов висел навсегда, не поставив ни одного напоминания.
+        // `isExactNotification` включаем только когда разрешение уже есть.
+        // Иначе плагин уводит человека в системный экран «Будильники и
+        // напоминания» прямо посреди сохранения настроек, а если разрешение
+        // ещё и не объявлено — экрана нет и вызов висит навсегда, не поставив
+        // ни одного напоминания. Проверено: именно так и было.
         //
         // `allowWhileIdle: true` — иначе плагин ставит будильник типа RTC,
         // который телефон **не будит**. Напоминание в восемь утра не
         // прозвучало бы, пока телефон спит на тумбочке. С этим флагом идёт
-        // `setAndAllowWhileIdle(RTC_WAKEUP)`: он будит устройство, работает в
-        // режиме глубокого сна и особого разрешения не требует.
-        isExactNotification: false,
+        // пробуждающий будильник, работающий и в режиме глубокого сна.
+        isExactNotification: exact,
+        // Не обязательное: если разрешение отзовут, напоминания должны
+        // остаться — пусть неточные, — а не исчезнуть совсем.
+        isExactMandatory: false,
         schedule: { at: new Date(item.at), allowWhileIdle: true },
       })),
     })
@@ -215,6 +241,7 @@ export const capacitorReminders: RemindersPort = {
                 actionTypeId: ACTION_TYPE,
                 extra: event.notification.extra,
                 isExactNotification: false,
+                isExactMandatory: false,
                 schedule: { at: new Date(Date.now() + SNOOZE_MIN * 60_000), allowWhileIdle: true },
               },
             ],

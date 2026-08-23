@@ -40,6 +40,7 @@ export function Reminders({
   const [error, setError] = useState<string | null>(null)
   const [playing, setPlaying] = useState<string | null>(null)
   const [batteryRestricted, setBatteryRestricted] = useState<boolean | null>(null)
+  const [exact, setExact] = useState<boolean | null>(null)
   const audio = useRef<HTMLAudioElement | null>(null)
 
   const времена = reminderTimes(medicines)
@@ -48,6 +49,7 @@ export function Reminders({
     if (!supported) return
     setPermission(await port.permission())
     setBatteryRestricted(await port.isBatteryRestricted())
+    setExact(await port.exactTiming())
   }, [port, supported])
 
   useEffect(() => {
@@ -131,14 +133,14 @@ export function Reminders({
         <h2>Напоминания о приёме</h2>
       </div>
 
-      <label className="badge" style={{ whiteSpace: 'normal' }}>
+      <label className="optrow__label">
         <input
           type="checkbox"
           checked={enabled}
           disabled={busy}
           onChange={(event) => void включить(event.target.checked)}
         />
-        <span style={{ fontSize: 'var(--fs-2)', color: 'var(--text-primary)' }}>
+        <span className="optrow__title">
           Напоминать принять лекарства
           <span className="fact__note">
             {времена.length
@@ -203,13 +205,13 @@ export function Reminders({
       <Reveal open={действует}>
         <div className="stack" style={{ paddingTop: 'var(--space-5)', gap: 'var(--space-4)' }}>
           <div>
-            <label className="badge" style={{ whiteSpace: 'normal' }}>
+            <label className="optrow__label">
               <input
                 type="checkbox"
                 checked={repeat}
                 onChange={(event) => onPatch({ remindersRepeat: event.target.checked })}
               />
-              <span style={{ fontSize: 'var(--fs-2)', color: 'var(--text-primary)' }}>
+              <span className="optrow__title">
                 Повторять, пока не отмечу приём
                 <span className="fact__note">
                   ещё {REPEATS} раза каждые {REPEAT_INTERVAL_MIN} минут, потом приложение замолчит
@@ -231,12 +233,8 @@ export function Reminders({
 
           <div className="stack" style={{ gap: 'var(--space-2)' }}>
             {sounds.map((item) => (
-              <div
-                key={item.id}
-                className="row"
-                style={{ gap: 'var(--space-3)', alignItems: 'center', minHeight: 'var(--tap)' }}
-              >
-                <label className="badge" style={{ whiteSpace: 'normal', flex: 1 }}>
+              <div key={item.id} className="optrow">
+                <label className="optrow__label">
                   <input
                     type="radio"
                     name="reminder-sound"
@@ -246,14 +244,14 @@ export function Reminders({
                       послушать(item.id)
                     }}
                   />
-                  <span style={{ fontSize: 'var(--fs-2)', color: 'var(--text-primary)' }}>
+                  <span className="optrow__title">
                     {item.name}
                     <span className="fact__note">{item.hint}</span>
                   </span>
                 </label>
                 {item.id !== 'system' && (
                   <button
-                    className="btn btn--sm"
+                    className="btn btn--sm optrow__action"
                     onClick={() => послушать(item.id)}
                     aria-label={`Прослушать «${item.name}»`}
                   >
@@ -276,6 +274,35 @@ export function Reminders({
               приложение.
             </div>
           </div>
+
+          {/*
+            Точное время. Без разрешения система выдаёт будильник с окном,
+            которое растёт со временем: измерено на HUAWEI — десять минут у
+            ближайшего напоминания, двадцать две у следующего. Повторы через
+            пятнадцать минут при таком разбросе слипаются.
+
+            Спрашиваем здесь, а не в момент сохранения настроек: рядом видно
+            зачем, и человек решает сам.
+          */}
+          {exact === false && (
+            <Banner tone="warning">
+              <b>Напоминания приходят не вовремя</b>
+              <div style={{ marginTop: 4 }}>
+                Телефон откладывает их на десять–двадцать минут, чтобы сэкономить батарею. Разрешите точное время — и
+                напоминание придёт в тот час, который вы назначили.
+              </div>
+              <button
+                className="btn btn--sm"
+                style={{ marginTop: 'var(--space-3)' }}
+                onClick={() => void port.requestExactTiming().then(setExact)}
+              >
+                Разрешить точное время
+              </button>
+            </Banner>
+          )}
+          {exact === true && (
+            <div className="muted">Точное время разрешено — напоминание придёт минута в минуту.</div>
+          )}
 
           {/*
             Главная причина молчащих напоминаний на Android — и проверено на
