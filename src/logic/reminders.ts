@@ -62,6 +62,20 @@ export function doseLine(medicine: Medicine): string {
   return хвост ? `${голова} — ${хвост}` : голова
 }
 
+/**
+ * Короткая строка для свёрнутого уведомления.
+ *
+ * В свёрнутом виде Android показывает одну строку и обрезает остальное
+ * многоточием: при двух препаратах человек видел первый и «…». Здесь названия
+ * без дозировок — они умещаются, и сразу понятно, сколько всего ждёт.
+ * Подробности с дозировками остаются в развёрнутом виде.
+ */
+export function shortBody(names: string[]): string {
+  if (names.length === 1) return names[0]
+  if (names.length === 2) return `${names[0]} и ${names[1]}`
+  return `${names[0]}, ${names[1]} и ещё ${names.length - 2}`
+}
+
 export const formatSlot = (minutes: number) =>
   `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
 
@@ -129,7 +143,9 @@ export function buildReminders(
       })
       if (!ждут.length) return
 
-      const body = [...ждут].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map(doseLine).join('\n')
+      const поПорядку = [...ждут].sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+      const подробно = поПорядку.map(doseLine).join('\n')
+      const коротко = shortBody(поПорядку.map((m) => m.name))
       const шагов = options.repeat ? REPEATS + 1 : 1
 
       for (let step = 0; step < шагов; step++) {
@@ -143,7 +159,8 @@ export function buildReminders(
             step === 0
               ? `${partOfDay(минуты)} — ${time}`
               : `Напоминание: приём в ${time} не отмечен`,
-          body,
+          body: коротко,
+          details: подробно,
           at,
           slot: time,
           day: день,

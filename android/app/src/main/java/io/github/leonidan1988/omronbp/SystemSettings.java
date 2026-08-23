@@ -1,5 +1,6 @@
 package io.github.leonidan1988.omronbp;
 
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -90,6 +91,30 @@ public class SystemSettings extends Plugin {
             // Прошивка могла не ответить. Молчим, а не пугаем: интерфейс на
             // `null` просто не показывает предупреждение.
             result.put("restricted", null);
+        }
+        call.resolve(result);
+    }
+
+    /**
+     * Включён ли сейчас режим «Не беспокоить».
+     *
+     * В этом режиме уведомление приходит молча — приложение об этом узнать
+     * обязано, потому что беззвучное напоминание о лекарстве равно
+     * отсутствующему. Разрешения не требует: читаем состояние, не меняем его.
+     */
+    @PluginMethod
+    public void isDoNotDisturbOn(PluginCall call) {
+        JSObject result = new JSObject();
+        try {
+            NotificationManager manager =
+                    (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+            int фильтр = manager == null
+                    ? NotificationManager.INTERRUPTION_FILTER_ALL
+                    : manager.getCurrentInterruptionFilter();
+            result.put("on", фильтр != NotificationManager.INTERRUPTION_FILTER_ALL
+                    && фильтр != NotificationManager.INTERRUPTION_FILTER_UNKNOWN);
+        } catch (Exception error) {
+            result.put("on", null);
         }
         call.resolve(result);
     }

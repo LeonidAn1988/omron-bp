@@ -30,6 +30,7 @@ export const webReminders: RemindersPort = {
   onAction: () => () => undefined,
   exactTiming: async () => null,
   requestExactTiming: async () => null,
+  isQuietModeOn: async () => null,
   isBatteryRestricted: async () => null,
   openSoundSettings: async () => false,
   openBatterySettings: async () => false,

@@ -31,6 +31,7 @@ interface SystemSettingsPlugin {
   openAppNotifications(): Promise<{ opened: boolean }>
   openAppDetails(): Promise<{ opened: boolean }>
   isBatteryRestricted(): Promise<{ restricted: boolean | null }>
+  isDoNotDisturbOn(): Promise<{ on: boolean | null }>
   openBatteryOptimization(): Promise<{ opened: boolean }>
 }
 
@@ -181,6 +182,11 @@ export const capacitorReminders: RemindersPort = {
         id: item.id,
         title: item.title,
         body: item.body,
+        // Развёрнутый вид: полный состав приёма с дозировками. Без этого
+        // Android обрезает вторую строку многоточием, и второй препарат
+        // человек просто не видит.
+        largeBody: item.details,
+        summaryText: item.title,
         channelId: channelId(soundId),
         actionTypeId: ACTION_TYPE,
         // Приём и сутки едут вместе с уведомлением: по ним приложение поймёт,
@@ -272,6 +278,15 @@ export const capacitorReminders: RemindersPort = {
       } catch {
         return false
       }
+    }
+  },
+
+  async isQuietModeOn() {
+    try {
+      const { on } = await SystemSettings.isDoNotDisturbOn()
+      return on
+    } catch {
+      return null
     }
   },
 

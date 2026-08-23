@@ -41,6 +41,7 @@ export function Reminders({
   const [playing, setPlaying] = useState<string | null>(null)
   const [batteryRestricted, setBatteryRestricted] = useState<boolean | null>(null)
   const [exact, setExact] = useState<boolean | null>(null)
+  const [quiet, setQuiet] = useState<boolean | null>(null)
   const audio = useRef<HTMLAudioElement | null>(null)
 
   const времена = reminderTimes(medicines)
@@ -50,6 +51,7 @@ export function Reminders({
     setPermission(await port.permission())
     setBatteryRestricted(await port.isBatteryRestricted())
     setExact(await port.exactTiming())
+    setQuiet(await port.isQuietModeOn())
   }, [port, supported])
 
   useEffect(() => {
@@ -274,6 +276,28 @@ export function Reminders({
               приложение.
             </div>
           </div>
+
+          {/*
+            «Не беспокоить» делает напоминание беззвучным, а беззвучное
+            напоминание о лекарстве равно отсутствующему. Проверено на живом
+            телефоне: уведомление пришло вовремя и молча.
+          */}
+          {quiet === true && (
+            <Banner tone="warning">
+              <b>Сейчас включён режим «Не беспокоить»</b>
+              <div style={{ marginTop: 4 }}>
+                Напоминание придёт, но без звука — его легко не заметить. Разрешите этому приложению звучать и в тихом
+                режиме: в открывшемся экране включите «Переопределить режим „Не беспокоить“».
+              </div>
+              <button
+                className="btn btn--sm"
+                style={{ marginTop: 'var(--space-3)' }}
+                onClick={() => void port.openSoundSettings(sound)}
+              >
+                Открыть настройки уведомления
+              </button>
+            </Banner>
+          )}
 
           {/*
             Точное время. Без разрешения система выдаёт будильник с окном,

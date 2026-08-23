@@ -58,6 +58,7 @@ export {
   doseLine,
   reminderId,
   reminderTimes,
+  shortBody,
 } from '../src/logic/reminders'
 
 export {
