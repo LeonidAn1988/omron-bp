@@ -81,7 +81,10 @@ export function useReminders({ medicines, enabled, sound, repeat, ready, onOpen,
       enabled,
       sound,
       repeat,
-      wanted.map((item) => [item.id, item.title, item.body]),
+      // Подробный текст обязан входить в слепок: смена дозировки не меняет ни
+      // идентификатор, ни короткую строку с названиями, и без этого в
+      // уведомлении осталась бы старая цифра.
+      wanted.map((item) => [item.id, item.title, item.body, item.details]),
     ])
     if (applied.current === снимок) return
 
