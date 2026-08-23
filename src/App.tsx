@@ -228,7 +228,11 @@ export default function App() {
 
   const handleSaveMedicine = useCallback(
     async (item: Medicine) => {
-      await putMedicine(item.id ? item : { ...item, id: newMedicineId() })
+      // День заведения проставляется здесь и только здесь — в единственном
+      // месте, где препарат появляется в аптечке. Без него расписание
+      // распространилось бы на всё прошлое, и свежий препарат показал бы
+      // пропуски за два месяца назад.
+      await putMedicine(item.id ? item : { ...item, id: newMedicineId(), since: Date.now() })
       await refreshMedicines()
     },
     [refreshMedicines],

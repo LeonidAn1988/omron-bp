@@ -1,42 +1,43 @@
 /** Когда препарат считается кончающимся и когда просроченным. */
 import {
-  medicineAlert,
-  supplyDays,
-  daysToExpiry,
-  sortMedicines,
-  countAlerts,
-  monthToExpiry,
-  expiryToMonth,
   EXPIRY_SOON_DAYS,
+  KEEP_INTAKES_DAYS,
+  RESTOCK_DAYS,
   SUPPLY_SOON_DAYS,
-  plural,
-  perDayOf,
-  perTimeOf,
-  projectedLeft,
-  parseTime,
-  formatTime,
-  normalizeTimes,
-  dosesToday,
-  pendingToday,
-  markTaken,
-  undoTaken,
-  setLeft,
-  effectiveLeft,
-  isEstimated,
-  runsOutAt,
-  shortForm,
-  restockList,
-  restockText,
+  addPack,
+  adherence,
+  countAlerts,
+  dayStatus,
+  daysToExpiry,
   displayAlert,
   dosesOn,
-  dayStatus,
-  partOfDay,
+  dosesToday,
+  effectiveLeft,
+  expiryToMonth,
+  formatTime,
+  isEstimated,
+  markTaken,
   markTakenAt,
-  addPack,
+  medicineAlert,
+  monthToExpiry,
+  normalizeTimes,
   packsNeeded,
-  adherence,
-  RESTOCK_DAYS,
-  KEEP_INTAKES_DAYS,
+  parseTime,
+  partOfDay,
+  pendingToday,
+  perDayOf,
+  perTimeOf,
+  plural,
+  projectedLeft,
+  restockList,
+  restockText,
+  runsOutAt,
+  setLeft,
+  shortForm,
+  sortMedicines,
+  supplyDays,
+  trackedSince,
+  undoTaken,
 } from './build/api.mjs'
 
 export function run() {
@@ -483,6 +484,47 @@ export function run() {
     общий.planned === 10 && общий.taken === 9,
     `получилось ${общий.taken}/${общий.planned}`,
   )
+
+
+
+  // ── с какого дня препарат ведётся ────────────────────────────────────────
+  //
+  // Расписание не действует задним числом: препарат, заведённый сегодня, вчера
+  // пропущен не был — его не было. Иначе первый же заход в аптечку размечал
+  // полосу дней сплошными провалами.
+  {
+    const сегодня = new Date(2026, 7, 24, 12, 0, 0).getTime()
+    const день = (сдвиг) => new Date(2026, 7, 24 + сдвиг, 0, 0, 0).getTime()
+    const базовый = { id: 'm', name: 'Лозартан', dose: '50 мг', left: 30, perDay: null, expires: null, times: ['08:00'] }
+
+    const свежий = { ...базовый, since: сегодня }
+    check('заведённый сегодня: вчера приёмов нет', dosesOn(свежий, день(-1), сегодня).length === 0)
+    check('заведённый сегодня: сегодня приём есть', dosesOn(свежий, день(0), сегодня).length === 1)
+    check('заведённый сегодня: завтра приём есть', dosesOn(свежий, день(1), сегодня).length === 1)
+    check(
+      'полоса дней не размечает прошлое пропусками',
+      dayStatus([свежий], день(-1), сегодня) === 'empty',
+      dayStatus([свежий], день(-1), сегодня),
+    )
+
+    const старый = { ...базовый, since: день(-3) }
+    check('заведённый три дня назад: позавчера приём есть', dosesOn(старый, день(-2), сегодня).length === 1)
+    check('заведённый три дня назад: четыре дня назад приёмов нет', dosesOn(старый, день(-4), сегодня).length === 0)
+
+    // Записи, сделанные до появления поля, ведут себя как раньше — иначе
+    // человек, забывший отметить вчерашний приём, не смог бы это исправить.
+    const без = { ...базовый }
+    check('без даты заведения и без отметок ограничения нет', dosesOn(без, день(-5), сегодня).length === 1)
+    check(
+      'без даты заведения начало берётся из первой отметки',
+      trackedSince({ ...базовый, taken: [день(-2) + 8 * 3600_000] }, сегодня) === день(-2),
+    )
+    check(
+      'до первой отметки приёмов нет',
+      dosesOn({ ...базовый, taken: [день(-2) + 8 * 3600_000] }, день(-3), сегодня).length === 0,
+    )
+    check('явная дата важнее отметок', trackedSince({ ...базовый, since: день(-1), taken: [день(-5)] }, сегодня) === день(-1))
+  }
 
   return failures
 }

@@ -272,11 +272,37 @@ export function dosesToday(medicine: Medicine, now: number): DoseSlot[] {
  * только относительно настоящего времени, иначе вчерашние приёмы выглядели бы
  * просроченными даже там, где отметка стоит.
  */
+/**
+ * С какого дня у препарата вообще есть расписание.
+ *
+ * Расписание не действует задним числом. Препарат, заведённый сегодня, не был
+ * пропущен вчера — его просто не было, и размечать вчера пропуском значит
+ * врать человеку в лицо.
+ *
+ * Порядок источников:
+ * 1. явная дата заведения — она есть у всего, что добавлено в аптечку;
+ * 2. первая отметка о приёме — значит, к тому дню препарат уже существовал;
+ * 3. ограничения нет.
+ *
+ * Третий случай — препараты, заведённые до появления этого поля. Считать их
+ * начало сегодняшним днём нельзя: человек, который забыл отметить вчерашний
+ * приём, лишился бы возможности это исправить. Пусть у старых записей всё
+ * останется как было, а новые ведут себя правильно.
+ */
+export function trackedSince(medicine: Medicine, now: number): number {
+  void now
+  if (medicine.since !== undefined) return startOfDay(medicine.since)
+  const marks = medicine.taken ?? []
+  return marks.length ? startOfDay(Math.min(...marks)) : Number.NEGATIVE_INFINITY
+}
+
 export function dosesOn(medicine: Medicine, day: number, now: number): DoseSlot[] {
   const times = normalizeTimes(medicine.times ?? [])
   if (times.length === 0) return []
 
   const dayStart = startOfDay(day)
+  // До дня заведения расписания не существует.
+  if (dayStart < trackedSince(medicine, now)) return []
   const marks = (medicine.taken ?? []).filter((t) => t >= dayStart && t < dayStart + DAY).sort((a, b) => a - b)
   const planned = times.map((time) => dayStart + parseTime(time)! * 60_000)
 
