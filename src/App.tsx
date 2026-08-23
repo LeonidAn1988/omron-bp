@@ -29,6 +29,7 @@ import { countAlerts, pendingToday } from './logic/medicines'
 import type { ImportResult } from './logic/io'
 import { applyTheme } from './ui/theme'
 import { useBackup } from './ui/useBackup'
+import { useReminders } from './ui/useReminders'
 import { BackupNudge } from './ui/Backup'
 import { Settings } from './ui/Settings'
 import { Report } from './ui/Report'
@@ -254,6 +255,11 @@ export default function App() {
   )
 
   const backup = useBackup(measurements, medicines, settings, updateSettings, ready)
+
+  // Напоминания живут здесь, а не на экране настроек: расписание правится в
+  // аптечке, и пересобирать набор надо в тот же момент, а не при следующем
+  // заходе в настройки.
+  useReminders(medicines, settings.remindersOn, settings.reminderSound, ready)
 
   const glucoseTargets: GlucoseTargets = useMemo(
     () => ({
@@ -606,6 +612,7 @@ export default function App() {
         <Settings
           settings={settings}
           onChange={updateSettings}
+          medicines={medicines}
           measurements={measurements}
           onRestore={handleRestore}
           onClearAll={handleClearAll}

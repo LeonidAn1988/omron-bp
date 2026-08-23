@@ -312,6 +312,19 @@ export class OmronTransport {
 
     const response = await this.unlockTransceive(Uint8Array.from([0x00, ...key]))
     if (response[0] !== 0x80 || response[1] !== 0x00) {
+      // Отказ на запись — ещё не беда: прибор так отвечает и когда наш ключ в
+      // нём уже лежит. Проверено на RS7 23 августа 2026: повторное сопряжение
+      // даёт `80 01`, при том что `01 + ключ` прибор принимает и память
+      // открывает. Спрашиваем прибор напрямую, вместо того чтобы пугать
+      // человека словом «не получилось» там, где всё в порядке.
+      this.log('debug', `запись ключа отклонена (${hex(response.subarray(0, 2))}) — проверяем, не записан ли он уже`)
+      const check = await this.unlockTransceive(Uint8Array.from([0x01, ...key]))
+      if (check[0] === 0x81 && check[1] === 0x00) {
+        await this.stopUnlockNotifications()
+        await this.rxChars[0].stopNotifications()
+        this.log('info', 'прибор уже сопряжён с этим приложением — ключ переписывать не нужно')
+        return
+      }
       throw new OmronProtocolError(`Прибор отклонил запись ключа (ответ ${hex(response.subarray(0, 2))})`)
     }
 

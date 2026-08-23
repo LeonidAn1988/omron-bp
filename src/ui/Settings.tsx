@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
-import type { Measurement, SectionKey, Settings as SettingsData, ThemeChoice } from '../types'
+import type { Measurement, Medicine, SectionKey, Settings as SettingsData, ThemeChoice } from '../types'
 import { DEFAULT_PAIRING_KEY } from '../ble/session'
+import { Reminders } from './Reminders'
 import { download, parseImportFile, toCsv, toJson, type ImportResult } from '../logic/io'
 import { platform } from '../platform/ports'
 import { Banner, Field } from './bits'
@@ -34,6 +35,7 @@ export function Settings({
   settings,
   onChange,
   measurements,
+  medicines,
   onRestore,
   onClearAll,
   showUserPicker,
@@ -41,6 +43,7 @@ export function Settings({
 }: {
   settings: SettingsData
   onChange: (next: SettingsData) => void
+  medicines: Medicine[]
   measurements: Measurement[]
   onRestore: (incoming: ImportResult) => Promise<{ added: number; medicines: number; settingsRestored: boolean }>
   onClearAll: () => Promise<void>
@@ -162,6 +165,13 @@ export function Settings({
       </div>
 
       <DataSafety status={backup} />
+
+      <Reminders
+        medicines={medicines}
+        enabled={settings.remindersOn}
+        sound={settings.reminderSound}
+        onPatch={patch}
+      />
 
       <div className="card">
         <div className="card__head">

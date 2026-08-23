@@ -39,6 +39,7 @@ const suites = [
   ['Аптечка: остатки и сроки', await import('./medicines.test.mjs')],
   ['Справочник лекарств', await import('./drugs.test.mjs')],
   ['Расписание в календарь', await import('./calendar.test.mjs')],
+  ['Напоминания о приёме', await import('./reminders.test.mjs')],
   ['Переносимость ядра', await import('./portability.test.mjs')],
 ]
 

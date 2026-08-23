@@ -23,6 +23,10 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'auto',
   sections: { overview: true, bp: true, glucose: true, intake: true, cabinet: true },
   startTab: 'overview',
+  remindersOn: false,
+  // Не системный звук: напоминание о лекарстве должно отличаться от почты и
+  // мессенджера, иначе человек перестаёт на него реагировать.
+  reminderSound: 'kolokolchik',
   backupLastAt: null,
   backupLastCount: 0,
 }

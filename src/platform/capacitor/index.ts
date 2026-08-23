@@ -11,6 +11,7 @@ import { webStorage } from '../web/storage'
 import { capacitorBluetooth } from './bluetooth'
 import { capacitorFiles } from './files'
 import { capacitorBackup } from './backup'
+import { capacitorReminders } from './reminders'
 
 /**
  * Хранилище берём браузерное: IndexedDB внутри WebView работает, и переписывать
@@ -38,6 +39,7 @@ export const capacitorPlatform: Platform = {
   storage: capacitorStorage,
   files: capacitorFiles,
   backup: capacitorBackup,
+  reminders: capacitorReminders,
 }
 
 /**

@@ -1,0 +1,92 @@
+package io.github.leonidan1988.omronbp;
+
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
+
+import com.getcapacitor.JSObject;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
+import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.CapacitorPlugin;
+
+/**
+ * Переходы на системные экраны, которых нет в готовых плагинах.
+ *
+ * Звук и громкость уведомления на Android 8 и новее принадлежат не приложению,
+ * а каналу уведомлений, и меняются только в настройках системы. Приложение
+ * вправе туда привести, но не вправе менять за человека — поэтому здесь ровно
+ * переходы, без единой записи в настройки.
+ *
+ * Второй экран — энергосбережение. Huawei, Xiaomi и Samsung усыпляют фоновые
+ * приложения, и напоминание о лекарстве не приходит вовсе. Это главная причина
+ * молчащих будильников на Android, и человеку нужен путь к тому переключателю,
+ * а не совет «поищите в настройках».
+ */
+@CapacitorPlugin(name = "SystemSettings")
+public class SystemSettings extends Plugin {
+
+    /** Экран одного канала уведомлений: мелодия, громкость, вибрация, важность. */
+    @PluginMethod
+    public void openChannel(PluginCall call) {
+        String channelId = call.getString("channelId");
+        if (channelId == null) {
+            call.reject("не указан канал");
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            // До Android 8 каналов не существует, и звук задаётся самим
+            // уведомлением. Отдельного экрана нет — ведём в общие настройки.
+            openAppNotifications(call);
+            return;
+        }
+        Intent intent = new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName())
+                .putExtra(Settings.EXTRA_CHANNEL_ID, channelId)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        start(intent, call);
+    }
+
+    /** Все уведомления приложения — запасной путь, если канал ещё не создан. */
+    @PluginMethod
+    public void openAppNotifications(PluginCall call) {
+        Intent intent;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+        } else {
+            intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                    .setData(Uri.parse("package:" + getContext().getPackageName()));
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        start(intent, call);
+    }
+
+    /**
+     * Настройки приложения: оттуда человек доходит до «Батарея» и снимает
+     * ограничения. Прямого экрана энергосбережения у производителей нет —
+     * у каждого он свой и по имени не вызывается.
+     */
+    @PluginMethod
+    public void openAppDetails(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.parse("package:" + getContext().getPackageName()))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        start(intent, call);
+    }
+
+    private void start(Intent intent, PluginCall call) {
+        try {
+            getContext().startActivity(intent);
+            JSObject result = new JSObject();
+            result.put("opened", true);
+            call.resolve(result);
+        } catch (Exception error) {
+            // Экран может отсутствовать на нестандартной прошивке. Сообщаем
+            // честно, чтобы интерфейс сказал «откройте настройки сами», а не
+            // сделал вид, что перешёл.
+            call.reject("не удалось открыть системный экран", error);
+        }
+    }
+}

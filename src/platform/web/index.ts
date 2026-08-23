@@ -11,6 +11,7 @@ import { webBluetooth } from './bluetooth'
 import { webStorage } from './storage'
 import { webFiles } from './files'
 import { webBackup } from './backup'
+import { webReminders } from './reminders'
 
 export const webPlatform: Platform = {
   kind: 'web',
@@ -18,6 +19,7 @@ export const webPlatform: Platform = {
   storage: webStorage,
   files: webFiles,
   backup: webBackup,
+  reminders: webReminders,
 }
 
 export function installWebPlatform() {
