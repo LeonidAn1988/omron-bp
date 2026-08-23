@@ -9,6 +9,7 @@ import {
   DEFAULT_PAIRING_KEY,
   OmronProtocolError,
   OmronTransport,
+  OMRON_ADVERTISED_SERVICES,
   OMRON_SERVICE,
   PairingRequiredError,
   RX_CHANNELS,
@@ -46,7 +47,12 @@ export function isCancellation(error: unknown): boolean {
 
 /** Открывает системный выбор устройства. Обязан вызываться из обработчика жеста. */
 export function pickDevice(showAll = false): Promise<GattDevice> {
-  return platform().bluetooth.pickDevice({ serviceUuid: OMRON_SERVICE, namePrefixes: NAME_PREFIXES, showAll })
+  return platform().bluetooth.pickDevice({
+    serviceUuid: OMRON_SERVICE,
+    advertisedServices: OMRON_ADVERTISED_SERVICES,
+    namePrefixes: NAME_PREFIXES,
+    showAll,
+  })
 }
 
 /** Ранее разрешённые устройства — позволяет переподключаться без диалога выбора. */

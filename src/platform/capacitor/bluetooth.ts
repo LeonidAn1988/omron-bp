@@ -277,16 +277,36 @@ export const capacitorBluetooth: BluetoothPort = {
    * Если нет — здесь понадобится собственное сканирование через `requestLEScan`
    * со своим списком устройств.
    */
-  async pickDevice({ serviceUuid, namePrefixes, showAll }: DevicePickerOptions) {
+  /**
+   * Искать прибор по тому, что он объявляет в эфире, а не по рабочему сервису.
+   *
+   * Прежняя версия фильтровала по `serviceUuid` — фирменному сервису Omron, — и
+   * не находила ровно ничего: тонометр его в рекламном пакете не объявляет.
+   * Человек видел пустой список, нажимал «показать все» и получал восемь
+   * десятков безымянных MAC-адресов. Проверено на живом RS7 23 августа 2026.
+   *
+   * Веб-версия этим не страдала: там фильтры складываются по «или», и совпадение
+   * по имени срабатывало вместо сервиса. У плагина фильтры складываются по «и»,
+   * поэтому имя сюда не добавляем — иначе сузим до пустоты во второй раз.
+   */
+  async pickDevice({ serviceUuid, advertisedServices, namePrefixes, showAll }: DevicePickerOptions) {
     await initialize()
+    const searchBy = advertisedServices?.length ? advertisedServices : [serviceUuid]
+    // Рабочий сервис обязателен в необязательных: без него подключение к нему
+    // после выбора запрещено.
+    const optionalServices = [...new Set([serviceUuid, ...searchBy])]
     const device = await serial(() =>
       BleClient.requestDevice(
         showAll
-          ? { optionalServices: [serviceUuid] }
+          ? { optionalServices }
           : {
-              services: [serviceUuid],
-              optionalServices: [serviceUuid],
-              ...(namePrefixes.length === 1 ? { namePrefix: namePrefixes[0] } : {}),
+              services: searchBy,
+              optionalServices,
+              // Имя дополняет фильтр, только когда искать больше не по чему:
+              // прибор без объявленных сервисов иначе не отличить от прочих.
+              ...(searchBy.length === 1 && namePrefixes.length === 1 && !advertisedServices?.length
+                ? { namePrefix: namePrefixes[0] }
+                : {}),
             },
       ),
     )
@@ -303,6 +323,25 @@ export const capacitorBluetooth: BluetoothPort = {
     } catch {
       return []
     }
+  },
+
+  /**
+   * Проверено на живом приборе 17 августа 2026: при выключенной службе
+   * местоположения поиск возвращает пустоту, хотя радиомодуль включён,
+   * разрешения выданы, а тонометр вещает в эфир и виден веб-версии.
+   */
+  async isLocationBlockingScan() {
+    try {
+      await initialize()
+      if (!(await BleClient.isEnabled())) return false
+      return !(await BleClient.isLocationEnabled())
+    } catch {
+      return null
+    }
+  },
+
+  async openLocationSettings() {
+    await BleClient.openLocationSettings()
   },
 
   /**

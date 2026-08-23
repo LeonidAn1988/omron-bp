@@ -133,12 +133,21 @@ export const webBluetooth: BluetoothPort = {
     }
   },
 
-  async pickDevice({ serviceUuid, namePrefixes, showAll }: DevicePickerOptions) {
+  async pickDevice({ serviceUuid, advertisedServices = [], namePrefixes, showAll }: DevicePickerOptions) {
+    // Рабочий сервис и объявленный в эфире — не одно и то же: к первому мы
+    // подключаемся, по второму ищем. Оба нужны в `optionalServices`, иначе
+    // браузер запретит обращаться к сервису, которого не было в запросе.
+    const optionalServices = [...new Set([serviceUuid, ...advertisedServices])]
     const options: RequestDeviceOptions = showAll
-      ? { acceptAllDevices: true, optionalServices: [serviceUuid] }
+      ? { acceptAllDevices: true, optionalServices }
       : {
-          filters: [...namePrefixes.map((namePrefix) => ({ namePrefix })), { services: [serviceUuid] }],
-          optionalServices: [serviceUuid],
+          // Фильтры складываются по «или»: подойдёт совпадение по имени либо по
+          // любому из сервисов.
+          filters: [
+            ...namePrefixes.map((namePrefix) => ({ namePrefix })),
+            ...[serviceUuid, ...advertisedServices].map((service) => ({ services: [service] })),
+          ],
+          optionalServices,
         }
     return new WebDevice(await navigator.bluetooth.requestDevice(options))
   },

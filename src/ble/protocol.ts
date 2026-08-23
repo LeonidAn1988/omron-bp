@@ -21,6 +21,18 @@ import type { GattCharacteristic, GattService } from '../platform/ports'
 
 export const OMRON_SERVICE = 'ecbe3980-c9a2-11e1-b1bd-0002a5d5c51b'
 
+/**
+ * Сервис, который прибор объявляет в эфире, — стандартный «Blood Pressure».
+ *
+ * С рабочим `OMRON_SERVICE` он не совпадает, и это не мелочь, а ловушка: по
+ * фирменному сервису идёт выгрузка памяти, но в рекламный пакет он не попадает,
+ * поэтому искать прибор по нему нельзя — не найдётся ничего.
+ *
+ * Измерено на RS7 Intelli IT 23 августа 2026: в эфире `BLESmart_0000024400…`,
+ * uuids ровно `[00001810-…]`, производитель 526 (Omron Healthcare).
+ */
+export const OMRON_ADVERTISED_SERVICES = ['00001810-0000-1000-8000-00805f9b34fb']
+
 /** Каналы notify: прибор -> мы */
 export const RX_CHANNELS = [
   '49123040-aee8-11e1-a74d-0002a5d5c51b',
