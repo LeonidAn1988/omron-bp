@@ -23,7 +23,7 @@
 
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { registerPlugin } from '@capacitor/core'
-import type { Reminder, ReminderPermission, ReminderSound, RemindersPort } from '../ports'
+import type { Reminder, ReminderAction, ReminderPermission, ReminderSound, RemindersPort } from '../ports'
 
 /** Свой нативный плагин: переходы на системные экраны. */
 interface SystemSettingsPlugin {
@@ -51,6 +51,45 @@ const SOUNDS: ReminderSound[] = [
  * требует нового имени.
  */
 const CHANNEL_PREFIX = 'omron-meds-v1-'
+
+/**
+ * Кнопки прямо в уведомлении — главный выигрыш всей затеи.
+ *
+ * «Принял» с заблокированного экрана это одно касание, а не «разблокировать,
+ * найти приложение, найти препарат, нажать». Оговорка: приложение при этом
+ * всё равно запускается — у Capacitor нет фонового обработчика для локальных
+ * уведомлений, и обойти это можно только своим нативным приёмником.
+ */
+const ACTION_TYPE = 'omron-dose'
+const SNOOZE_MIN = 15
+
+/**
+ * Мелодия, выбранная в последний раз. Нужна отложенному напоминанию: оно
+ * создаётся в ответ на нажатие, когда настроек под рукой нет, а прийти обязано
+ * тем же звуком, что и остальные — иначе человек его не узнает.
+ */
+let lastSound = 'system'
+
+let actionsReady: Promise<void> | null = null
+
+function registerActions(): Promise<void> {
+  if (!actionsReady) {
+    actionsReady = LocalNotifications.registerActionTypes({
+      types: [
+        {
+          id: ACTION_TYPE,
+          actions: [
+            { id: 'taken', title: 'Принял' },
+            { id: 'snooze', title: `Отложить ${SNOOZE_MIN} мин` },
+          ],
+        },
+      ],
+    }).catch(() => {
+      actionsReady = null
+    })
+  }
+  return actionsReady
+}
 
 const channelId = (soundId: string) => CHANNEL_PREFIX + soundId
 
@@ -108,16 +147,19 @@ export const capacitorReminders: RemindersPort = {
     if (!reminders.length) return
 
     await ensureChannel(soundId)
+    lastSound = soundId
+    await registerActions()
     await LocalNotifications.schedule({
       notifications: reminders.map((item) => ({
         id: item.id,
         title: item.title,
         body: item.body,
         channelId: channelId(soundId),
-        // `repeats` с `on` — ежедневное повторение в заданное время. Секунды
-        // задаём нулём явно: без них система подставляет текущие, и напоминание
-        // приходит в 08:00:37.
-        schedule: { on: { hour: item.hour, minute: item.minute, second: 0 }, repeats: true, allowWhileIdle: false },
+        actionTypeId: ACTION_TYPE,
+        // Приём и сутки едут вместе с уведомлением: по ним приложение поймёт,
+        // какую именно отметку ставить, когда человек нажмёт «Принял».
+        extra: { slot: item.slot, day: item.day, step: item.step },
+        schedule: { at: new Date(item.at), allowWhileIdle: false },
       })),
     })
   },
@@ -131,6 +173,45 @@ export const capacitorReminders: RemindersPort = {
   async scheduled() {
     const { notifications } = await LocalNotifications.getPending()
     return notifications.length
+  },
+
+  onAction(handler: (action: ReminderAction) => void) {
+    let живо = true
+    const подписка = LocalNotifications.addListener('localNotificationActionPerformed', (event) => {
+      if (!живо) return
+      const extra = (event.notification.extra ?? {}) as { slot?: string; day?: number }
+      if (typeof extra.slot !== 'string' || typeof extra.day !== 'number') return
+
+      if (event.actionId === 'snooze') {
+        // Откладывание — целиком забота платформы: приложению незачем знать,
+        // что человек попросил напомнить попозже, набор от этого не меняется.
+        void ensureChannel(lastSound).then(() =>
+          LocalNotifications.schedule({
+            notifications: [
+              {
+                // Свой диапазон идентификаторов: отложенное не должно затирать
+                // штатные напоминания и не должно ими затираться.
+                id: 900_000 + (event.notification.id % 100_000),
+                title: event.notification.title,
+                body: event.notification.body ?? '',
+                channelId: channelId(lastSound),
+                actionTypeId: ACTION_TYPE,
+                extra: event.notification.extra,
+                schedule: { at: new Date(Date.now() + SNOOZE_MIN * 60_000), allowWhileIdle: false },
+              },
+            ],
+          }),
+        )
+        return
+      }
+
+      handler({ kind: event.actionId === 'taken' ? 'taken' : 'open', slot: extra.slot, day: extra.day })
+    })
+
+    return () => {
+      живо = false
+      void подписка.then((item) => item.remove())
+    }
   },
 
   async openSoundSettings(soundId: string) {

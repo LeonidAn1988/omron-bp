@@ -25,7 +25,7 @@ import { Intake } from './ui/Intake'
 import { Cabinet } from './ui/Cabinet'
 import { Entry } from './ui/Entry'
 import { Sync } from './ui/Sync'
-import { countAlerts, pendingToday } from './logic/medicines'
+import { countAlerts, dosesOn, markTakenAt, normalizeTimes, parseTime, pendingToday } from './logic/medicines'
 import type { ImportResult } from './logic/io'
 import { applyTheme } from './ui/theme'
 import { useBackup } from './ui/useBackup'
@@ -259,7 +259,41 @@ export default function App() {
   // Напоминания живут здесь, а не на экране настроек: расписание правится в
   // аптечке, и пересобирать набор надо в тот же момент, а не при следующем
   // заходе в настройки.
-  useReminders(medicines, settings.remindersOn, settings.reminderSound, ready)
+  /**
+   * «Принял» нажато прямо в уведомлении.
+   *
+   * Отмечаются все препараты этого приёма, у которых отметки ещё нет: в
+   * уведомлении они перечислены вместе, и человек, нажимая одну кнопку, имеет
+   * в виду именно их. Отметка ставится на **назначенное** время, а не на
+   * текущее, — иначе повтор в 8:45 записался бы отдельным приёмом.
+   */
+  const handleReminderTaken = useCallback(
+    async (day: number, slot: string) => {
+      const minutes = parseTime(slot)
+      if (minutes === null) return
+      const planned = day + minutes * 60_000
+      const now = Date.now()
+      for (const medicine of medicines) {
+        if (!normalizeTimes(medicine.times ?? []).includes(slot)) continue
+        const dose = dosesOn(medicine, day, now).find((item) => item.time === slot)
+        if (dose && dose.takenAt !== null) continue
+        await putMedicine(markTakenAt(medicine, planned, now))
+      }
+      await refreshMedicines()
+      setTab('intake')
+    },
+    [medicines, refreshMedicines],
+  )
+
+  useReminders({
+    medicines,
+    enabled: settings.remindersOn,
+    sound: settings.reminderSound,
+    repeat: settings.remindersRepeat,
+    ready,
+    onOpen: () => setTab('intake'),
+    onTaken: (day, slot) => void handleReminderTaken(day, slot),
+  })
 
   const glucoseTargets: GlucoseTargets = useMemo(
     () => ({

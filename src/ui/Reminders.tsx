@@ -12,25 +12,24 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { buildReminders } from '../logic/reminders'
+import { HORIZON_DAYS, REPEAT_INTERVAL_MIN, REPEATS, reminderTimes } from '../logic/reminders'
 import { platform } from '../platform/ports'
 import type { ReminderPermission } from '../platform/ports'
 import type { Medicine } from '../types'
 import { Banner, Reveal } from './bits'
 
-const ЧАСЫ = (hour: number, minute: number) =>
-  `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-
 export function Reminders({
   medicines,
   enabled,
   sound,
+  repeat,
   onPatch,
 }: {
   medicines: Medicine[]
   enabled: boolean
   sound: string
-  onPatch: (patch: { remindersOn?: boolean; reminderSound?: string }) => void
+  repeat: boolean
+  onPatch: (patch: { remindersOn?: boolean; reminderSound?: string; remindersRepeat?: boolean }) => void
 }) {
   const port = platform().reminders
   const supported = port.isSupported()
@@ -42,7 +41,7 @@ export function Reminders({
   const [playing, setPlaying] = useState<string | null>(null)
   const audio = useRef<HTMLAudioElement | null>(null)
 
-  const план = buildReminders(medicines)
+  const времена = reminderTimes(medicines)
 
   const обновить = useCallback(async () => {
     if (!supported) return
@@ -122,7 +121,7 @@ export function Reminders({
     )
   }
 
-  const действует = enabled && permission === 'granted' && план.length > 0
+  const действует = enabled && permission === 'granted' && времена.length > 0
 
   return (
     <div className="card">
@@ -140,8 +139,8 @@ export function Reminders({
         <span style={{ fontSize: 'var(--fs-2)', color: 'var(--text-primary)' }}>
           Напоминать принять лекарства
           <span className="fact__note">
-            {план.length
-              ? `по расписанию из аптечки — ${план.map((r) => ЧАСЫ(r.hour, r.minute)).join(', ')}`
+            {времена.length
+              ? `по расписанию из аптечки — ${времена.join(', ')}`
               : 'ни у одного препарата пока не указано время приёма'}
           </span>
         </span>
@@ -149,7 +148,7 @@ export function Reminders({
 
       {/* Расписания нет — напоминать не о чем, и это надо сказать прямо,
           а не оставлять человека с включённым переключателем и тишиной. */}
-      <Reveal open={enabled && план.length === 0}>
+      <Reveal open={enabled && времена.length === 0}>
         <div style={{ paddingTop: 'var(--space-4)' }}>
           <Banner tone="info">
             <b>Напоминать пока не о чем</b>
@@ -157,6 +156,28 @@ export function Reminders({
               Откройте аптечку, выберите препарат и укажите часы приёма — например 08:00 и 20:00. Напоминания появятся
               сами.
             </div>
+          </Banner>
+        </div>
+      </Reveal>
+
+      {/* Разрешение могли отозвать в настройках телефона уже после включения.
+          Молчать об этом нельзя: переключатель стоит в положении «напоминать»,
+          а напоминания не приходят — и человек об этом узнаёт по пропущенной
+          таблетке. */}
+      <Reveal open={enabled && permission !== 'granted' && !error}>
+        <div style={{ paddingTop: 'var(--space-4)' }}>
+          <Banner tone="warning">
+            <b>Напоминания выключены телефоном</b>
+            <div style={{ marginTop: 4 }}>
+              Разрешение показывать уведомления отозвано в настройках, и напоминания приходить не будут.
+            </div>
+            <button
+              className="btn btn--sm"
+              style={{ marginTop: 'var(--space-3)' }}
+              onClick={() => void port.openBatterySettings()}
+            >
+              Открыть настройки приложения
+            </button>
           </Banner>
         </div>
       </Reveal>
@@ -179,6 +200,26 @@ export function Reminders({
 
       <Reveal open={действует}>
         <div className="stack" style={{ paddingTop: 'var(--space-5)', gap: 'var(--space-4)' }}>
+          <div>
+            <label className="badge" style={{ whiteSpace: 'normal' }}>
+              <input
+                type="checkbox"
+                checked={repeat}
+                onChange={(event) => onPatch({ remindersRepeat: event.target.checked })}
+              />
+              <span style={{ fontSize: 'var(--fs-2)', color: 'var(--text-primary)' }}>
+                Повторять, пока не отмечу приём
+                <span className="fact__note">
+                  ещё {REPEATS} раза каждые {REPEAT_INTERVAL_MIN} минут, потом приложение замолчит
+                </span>
+              </span>
+            </label>
+            <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
+              В самом уведомлении есть кнопки «Принял» и «Отложить» — отмечать можно, не открывая приложение. Отметка
+              снимает оставшиеся повторы этого приёма.
+            </div>
+          </div>
+
           <div>
             <div style={{ fontSize: 'var(--fs-2)', fontWeight: 600 }}>Мелодия</div>
             <div className="muted" style={{ marginTop: 2 }}>
@@ -227,6 +268,10 @@ export function Reminders({
             </button>
             <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
               Ими распоряжается сам телефон — кнопка открывает нужный его экран.
+            </div>
+            <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
+              Напоминания расставлены на {HORIZON_DAYS} дней вперёд и продлеваются каждый раз, когда вы открываете
+              приложение.
             </div>
           </div>
 

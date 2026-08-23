@@ -26,6 +26,8 @@ export const webReminders: RemindersPort = {
   },
   cancelAll: async () => undefined,
   scheduled: async () => 0,
+  // Подписываться не на что: уведомлений нет, значит и нажимать нечего.
+  onAction: () => () => undefined,
   openSoundSettings: async () => false,
   openBatterySettings: async () => false,
 }

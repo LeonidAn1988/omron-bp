@@ -170,6 +170,7 @@ export function Settings({
         medicines={medicines}
         enabled={settings.remindersOn}
         sound={settings.reminderSound}
+        repeat={settings.remindersRepeat}
         onPatch={patch}
       />
 

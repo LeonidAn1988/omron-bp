@@ -50,7 +50,15 @@ export {
 
 export { buildCalendar, countCalendarEvents, foldLine, doseTitle } from '../src/logic/calendar'
 
-export { buildReminders, countReminders, doseLine, minutesOfDay } from '../src/logic/reminders'
+export {
+  HORIZON_DAYS,
+  REPEATS,
+  REPEAT_INTERVAL_MIN,
+  buildReminders,
+  doseLine,
+  reminderId,
+  reminderTimes,
+} from '../src/logic/reminders'
 
 export {
   medicineAlert,
