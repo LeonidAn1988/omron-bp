@@ -286,7 +286,7 @@ export function Settings({
             Экспорт CSV
           </button>
           <button className="btn" onClick={() => download(`dnevnik-${today()}.json`, toJson(measurements), 'application/json')} disabled={!measurements.length}>
-            Резервная копия JSON
+            Только измерения, JSON
           </button>
           <button className="btn" onClick={() => fileRef.current?.click()}>
             Импорт из файла
@@ -295,8 +295,15 @@ export function Settings({
         </div>
 
         <div className="muted" style={{ marginTop: 10 }}>
-          Импорт понимает CSV с русскими или английскими заголовками, а также <kbd>ubpm.json</kbd> и{' '}
-          <kbd>user1.csv</kbd> от omblepy. Совпадающие измерения не задваиваются.
+          {/* Разница между этими выгрузками и полной копией стоила бы дорого:
+              человек, переносящий дневник на другое устройство, взял бы отсюда
+              файл без аптечки и заметил бы это через неделю. */}
+          <b>Здесь только измерения.</b> Чтобы перенести дневник целиком — с аптечкой, расписанием приёма и
+          настройками, — берите «Сохранить в файл» в разделе «Сохранность данных» выше.
+          <div style={{ marginTop: 6 }}>
+            Импорт понимает и то и другое, а ещё CSV с русскими или английскими заголовками и{' '}
+            <kbd>ubpm.json</kbd> с <kbd>user1.csv</kbd> от omblepy. Совпадающие измерения не задваиваются.
+          </div>
         </div>
 
         {message && (
