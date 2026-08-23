@@ -65,7 +65,7 @@ export function run() {
   )
   check('шаги пронумерованы подряд', JSON.stringify(один.map((r) => r.step)) === JSON.stringify([0, 1, 2, 3]))
   check('заголовок повтора отличается от основного', один[0].title !== один[1].title, один[1].title)
-  check('повтор говорит, что приём не отмечен', один[1].title.includes('не отмечен'), один[1].title)
+  check('повтор напоминает по-человечески, без служебных слов', один[1].title === 'Не забудьте: приём в 08:00', один[1].title)
 
   const без = buildReminders([med({ times: ['08:00'] })], now, { repeat: false, horizonDays: 1 })
   check('без повторов остаётся одно напоминание', без.length === 1)

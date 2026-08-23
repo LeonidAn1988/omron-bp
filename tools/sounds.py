@@ -22,10 +22,11 @@ from pathlib import Path
 
 ЧАСТОТА = 22050
 КОРЕНЬ = Path(__file__).resolve().parent.parent
-# Два адресата: Android играет мелодию из своих ресурсов, а интерфейсу нужна
-# та же мелодия рядом со страницей, чтобы её можно было послушать до выбора.
+# Только ресурсы Android: мелодию играет система, а не страница. Копия рядом со
+# страницей была нужна, пока «послушать» проигрывало файл плеером; от этого
+# отказались — плеер идёт громкостью музыки и врёт о том, как прозвучит
+# напоминание. Теперь проверка показывает настоящее уведомление.
 ВЫХОД = КОРЕНЬ / 'android/app/src/main/res/raw'
-ВЫХОД_ВЕБ = КОРЕНЬ / 'public/sounds'
 
 # Ноты равномерного строя от ля первой октавы.
 НОТЫ = {'до': 261.63, 'ре': 293.66, 'ми': 329.63, 'соль': 392.00, 'ля': 440.00,
@@ -70,14 +71,14 @@ def собрать(имя: str, фразы: list[tuple[str, float, float]]):
     пик = max(abs(v) for v in буфер) or 1.0
     данные = b''.join(struct.pack('<h', int(max(-1.0, min(1.0, v / пик * 0.86)) * 32767)) for v in буфер)
 
-    for каталог in (ВЫХОД, ВЫХОД_ВЕБ):
-        каталог.mkdir(parents=True, exist_ok=True)
-        with wave.open(str(каталог / f'{имя}.wav'), 'wb') as f:
-            f.setnchannels(1)
-            f.setsampwidth(2)
-            f.setframerate(ЧАСТОТА)
-            f.writeframes(данные)
-    return ВЫХОД / f'{имя}.wav', len(данные) // 2 / ЧАСТОТА
+    ВЫХОД.mkdir(parents=True, exist_ok=True)
+    путь = ВЫХОД / f'{имя}.wav'
+    with wave.open(str(путь), 'wb') as f:
+        f.setnchannels(1)
+        f.setsampwidth(2)
+        f.setframerate(ЧАСТОТА)
+        f.writeframes(данные)
+    return путь, len(данные) // 2 / ЧАСТОТА
 
 
 МЕЛОДИИ = {

@@ -166,10 +166,10 @@ export function buildReminders(
         if (at <= now) continue
         набор.push({
           id: reminderId(день, slotIndex, step),
-          title:
-            step === 0
-              ? `${partOfDay(минуты)} — ${time}`
-              : `Напоминание: приём в ${time} не отмечен`,
+          // Повтор говорит по-человечески, а не служебным «не отмечен»: слово
+          // «отметить» — из устройства приложения, а человеку нужно про
+          // таблетки.
+          title: step === 0 ? `${partOfDay(минуты)} — ${time}` : `Не забудьте: приём в ${time}`,
           body: коротко,
           details: подробно,
           at,

@@ -85,6 +85,8 @@ export default function App() {
   const [rootSignal, setRootSignal] = useState(0)
   /** Стартовый экран из настроек применяется один раз, после загрузки данных. */
   const started = useRef(false)
+  /** Приложение открылось нажатием по напоминанию — стартовый экран не навязываем. */
+  const openedByReminder = useRef(false)
   const [ready, setReady] = useState(false)
   /** Хранилище не ответило. Молчать нельзя: экран «Загрузка…» висел бы вечно. */
   const [storageFailed, setStorageFailed] = useState(false)
@@ -113,9 +115,14 @@ export default function App() {
       setSettings(loaded.trackGlucose || stored.some(isGlucose) ? { ...loaded, trackGlucose: true } : loaded)
       // Стартовый экран применяется один раз при загрузке: дальше человек
       // переключается сам, и возвращать его к «своему» экрану было бы навязчиво.
+      //
+      // Нажатие по уведомлению — тоже «дальше»: приложение при этом запускается
+      // с нуля, и система отдаёт событие раньше, чем дочитывается база. Без
+      // этой оговорки человек, нажавший на напоминание, попадал не на экран
+      // приёма, а на «Обзор» — и не понимал, куда делась таблетка.
       if (!started.current) {
         started.current = true
-        if (loaded.startTab) setTab(loaded.startTab as TabKey)
+        if (loaded.startTab && !openedByReminder.current) setTab(loaded.startTab as TabKey)
       }
       setReady(true)
     }).catch(() => setStorageFailed(true))
@@ -306,8 +313,14 @@ export default function App() {
     sound: settings.reminderSound,
     repeat: settings.remindersRepeat,
     ready,
-    onOpen: () => setTab('intake'),
-    onTaken: (day, slot) => void handleReminderTaken(day, slot),
+    onOpen: () => {
+      openedByReminder.current = true
+      setTab('intake')
+    },
+    onTaken: (day, slot) => {
+      openedByReminder.current = true
+      void handleReminderTaken(day, slot)
+    },
   })
 
   const glucoseTargets: GlucoseTargets = useMemo(

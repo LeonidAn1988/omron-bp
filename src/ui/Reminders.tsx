@@ -11,10 +11,10 @@
  * узнать о ней от приложения, а не от форума.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { HORIZON_DAYS, REPEAT_INTERVAL_MIN, REPEATS, reminderTimes } from '../logic/reminders'
 import { platform } from '../platform/ports'
-import type { ReminderPermission } from '../platform/ports'
+import type { ReminderHealth, ReminderPermission } from '../platform/ports'
 import type { Medicine } from '../types'
 import { Banner, Reveal } from './bits'
 
@@ -38,11 +38,11 @@ export function Reminders({
   const [permission, setPermission] = useState<ReminderPermission>('prompt')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [playing, setPlaying] = useState<string | null>(null)
+  const [checking, setChecking] = useState<string | null>(null)
   const [batteryRestricted, setBatteryRestricted] = useState<boolean | null>(null)
   const [exact, setExact] = useState<boolean | null>(null)
   const [quiet, setQuiet] = useState<boolean | null>(null)
-  const audio = useRef<HTMLAudioElement | null>(null)
+  const [health, setHealth] = useState<ReminderHealth | null>(null)
 
   const времена = reminderTimes(medicines)
 
@@ -52,7 +52,8 @@ export function Reminders({
     setBatteryRestricted(await port.isBatteryRestricted())
     setExact(await port.exactTiming())
     setQuiet(await port.isQuietModeOn())
-  }, [port, supported])
+    setHealth(await port.health(sound))
+  }, [port, supported, sound])
 
   useEffect(() => {
     void обновить()
@@ -69,21 +70,16 @@ export function Reminders({
     return () => document.removeEventListener('visibilitychange', слушать)
   }, [supported, обновить])
 
-  useEffect(
-    () => () => {
-      audio.current?.pause()
-    },
-    [],
-  )
-
-  function послушать(id: string) {
-    audio.current?.pause()
-    if (id === 'system') return
-    const звук = new Audio(`sounds/${id}.wav`)
-    audio.current = звук
-    setPlaying(id)
-    звук.addEventListener('ended', () => setPlaying(null))
-    звук.play().catch(() => setPlaying(null))
+  /**
+   * Показать настоящее пробное напоминание, а не проиграть файл.
+   *
+   * Звук уведомления идёт своей громкостью, отдельной от музыки, и подчиняется
+   * тихому режиму. Проиграв файл плеером, мы дали бы услышать не то, что
+   * прозвучит в восемь утра, — и человек настроил бы громкость не ту.
+   */
+  function проверить(id: string) {
+    setChecking(id)
+    void port.preview(id).finally(() => window.setTimeout(() => setChecking(null), 2500))
   }
 
   async function включить(next: boolean) {
@@ -229,7 +225,8 @@ export function Reminders({
           <div>
             <div style={{ fontSize: 'var(--fs-2)', fontWeight: 600 }}>Мелодия</div>
             <div className="muted" style={{ marginTop: 2 }}>
-              Пусть отличается от почты и сообщений — так понятно, что зовут к лекарствам.
+              Пусть отличается от почты и сообщений — так понятно, что зовут к лекарствам. «Проверить» показывает
+              настоящее напоминание: услышите ровно то, что прозвучит утром, и той же громкостью.
             </div>
           </div>
 
@@ -243,7 +240,7 @@ export function Reminders({
                     checked={sound === item.id}
                     onChange={() => {
                       onPatch({ reminderSound: item.id })
-                      послушать(item.id)
+                      проверить(item.id)
                     }}
                   />
                   <span className="optrow__title">
@@ -251,15 +248,13 @@ export function Reminders({
                     <span className="fact__note">{item.hint}</span>
                   </span>
                 </label>
-                {item.id !== 'system' && (
-                  <button
-                    className="btn btn--sm optrow__action"
-                    onClick={() => послушать(item.id)}
-                    aria-label={`Прослушать «${item.name}»`}
-                  >
-                    {playing === item.id ? 'Звучит…' : 'Послушать'}
-                  </button>
-                )}
+                <button
+                  className="btn btn--sm optrow__action"
+                  onClick={() => проверить(item.id)}
+                  aria-label={`Проверить звук «${item.name}»`}
+                >
+                  {checking === item.id ? 'Слушайте…' : 'Проверить'}
+                </button>
               </div>
             ))}
           </div>
@@ -272,10 +267,30 @@ export function Reminders({
               Ими распоряжается сам телефон — кнопка открывает нужный его экран.
             </div>
             <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
-              Напоминания расставлены на {HORIZON_DAYS} дней вперёд и продлеваются каждый раз, когда вы открываете
-              приложение.
+              {health && health.scheduled > 0 && health.until
+                ? `Сейчас в телефоне ${health.scheduled} напоминаний, последнее — ${new Intl.DateTimeFormat('ru-RU', {
+                    day: 'numeric',
+                    month: 'long',
+                  }).format(health.until)}. Список продлевается каждый раз, когда вы открываете приложение.`
+                : `Напоминания расставляются на ${HORIZON_DAYS} дней вперёд и продлеваются каждый раз, когда вы открываете приложение.`}
             </div>
           </div>
+
+          {health?.channelOff && (
+            <Banner tone="critical">
+              <b>Напоминания выключены в настройках телефона</b>
+              <div style={{ marginTop: 4 }}>
+                Уведомления этого приложения отключены — расписание стоит, но ни одно напоминание не появится.
+              </div>
+              <button
+                className="btn btn--sm"
+                style={{ marginTop: 'var(--space-3)' }}
+                onClick={() => void port.openSoundSettings(sound)}
+              >
+                Включить уведомления
+              </button>
+            </Banner>
+          )}
 
           {/*
             «Не беспокоить» делает напоминание беззвучным, а беззвучное

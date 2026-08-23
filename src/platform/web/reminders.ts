@@ -21,11 +21,12 @@ export const webReminders: RemindersPort = {
   permission: async () => 'denied',
   requestPermission: async () => 'denied',
   sounds: () => [],
+  preview: async () => false,
   schedule: async () => {
     throw new Error(НЕТ)
   },
   cancelAll: async () => undefined,
-  scheduled: async () => 0,
+  health: async () => ({ scheduled: 0, until: null, channelOff: false }),
   // Подписываться не на что: уведомлений нет, значит и нажимать нечего.
   onAction: () => () => undefined,
   exactTiming: async () => null,

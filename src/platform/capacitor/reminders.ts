@@ -23,7 +23,14 @@
 
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { registerPlugin } from '@capacitor/core'
-import type { Reminder, ReminderAction, ReminderPermission, ReminderSound, RemindersPort } from '../ports'
+import type {
+  Reminder,
+  ReminderAction,
+  ReminderHealth,
+  ReminderPermission,
+  ReminderSound,
+  RemindersPort,
+} from '../ports'
 
 /** Свой нативный плагин: переходы на системные экраны. */
 interface SystemSettingsPlugin {
@@ -162,6 +169,33 @@ export const capacitorReminders: RemindersPort = {
 
   sounds: () => SOUNDS,
 
+  async preview(soundId: string) {
+    try {
+      await ensureChannel(soundId)
+      lastSound = soundId
+      await registerActions()
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            // Свой идентификатор вне обоих рабочих диапазонов: пробное
+            // напоминание не должно ни затирать расписание, ни попадать под
+            // его пересборку.
+            id: 990_001,
+            title: 'Так будет звучать напоминание',
+            body: 'Это проверка звука — принимать ничего не нужно',
+            channelId: channelId(soundId),
+            isExactNotification: false,
+            isExactMandatory: false,
+            schedule: { at: new Date(Date.now() + 1500), allowWhileIdle: true },
+          },
+        ],
+      })
+      return true
+    } catch {
+      return false
+    }
+  },
+
   async exactTiming() {
     try {
       const { exact_alarm: состояние } = await LocalNotifications.checkExactNotificationSetting()
@@ -245,14 +279,35 @@ export const capacitorReminders: RemindersPort = {
     const { notifications } = await LocalNotifications.getPending()
     // Отложенные не трогаем: человек попросил напомнить попозже, и пересборка
     // набора — не повод забыть об этой просьбе.
+    // Пробное напоминание тоже не наше дело — оно живёт своей минутой.
     const наши = notifications.filter(({ id }) => id < SNOOZE_BASE)
     if (!наши.length) return
     await LocalNotifications.cancel({ notifications: наши.map(({ id }) => ({ id })) })
   },
 
-  async scheduled() {
-    const { notifications } = await LocalNotifications.getPending()
-    return notifications.length
+  async health(soundId: string): Promise<ReminderHealth> {
+    const пусто: ReminderHealth = { scheduled: 0, until: null, channelOff: false }
+    try {
+      const { notifications } = await LocalNotifications.getPending()
+      const наши = notifications.filter(({ id }) => id < SNOOZE_BASE)
+      const сроки = наши
+        .map((item) => (item.schedule?.at ? new Date(item.schedule.at).getTime() : null))
+        .filter((value): value is number => value !== null)
+
+      // Канал, выключенный человеком в шторке, обнуляет важность. Приложение
+      // об этом узнать иначе не может и продолжало бы уверять, что всё в
+      // порядке, пока напоминания молчат.
+      const { channels } = await LocalNotifications.listChannels()
+      const наш = channels.find((item) => item.id === channelId(soundId))
+
+      return {
+        scheduled: наши.length,
+        until: сроки.length ? Math.max(...сроки) : null,
+        channelOff: !!наш && наш.importance === 0,
+      }
+    } catch {
+      return пусто
+    }
   },
 
   onAction(handler: (action: ReminderAction) => void) {
