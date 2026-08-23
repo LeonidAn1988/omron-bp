@@ -111,9 +111,10 @@ async function ensureChannel(soundId: string) {
     id: wanted,
     name: 'Приём лекарств',
     description: 'Напоминания принять препарат по расписанию',
-    // Максимальная важность: напоминание должно всплывать и звучать, иначе оно
-    // теряется в ленте и смысла в нём нет.
-    importance: 5,
+    // Наивысшая достижимая важность: уведомление всплывает и звучит, иначе
+    // оно теряется в ленте и смысла в нём нет. Пятёрку (IMPORTANCE_MAX)
+    // Android не отдаёт — проверено на устройстве, канал создаётся с четвёркой.
+    importance: 4,
     visibility: 1,
     vibration: true,
     ...(soundId === 'system' ? {} : { sound: `${soundId}.wav` }),
@@ -159,7 +160,21 @@ export const capacitorReminders: RemindersPort = {
         // Приём и сутки едут вместе с уведомлением: по ним приложение поймёт,
         // какую именно отметку ставить, когда человек нажмёт «Принял».
         extra: { slot: item.slot, day: item.day, step: item.step },
-        schedule: { at: new Date(item.at), allowWhileIdle: false },
+        // Два флага, и оба выяснены на живом телефоне, а не по документации.
+        //
+        // `isExactNotification: false` — прямой отказ от точного будильника.
+        // По умолчанию плагин считает уведомление точным и, не найдя
+        // разрешения, уводит человека в системный экран «Будильники и
+        // напоминания». Разрешение мы сняли сознательно, поэтому экрана нет —
+        // и вызов висел навсегда, не поставив ни одного напоминания.
+        //
+        // `allowWhileIdle: true` — иначе плагин ставит будильник типа RTC,
+        // который телефон **не будит**. Напоминание в восемь утра не
+        // прозвучало бы, пока телефон спит на тумбочке. С этим флагом идёт
+        // `setAndAllowWhileIdle(RTC_WAKEUP)`: он будит устройство, работает в
+        // режиме глубокого сна и особого разрешения не требует.
+        isExactNotification: false,
+        schedule: { at: new Date(item.at), allowWhileIdle: true },
       })),
     })
   },
@@ -197,7 +212,8 @@ export const capacitorReminders: RemindersPort = {
                 channelId: channelId(lastSound),
                 actionTypeId: ACTION_TYPE,
                 extra: event.notification.extra,
-                schedule: { at: new Date(Date.now() + SNOOZE_MIN * 60_000), allowWhileIdle: false },
+                isExactNotification: false,
+                schedule: { at: new Date(Date.now() + SNOOZE_MIN * 60_000), allowWhileIdle: true },
               },
             ],
           }),
