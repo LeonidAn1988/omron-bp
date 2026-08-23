@@ -214,9 +214,21 @@ export const capacitorReminders: RemindersPort = {
     }
   },
 
+  /**
+   * Сначала поставить новое, потом снять лишнее — не наоборот.
+   *
+   * Прежний порядок начинался со снятия всего набора, и между снятием и
+   * постановкой в телефоне не было ни одного напоминания. Секунда, но не
+   * пустая: приложение в этот момент могут выгрузить, а любая ошибка ниже по
+   * ходу оставила бы человека вообще без напоминаний, и молча. Идентификаторы
+   * у нас выводятся из дня и приёма, поэтому повторная постановка того же
+   * идентификатора просто заменяет прежнее — снимать заранее незачем.
+   */
   async schedule(reminders: Reminder[], soundId: string) {
-    await this.cancelAll()
-    if (!reminders.length) return
+    if (!reminders.length) {
+      await this.cancelAll()
+      return
+    }
 
     // Убираем из шторки то, что уже показано, но в новом наборе не значится:
     // отмеченный приём иначе оставляет стопку карточек, и человек смотрит на
@@ -273,6 +285,17 @@ export const capacitorReminders: RemindersPort = {
         schedule: { at: new Date(item.at), allowWhileIdle: true },
       })),
     })
+
+    // Теперь — снять то, чего в новом наборе нет: отменённый препарат,
+    // отмеченный приём, съехавшее расписание. Отложенные и пробное не наши.
+    try {
+      const { notifications: ожидают } = await LocalNotifications.getPending()
+      const нужные = new Set(reminders.map((item) => item.id))
+      const лишние = ожидают.filter(({ id }) => id < SNOOZE_BASE && !нужные.has(id))
+      if (лишние.length) await LocalNotifications.cancel({ notifications: лишние.map(({ id }) => ({ id })) })
+    } catch {
+      // Лишнее напоминание переживаемо; уронить постановку из-за уборки — нет.
+    }
   },
 
   async cancelAll() {

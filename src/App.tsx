@@ -25,7 +25,15 @@ import { Intake } from './ui/Intake'
 import { Cabinet } from './ui/Cabinet'
 import { Entry } from './ui/Entry'
 import { Sync } from './ui/Sync'
-import { countAlerts, dosesOn, markTakenAt, normalizeTimes, parseTime, pendingToday } from './logic/medicines'
+import {
+  countAlerts,
+  dosesOn,
+  markTakenAt,
+  normalizeTimes,
+  parseTime,
+  pendingToday,
+  startOfDay,
+} from './logic/medicines'
 import type { ImportResult } from './logic/io'
 import { applyTheme } from './ui/theme'
 import { useBackup } from './ui/useBackup'
@@ -282,7 +290,11 @@ export default function App() {
     async (day: number, slot: string) => {
       const minutes = parseTime(slot)
       if (minutes === null) return
-      const planned = day + minutes * 60_000
+      // День приводим к местной полуночи заново. Уведомление несёт момент,
+      // посчитанный в том поясе, где оно ставилось; после перелёта или перевода
+      // часов простое сложение дало бы время из другого дня, и отметка легла бы
+      // не на тот приём.
+      const planned = startOfDay(day) + minutes * 60_000
       const now = Date.now()
 
       // Аптечка читается из хранилища, а не берётся из состояния экрана.
