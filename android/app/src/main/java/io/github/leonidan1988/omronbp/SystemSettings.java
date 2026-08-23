@@ -1,8 +1,10 @@
 package io.github.leonidan1988.omronbp;
 
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
 import android.provider.Settings;
 
 import com.getcapacitor.JSObject;
@@ -60,6 +62,50 @@ public class SystemSettings extends Plugin {
                     .setData(Uri.parse("package:" + getContext().getPackageName()));
         }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        start(intent, call);
+    }
+
+    /**
+     * Стоит ли на приложении ограничение энергосбережения.
+     *
+     * Читаем, а не меняем: снять ограничение вправе только человек. Нужно ровно
+     * для того, чтобы не пугать предупреждением того, у кого всё в порядке —
+     * предупреждение, которое висит всегда, перестают читать.
+     *
+     * Ответ неполный, и это надо помнить. Android отвечает про свой список
+     * исключений, а у Huawei, Xiaomi и Samsung поверх него есть собственное
+     * управление запуском приложений, о котором система ничего не сообщает.
+     * Поэтому `false` здесь значит «системных ограничений нет», а не
+     * «напоминания точно придут».
+     */
+    @PluginMethod
+    public void isBatteryRestricted(PluginCall call) {
+        JSObject result = new JSObject();
+        try {
+            PowerManager power = (PowerManager) getContext().getSystemService(Context.POWER_SERVICE);
+            boolean свободно = power != null
+                    && power.isIgnoringBatteryOptimizations(getContext().getPackageName());
+            result.put("restricted", !свободно);
+        } catch (Exception error) {
+            // Прошивка могла не ответить. Молчим, а не пугаем: интерфейс на
+            // `null` просто не показывает предупреждение.
+            result.put("restricted", null);
+        }
+        call.resolve(result);
+    }
+
+    /**
+     * Системный список «Батарея — приложения без ограничений».
+     *
+     * Отдельно от настроек приложения: здесь человек сразу видит нужный
+     * переключатель, а не ищет его среди прочего. Разрешения не требует —
+     * в отличие от прямого запроса на исключение, который магазины отдают
+     * закрытым списком категорий.
+     */
+    @PluginMethod
+    public void openBatteryOptimization(PluginCall call) {
+        Intent intent = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         start(intent, call);
     }
 

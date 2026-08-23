@@ -39,6 +39,7 @@ export function Reminders({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [playing, setPlaying] = useState<string | null>(null)
+  const [batteryRestricted, setBatteryRestricted] = useState<boolean | null>(null)
   const audio = useRef<HTMLAudioElement | null>(null)
 
   const времена = reminderTimes(medicines)
@@ -46,6 +47,7 @@ export function Reminders({
   const обновить = useCallback(async () => {
     if (!supported) return
     setPermission(await port.permission())
+    setBatteryRestricted(await port.isBatteryRestricted())
   }, [port, supported])
 
   useEffect(() => {
@@ -275,22 +277,35 @@ export function Reminders({
             </div>
           </div>
 
-          {/* Главная причина молчащих напоминаний на Android. Пишем до того,
-              как человек столкнётся, а не в ответ на жалобу. */}
-          <Banner tone="info">
-            <b>Если напоминания перестанут приходить</b>
-            <div style={{ marginTop: 4 }}>
-              Телефон умеет «усыплять» приложения ради экономии батареи, и тогда напоминание не приходит вовсе. Откройте
-              настройки приложения, найдите «Батарея» и разрешите работу в фоне.
-            </div>
-            <button
-              className="btn btn--sm"
-              style={{ marginTop: 'var(--space-3)' }}
-              onClick={() => void port.openBatterySettings()}
-            >
-              Открыть настройки приложения
-            </button>
-          </Banner>
+          {/*
+            Главная причина молчащих напоминаний на Android — и проверено на
+            живом телефоне, что причина настоящая: HUAWEI выгружает приложение,
+            как только гаснет экран.
+
+            Предупреждение показывается, только когда ограничение действительно
+            стоит. Постоянно висящий тревожный блок перестают читать, и в тот
+            день, когда он окажется правдой, его не заметят.
+          */}
+          {batteryRestricted !== false && (
+            <Banner tone={batteryRestricted ? 'warning' : 'info'}>
+              <b>{batteryRestricted ? 'Телефон может не дать напоминаниям прийти' : 'Если напоминания перестанут приходить'}</b>
+              <div style={{ marginTop: 4 }}>
+                Ради экономии батареи телефон «усыпляет» приложения, и тогда напоминание не приходит вовсе. Разрешите
+                приложению работать без ограничений — это делается один раз.
+              </div>
+              <button
+                className="btn btn--sm"
+                style={{ marginTop: 'var(--space-3)' }}
+                onClick={() => void port.openBatterySettings()}
+              >
+                Разрешить работу без ограничений
+              </button>
+              <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
+                На телефонах Huawei, Xiaomi и Samsung есть ещё свой список: настройки телефона → «Батарея» → «Запуск
+                приложений». Там приложение тоже нужно разрешить — система об этом списке не сообщает.
+              </div>
+            </Banner>
+          )}
         </div>
       </Reveal>
     </div>

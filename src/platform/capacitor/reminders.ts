@@ -30,6 +30,8 @@ interface SystemSettingsPlugin {
   openChannel(options: { channelId: string }): Promise<{ opened: boolean }>
   openAppNotifications(): Promise<{ opened: boolean }>
   openAppDetails(): Promise<{ opened: boolean }>
+  isBatteryRestricted(): Promise<{ restricted: boolean | null }>
+  openBatteryOptimization(): Promise<{ opened: boolean }>
 }
 
 const SystemSettings = registerPlugin<SystemSettingsPlugin>('SystemSettings')
@@ -246,7 +248,24 @@ export const capacitorReminders: RemindersPort = {
     }
   },
 
+  async isBatteryRestricted() {
+    try {
+      const { restricted } = await SystemSettings.isBatteryRestricted()
+      return restricted
+    } catch {
+      return null
+    }
+  },
+
   async openBatterySettings() {
+    try {
+      // Сначала список исключений: там нужный переключатель виден сразу.
+      const { opened } = await SystemSettings.openBatteryOptimization()
+      if (opened) return true
+    } catch {
+      // Экрана может не быть на нестандартной прошивке — ведём в настройки
+      // приложения, оттуда до батареи доходят в два шага.
+    }
     try {
       const { opened } = await SystemSettings.openAppDetails()
       return opened
