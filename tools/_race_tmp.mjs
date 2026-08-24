@@ -69,24 +69,34 @@ const windowMs = await page.evaluate(async () => {
 })
 console.log('окно клик→«принято», мс:', windowMs)
 
-// --- 2. Порог по задержке между двумя нажатиями
-const rows = []
-for (const delay of [0, 2, 5, 10, 20, 40, 80, 150, 250, 400]) {
+// --- Повторное нажатие ОДНОЙ кнопки (реальный «дабл-тап»)
+for (const delay of [0, 40, 120]) {
   await seed(page)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await openIntake(page)
-  const n = await page.evaluate(async (d) => {
+  await page.evaluate(async (d) => {
     const btns = [...document.querySelectorAll('.dose button')].filter((b) => b.textContent.trim() === 'Принял')
-    if (btns.length !== 2) return { err: 'кнопок: ' + btns.length }
     btns[0].click()
-    await new Promise((r) => setTimeout(r, d))
-    btns[1].click()
-    await new Promise((r) => setTimeout(r, 1200))
-    return { ok: true }
+    if (d > 0) await new Promise((r) => setTimeout(r, d))
+    btns[0].click()
+    await new Promise((r) => setTimeout(r, 1000))
   }, delay)
-  if (n.err) { console.log(delay, n.err); continue }
   const st = await readTaken(page)
-  rows.push({ delay, отметок: st.taken.length, left: st.left })
+  console.log('дабл-тап одной кнопки, пауза', delay, 'мс → отметок:', st.taken.length, '| дубли:', new Set(st.taken).size !== st.taken.length, '| остаток:', st.left)
 }
-console.table(rows)
+
+// --- Две РАЗНЫЕ строки, но человеческий темп нажатий через Playwright (реальные события мыши)
+for (const пауза of [0, 30]) {
+  await seed(page)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await openIntake(page)
+  const кнопки = page.locator('.dose button', { hasText: 'Принял' })
+  await кнопки.nth(0).click({ force: true })
+  if (пауза) await page.waitForTimeout(пауза)
+  await page.locator('.dose button', { hasText: 'Принял' }).first().click({ force: true })
+  await page.waitForTimeout(1000)
+  const st = await readTaken(page)
+  console.log('настоящие клики Playwright подряд (пауза', пауза, 'мс) → отметок:', st.taken.length)
+}
+
 await browser.close()
