@@ -391,7 +391,12 @@ export type DayStatus = 'future' | 'done' | 'missed' | 'pending' | 'empty'
  * человека совсем разные вещи, и красить их одинаково нельзя.
  */
 export function dayStatus(items: Medicine[], day: number, now: number): DayStatus {
-  const slots = items.flatMap((m) => dosesOn(m, day, now))
+  // Препараты с автосписанием в счёт не идут — так же, как в шапке экрана
+  // приёма, в признаке готовности карточки и в отчёте врачу. Кнопки «Принял» у
+  // них нет вовсе, отметка не появится никогда, и такой приём навсегда
+  // оставался просроченным: день в ленте краснел «есть пропуски», пока вверху
+  // того же экрана стояло «всё отмечено».
+  const slots = items.filter((m) => !m.autoDeduct).flatMap((m) => dosesOn(m, day, now))
   if (slots.length === 0) return 'empty'
   if (startOfDay(day) > startOfDay(now)) return 'future'
   if (slots.every((s) => s.takenAt !== null)) return 'done'

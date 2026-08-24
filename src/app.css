@@ -1460,6 +1460,14 @@ tbody tr:hover {
 .dose[data-done='true'] .dose__amount {
   color: var(--text-muted);
 }
+
+/* Количество и отношение к еде: тот же кегль, что дозировка, но приглушённее —
+   это уточнение к назначению, а не само назначение. */
+.dose__extra {
+  display: block;
+  font-size: var(--fs-1);
+  color: var(--text-muted);
+}
 .dose[data-done='true'] .dose__name {
   font-weight: 400;
 }

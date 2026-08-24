@@ -33,9 +33,17 @@ const PAST_DAYS = KEEP_INTAKES_DAYS
 /** Насколько вперёд. Неделя закрывает вопрос «что нужно завтра». */
 const FUTURE_DAYS = 7
 
+const MEAL_LABEL: Record<string, string> = { before: 'до еды', after: 'после еды' }
+
+/** «2 шт., после еды» — то, чего не хватало строке приёма. */
+function doseExtra(medicine: Medicine): string {
+  const штук = medicine.perTime && medicine.perTime > 1 ? `${medicine.perTime} шт.` : ''
+  const еда = medicine.meal ? (MEAL_LABEL[medicine.meal] ?? '') : ''
+  return [штук, еда].filter(Boolean).join(', ')
+}
+
 const WEEKDAY = new Intl.DateTimeFormat('ru-RU', { weekday: 'short' })
 const DAY_TITLE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' })
-const TIME_LABEL = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' })
 
 /** Подпись дня словами: «сегодня» читается быстрее, чем «14 августа». */
 function dayName(day: number, today: number): string {
@@ -269,12 +277,25 @@ function PartCard({
             <span className="dose__body">
               <span className="dose__name">{row.medicine.name}</span>
               {row.medicine.dose && <span className="dose__amount">{row.medicine.dose}</span>}
+              {/* Сколько штук и когда относительно еды.
+                  Экран приёма отвечает на вопрос «что выпить сейчас», и без
+                  количества он отвечает на половину: назначение «по две
+                  таблетки утром» превращалось в «Лозап 50 мг». Ошибка вдвое по
+                  дозе у гипертоника опаснее пропуска. В уведомлении эти данные
+                  показывались, а на самом экране — нет. */}
+              {doseExtra(row.medicine) && <span className="dose__extra">{doseExtra(row.medicine)}</span>}
               {/* Отметка и её отмена стоят одной строкой под названием, а не в
                   колонке действий: широкая кнопка выдавливала название в три
                   строки, и отмеченная строка была вдвое выше остальных. */}
               {row.takenAt !== null && (
                 <span className="dose__done">
-                  ✓ принято в {TIME_LABEL.format(row.takenAt)}
+                  {/* Раньше здесь стояло «принято в 08:00», и это было
+                      плановое время, а не фактическое: приняв таблетки в 11:40,
+                      человек читал, что принял их в восемь. Приложение врало в
+                      собственных данных, и эта неправда уезжала врачу. Пока
+                      отметка хранит плановый час (по нему приём и опознаётся),
+                      честнее не называть час вовсе. */}
+                  ✓ принято
                   <button className="dose__undo" onClick={() => void onSave(undoTaken(row.medicine, row.takenAt!))}>
                     убрать отметку
                   </button>
