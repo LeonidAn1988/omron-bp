@@ -278,8 +278,10 @@ function PartCard({
             data-done={row.takenAt !== null ? 'true' : undefined}
           >
             {/* Когда приём в карточке один, час уже стоит в заголовке —
-                повторять его у каждой строки значит писать одно число трижды. */}
-            <span className="dose__time">{времена.length > 1 ? row.time : ''}</span>
+                повторять его у каждой строки значит писать одно число трижды.
+                Колонку при этом убираем целиком: пустой span шириной 3,5em
+                оставлял слева широкий провал и сдвигал названия к середине. */}
+            {времена.length > 1 && <span className="dose__time">{row.time}</span>}
 
             <span className="dose__body">
               <span className="dose__name">{row.medicine.name}</span>
