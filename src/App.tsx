@@ -72,8 +72,11 @@ const TOOLS = [
 type TabKey = (typeof TABS)[number]['key'] | (typeof TOOLS)[number]['key']
 
 function PeriodPicker({ value, onChange }: { value: PeriodKey; onChange: (next: PeriodKey) => void }) {
+  // `--fill` — равные доли и перенос подписи. В проекте он заведён ровно на
+  // случай крупного системного шрифта, но этот переключатель его не
+  // использовал: при 130 % «Всё время» начинало выходить за край.
   return (
-    <div className="segmented" role="group" aria-label="Период">
+    <div className="segmented segmented--fill" role="group" aria-label="Период">
       {PERIODS.map((item) => (
         <button key={item.key} aria-pressed={value === item.key} onClick={() => onChange(item.key)}>
           {item.label}
@@ -282,13 +285,18 @@ export default function App() {
   const medicineAlerts = useMemo(() => countAlerts(medicines, Date.now()), [medicines])
 
   /**
-   * Пометка на переключателе значит «есть на что посмотреть»: либо приём не
-   * отмечен, либо что-то кончается. Считать там нечего, важен сам факт.
+   * Пометка на переключателе указывает туда, где дело.
+   *
+   * Раньше одна пометка на «Приёме» зажигалась и от неотмеченного приёма, и от
+   * кончающегося препарата. Человек шёл на «Приём» из-за амлодипина, а про
+   * амлодипин там ничего нет — про него на «Аптечке». Теперь каждая вкладка
+   * отвечает за своё.
    */
-  const medicineMark = useMemo(
-    () => medicineAlerts > 0 || pendingToday(medicines.filter((m) => !m.autoDeduct), Date.now()) > 0,
-    [medicines, medicineAlerts],
+  const intakeMark = useMemo(
+    () => pendingToday(medicines.filter((m) => !m.autoDeduct), Date.now()) > 0,
+    [medicines],
   )
+  const cabinetMark = medicineAlerts > 0
 
   const backup = useBackup(measurements, medicines, settings, updateSettings, ready)
 
@@ -534,7 +542,9 @@ export default function App() {
           >
             <span className="tab__full">{item.label}</span>
             <span className="tab__short">{item.short}</span>
-            {item.key === 'intake' && medicineMark && <span className="tab__mark" aria-hidden="true" />}
+            {((item.key === 'intake' && intakeMark) || (item.key === 'cabinet' && cabinetMark)) && (
+              <span className="tab__mark" aria-hidden="true" />
+            )}
           </button>
         ))}
       </nav>

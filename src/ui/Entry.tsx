@@ -21,6 +21,13 @@ function describeWhen(value: string): string {
   return `${sameDay ? 'сегодня' : DATE_FMT.format(date)}, ${TIME_FMT.format(date)}`
 }
 
+const SAVED_AT = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric',
+  month: 'long',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
 export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReading) => Promise<void> }) {
   const [sys, setSys] = useState('')
   const [dia, setDia] = useState('')
@@ -30,7 +37,8 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
   const [arm, setArm] = useState<'' | 'left' | 'right'>('')
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [saved, setSaved] = useState(false)
+  /** Что именно записали — для подтверждения, которое человек может сверить. */
+  const [saved, setSaved] = useState<{ sys: number; dia: number; bpm: number | null; ts: number } | null>(null)
 
   const coarse = useCoarsePointer()
   const sysRef = useRef<HTMLInputElement>(null)
@@ -47,7 +55,7 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
-    setSaved(false)
+    setSaved(null)
 
     if (!Number.isFinite(sysValue) || sysValue < 40 || sysValue > 300) {
       sysRef.current?.focus()
@@ -65,8 +73,8 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
     if (!Number.isFinite(ts)) return setError('Не разобрал дату и время')
 
     const pulse = Number(bpm)
-    await onAdd({
-      kind: 'bp',
+    const reading = {
+      kind: 'bp' as const,
       id: `m-${crypto.randomUUID()}`,
       ts,
       sys: Math.round(sysValue),
@@ -75,13 +83,23 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
       ihb: false,
       mov: false,
       user,
-      source: 'manual',
+      source: 'manual' as const,
       arm: arm || undefined,
       note: note.trim() || undefined,
-    })
+    }
+    await onAdd(reading)
 
     setError(null)
-    setSaved(true)
+    // Что именно ушло в дневник. Форма после записи очищается и выглядит ровно
+    // так же, как до нажатия, — человек, не уверенный, что попал по кнопке,
+    // жмёт ещё раз и получает дубль измерения. Подтверждение должно быть
+    // соразмерно действию и показывать записанное, а не мигать словом.
+    setSaved({
+      sys: reading.sys,
+      dia: reading.dia,
+      bpm: reading.bpm ?? null,
+      ts: reading.ts,
+    })
     setSys('')
     setDia('')
     setBpm('')
@@ -90,7 +108,6 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
     setWhen(toLocalInput(new Date()))
     setEditingWhen(false)
     sysRef.current?.focus()
-    window.setTimeout(() => setSaved(false), 4000)
   }
 
   return (
@@ -160,10 +177,21 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
         <button className="btn btn--primary" type="submit">
           Добавить
         </button>
-        <span className="muted" role="status" aria-live="polite">
-          {saved ? 'Сохранено' : ''}
-        </span>
       </div>
+
+      <Reveal open={saved !== null}>
+        <div style={{ paddingTop: 'var(--space-4)' }} role="status" aria-live="polite">
+          {saved && (
+            <Banner tone="good">
+              <b>
+                Записано: {saved.sys}/{saved.dia}
+                {saved.bpm !== null && <>, пульс {saved.bpm}</>}
+              </b>
+              <div style={{ marginTop: 4 }}>{SAVED_AT.format(saved.ts)}</div>
+            </Banner>
+          )}
+        </div>
+      </Reveal>
 
       {/* Медицинское предупреждение — под кнопкой: оно не должно сдвигать её вниз
           в тот момент, когда человек уже дописывает вторую цифру. */}

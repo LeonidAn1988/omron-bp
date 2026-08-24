@@ -368,7 +368,15 @@ a {
   font: inherit;
   font-size: var(--fs-2);
   cursor: pointer;
-  white-space: nowrap;
+  /* Подпись переносится, а не выталкивает страницу.
+     Раньше здесь стоял `white-space: nowrap`, и при системном шрифте 175–200 %
+     «Напоминания в календарь» выходили за карточку на сотню пикселей: вся
+     страница получала прокрутку вбок, а активная вкладка уезжала за правый
+     край. Сжаться кнопке было нечем — `min-width: auto` у флекс-элемента не
+     даёт. Короткие подписи не переносятся и без запрета. */
+  max-width: 100%;
+  text-align: center;
+  text-wrap: balance;
   transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease);
 }
@@ -1016,6 +1024,38 @@ input[type='radio'] {
   white-space: nowrap;
 }
 
+
+/* Раскрывашка: своя цель нажатия и свой маркер.
+   У `summary` в проекте не было ни одного правила, и высота строки, по которой
+   надо попасть, равнялась строчному боксу — около 20 px при собственном пороге
+   проекта в 44. Системный треугольник размером в несколько пикселей человек с
+   неважным зрением просто не замечает. */
+details > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  padding-block: var(--space-2);
+  font-size: var(--fs-2);
+  list-style: none;
+  cursor: pointer;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+details > summary::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform var(--dur) var(--ease);
+}
+details[open] > summary::before {
+  transform: rotate(45deg);
+}
 
 /* ── таблицы ────────────────────────────────────────────────────────────── */
 
