@@ -123,6 +123,9 @@ function Adherence({ medicines, from, now }: { medicines: Medicine[]; from: numb
   )
 }
 
+/** Десятичный разделитель по-русски — запятая. */
+const десятичная = (value: number) => value.toFixed(1).replace('.', ',')
+
 export function Report({
   readings,
   summary,
@@ -198,9 +201,24 @@ export function Report({
         </div>
         <table className="report-facts">
           <tbody>
-            <Row label="Кого касается">{patient}</Row>
+            <Row label="Кого касается">
+              {/* «Пользователь 1» — это подпись кнопки прибора, а не имя
+                  человека. В документе, который несут врачу, она выглядит так,
+                  будто дневник вели не глядя. Подставлять что-то за человека
+                  нельзя, поэтому здесь прямая просьба — и она видна до печати. */}
+              {/^Пользовател[ья] \d$/.test(patient.trim()) ? (
+                <span className="critical-text">имя не указано — впишите его в настройках</span>
+              ) : (
+                patient
+              )}
+            </Row>
             <Row label="Период">
-              {periodLabel.toLowerCase()} — с {DATE.format(span.firstTs)} по {DATE.format(span.lastTs)}
+              {/* Раньше стояло «30 дней — с 10 по 22 августа», и подпись спорила
+                  с датами: за тридцать дней записей может быть на двенадцать.
+                  Теперь видно, что первое — запрошенный срок, второе — то, что
+                  в нём нашлось. */}
+              за {periodLabel.toLowerCase()}, записи с&nbsp;{DATE.format(span.firstTs)} по&nbsp;
+              {DATE.format(span.lastTs)}
             </Row>
           </tbody>
         </table>
@@ -218,15 +236,28 @@ export function Report({
                 <Row label="Среднее давление">
                   <b>
                     {Math.round(summary.avgSys)}/{Math.round(summary.avgDia)}
-                  </b>{' '}
-                  мм рт. ст. · <CategoryBadge sys={Math.round(summary.avgSys)} dia={Math.round(summary.avgDia)} />
+                  </b>
+                  &nbsp;мм&nbsp;рт.&nbsp;ст.{' '}
+                  <span className="nowrap">
+                    · <CategoryBadge sys={Math.round(summary.avgSys)} dia={Math.round(summary.avgDia)} />
+                  </span>
                 </Row>
                 <Row label="Средний пульс">
-                  {summary.avgBpm ? `${Math.round(summary.avgBpm)} уд/мин` : 'нет данных'}
+                  {summary.avgBpm ? <span className="nowrap">{Math.round(summary.avgBpm)}&nbsp;уд/мин</span> : 'нет данных'}
                 </Row>
                 <Row label="Разброс">
-                  систолическое ±{summary.sdSys.toFixed(1)} (от {summary.minSys} до {summary.maxSys}), диастолическое ±
-                  {summary.sdDia.toFixed(1)} (от {summary.minDia} до {summary.maxDia})
+                  {/* Разброс разъезжался на четыре строки: «(от» дважды
+                      повисало в конце, а «62 до 77)» оставалось сиротой.
+                      Диапазон — неразрывный кусок, и десятичный разделитель по
+                      русским правилам запятая, а не точка. */}
+                  систолическое <span className="nowrap">±{десятичная(summary.sdSys)}</span>{' '}
+                  <span className="nowrap">
+                    (от {summary.minSys} до {summary.maxSys})
+                  </span>
+                  , диастолическое <span className="nowrap">±{десятичная(summary.sdDia)}</span>{' '}
+                  <span className="nowrap">
+                    (от {summary.minDia} до {summary.maxDia})
+                  </span>
                 </Row>
                 <Row label="В целевом диапазоне">
                   {Math.round(summary.withinTarget * 100)}% измерений ниже {targetSys}/{targetDia}
