@@ -1821,8 +1821,15 @@ tbody tr:hover {
   gap: var(--space-1);
 }
 .tool {
+  /* Значок над подписью: так кнопка читается кнопкой и на узком экране, где
+     значок и слово в строку не помещаются. */
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   min-height: var(--tap);
-  padding: 0 var(--space-3);
+  padding: var(--space-1) var(--space-3);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: transparent;

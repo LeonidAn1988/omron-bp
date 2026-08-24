@@ -21,6 +21,8 @@ import { LatestAlert, SummaryTiles } from './ui/Summary'
 import { GlucoseEntry, GlucoseList, GlucoseTiles } from './ui/Glucose'
 import { Readings } from './ui/Readings'
 import { MedicineNudge } from './ui/Medicines'
+import { DeviceIcon, ReportIcon, SettingsIcon } from './ui/icons'
+import { Onboarding } from './ui/Onboarding'
 import { Intake } from './ui/Intake'
 import { Cabinet } from './ui/Cabinet'
 import { Entry } from './ui/Entry'
@@ -64,9 +66,9 @@ const TABS = [
 
 /** Разделы вне нижней строки: к ним обращаются редко, значок в шапке достаточен. */
 const TOOLS = [
-  { key: 'sync', label: 'Прибор' },
-  { key: 'report', label: 'Отчёт' },
-  { key: 'settings', label: 'Настройки' },
+  { key: 'sync', label: 'Прибор', Icon: DeviceIcon },
+  { key: 'report', label: 'Отчёт', Icon: ReportIcon },
+  { key: 'settings', label: 'Настройки', Icon: SettingsIcon },
 ] as const
 
 type TabKey = (typeof TABS)[number]['key'] | (typeof TOOLS)[number]['key']
@@ -304,7 +306,35 @@ export default function App() {
   )
   const cabinetMark = medicineAlerts > 0
 
+  /**
+   * Развёрнутые предупреждения прячутся на неделю.
+   *
+   * Баннер, висящий до устранения причины, доносит ровно один раз: дальше его
+   * перестают читать, и в тот день, когда он окажется важным, не заметят.
+   * Точка на кнопке при этом остаётся — сигнал никуда не девается.
+   */
+  const nudgeHidden = useMemo(
+    () => ({
+      backup: Date.now() < (settings.nudgesUntil?.backup ?? 0),
+      cabinet: Date.now() < (settings.nudgesUntil?.cabinet ?? 0),
+    }),
+    [settings.nudgesUntil],
+  )
+
+  const snoozeNudge = useCallback(
+    (kind: 'backup' | 'cabinet') => {
+      const until = Date.now() + 7 * 24 * 60 * 60 * 1000
+      updateSettings({
+        ...settingsRef.current,
+        nudgesUntil: { ...settingsRef.current.nudgesUntil, [kind]: until },
+      })
+    },
+    [updateSettings],
+  )
+
   const backup = useBackup(measurements, medicines, settings, updateSettings, ready)
+  /** Копия просрочена — точка на «Настройках» горит и после «Понятно». */
+  const settingsMark = backup.warning !== null
 
   // Напоминания живут здесь, а не на экране настроек: расписание правится в
   // аптечке, и пересобирать набор надо в тот же момент, а не при следующем
@@ -426,6 +456,18 @@ export default function App() {
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? ''
   const patientName = settings.userNames[settings.activeUser] ?? `Пользователь ${settings.activeUser}`
 
+  // Знакомство — до всего остального, но только на пустом дневнике: тому, кто
+  // обновился с записями, знакомиться не с чем, и показывать ему анкету значит
+  // спрашивать о том, что он уже решил.
+  if (ready && !settings.onboarded && measurements.length === 0 && medicines.length === 0) {
+    return (
+      <Onboarding
+        settings={settings}
+        onApply={(patch) => updateSettings({ ...settingsRef.current, ...patch })}
+      />
+    )
+  }
+
   if (storageFailed) {
     return (
       <div className="app">
@@ -509,8 +551,12 @@ export default function App() {
         </div>
 
         {/* Прибор, отчёт и настройки — редкие разделы. В нижней строке они
-            вытеснили бы ежедневные, а прятать ежедневное нельзя. Подпись у
-            каждого обязательна: значок без слова пожилой человек не узнаёт. */}
+            вытеснили бы ежедневные, а прятать ежедневное нельзя.
+
+            Значок и подпись вместе, а не то или другое. Значок опознаётся
+            быстрее и делает кнопку кнопкой — без него три слова в ряд читались
+            как строка текста. Подпись обязательна: шестерёнку узнают не все, а
+            бургер спрятал бы три пункта ради места, которого хватает. */}
         <nav className="tools no-print" aria-label="Служебные разделы">
           {TOOLS.map((item) => (
             <button
@@ -519,7 +565,9 @@ export default function App() {
               aria-current={tab === item.key ? 'page' : undefined}
               onClick={() => setTab(item.key)}
             >
-              {item.label}
+              <item.Icon />
+              <span>{item.label}</span>
+              {item.key === 'settings' && settingsMark && <span className="tab__mark" aria-hidden="true" />}
             </button>
           ))}
         </nav>
@@ -560,13 +608,24 @@ export default function App() {
           <LatestAlert latest={latestBp} />
 
           {/* Предупреждение о копии стоит здесь, а не в настройках: до настроек
-              человек не дойдёт, а потеря дневника необратима. */}
-          <BackupNudge status={backup} onOpenSettings={() => setTab('settings')} />
+              человек не дойдёт, а потеря дневника необратима. После «Понятно»
+              оно уходит на неделю, а сигнал остаётся точкой на кнопке
+              «Настройки» — тихо, но не молча. */}
+          {!nudgeHidden.backup && (
+            <BackupNudge
+              status={backup}
+              onOpenSettings={() => setTab('settings')}
+              onDismiss={() => snoozeNudge('backup')}
+            />
+          )}
 
-          <MedicineNudge
-            count={medicineAlerts}
-            onOpen={() => setTab('cabinet')}
-          />
+          {!nudgeHidden.cabinet && (
+            <MedicineNudge
+              count={medicineAlerts}
+              onOpen={() => setTab('cabinet')}
+              onDismiss={() => snoozeNudge('cabinet')}
+            />
+          )}
 
           {measurements.length === 0 ? (
             <Banner tone="info">

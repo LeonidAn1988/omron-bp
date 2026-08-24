@@ -101,7 +101,16 @@ export const ALERT_TONE: Record<MedicineAlert['kind'], 'critical' | 'warning'> =
   expiring: 'warning',
 }
 
-export function MedicineNudge({ count, onOpen }: { count: number; onOpen: () => void }) {
+export function MedicineNudge({
+  count,
+  onOpen,
+  onDismiss,
+}: {
+  count: number
+  onOpen: () => void
+  /** «Понятно»: убрать баннер на неделю. Точка на вкладке «Аптечка» останется. */
+  onDismiss: () => void
+}) {
   if (count === 0) return null
 
   return (
@@ -113,6 +122,9 @@ export function MedicineNudge({ count, onOpen }: { count: number; onOpen: () => 
       <div className="row" style={{ marginTop: 'var(--space-3)' }}>
         <button className="btn" onClick={onOpen}>
           Открыть аптечку
+        </button>
+        <button className="btn btn--sm" onClick={onDismiss}>
+          Понятно
         </button>
       </div>
     </Banner>

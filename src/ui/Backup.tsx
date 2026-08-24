@@ -140,7 +140,16 @@ const NUDGE_TITLE = {
 } as const
 
 /** Предупреждение на главном экране — там, где его увидят, а не в настройках. */
-export function BackupNudge({ status, onOpenSettings }: { status: BackupStatus; onOpenSettings: () => void }) {
+export function BackupNudge({
+  status,
+  onOpenSettings,
+  onDismiss,
+}: {
+  status: BackupStatus
+  onOpenSettings: () => void
+  /** «Понятно»: убрать баннер на неделю. Сигнал останется точкой на кнопке. */
+  onDismiss: () => void
+}) {
   if (status.warning === null) return null
 
   const explain = {
@@ -165,6 +174,9 @@ export function BackupNudge({ status, onOpenSettings }: { status: BackupStatus; 
         </button>
         <button className="btn" onClick={onOpenSettings}>
           Настроить
+        </button>
+        <button className="btn btn--sm" onClick={onDismiss}>
+          Понятно
         </button>
       </div>
     </Banner>
