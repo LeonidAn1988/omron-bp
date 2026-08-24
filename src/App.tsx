@@ -100,6 +100,14 @@ export default function App() {
   const [ready, setReady] = useState(false)
   /** Хранилище не ответило. Молчать нельзя: экран «Загрузка…» висел бы вечно. */
   const [storageFailed, setStorageFailed] = useState(false)
+  /**
+   * Хранилище отказало при записи.
+   *
+   * Отдельно от `storageFailed`: тот про чтение при запуске и показывается
+   * вместо всего приложения. Здесь дневник работает, но последнее действие не
+   * сохранилось, и молчать об этом нельзя — человек решит, что отметил приём.
+   */
+  const [saveFailed, setSaveFailed] = useState<string | null>(null)
   const [undo, setUndo] = useState<Measurement | null>(null)
   // ReturnType, а не number: в браузере таймер это число, в Node — объект.
   const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -249,7 +257,14 @@ export default function App() {
       // месте, где препарат появляется в аптечке. Без него расписание
       // распространилось бы на всё прошлое, и свежий препарат показал бы
       // пропуски за два месяца назад.
-      await putMedicine(item.id ? item : { ...item, id: newMedicineId(), since: Date.now() })
+      try {
+        await putMedicine(item.id ? item : { ...item, id: newMedicineId(), since: Date.now() })
+        setSaveFailed(null)
+      } catch (caught) {
+        setSaveFailed(caught instanceof Error ? caught.message : String(caught))
+        // Пробрасываем дальше: форма обязана остаться открытой и сказать своё.
+        throw caught
+      }
       await refreshMedicines()
     },
     [refreshMedicines],
@@ -432,6 +447,29 @@ export default function App() {
       </div>
     )
   }
+
+  /**
+   * Отказ хранилища при записи — на весь экран, поверх любой вкладки.
+   *
+   * Показывается везде, а не только там, где нажали: человек мог нажать
+   * «Принял» и уйти на другую вкладку, а приём при этом не сохранился.
+   */
+  const saveBanner = (
+    <Reveal open={saveFailed !== null}>
+      <div className="no-print" style={{ paddingBottom: 'var(--space-3)' }}>
+        <Banner tone="critical">
+          <b>Последнее изменение не сохранилось</b>
+          <div style={{ marginTop: 4 }}>
+            Телефон отказал в записи. Чаще всего это нехватка места. Освободите место и повторите — до этого дневник
+            показывает старые данные.
+          </div>
+          <button className="btn btn--sm" style={{ marginTop: 'var(--space-3)' }} onClick={() => setSaveFailed(null)}>
+            Понятно
+          </button>
+        </Banner>
+      </div>
+    </Reveal>
+  )
 
   const undoBanner = (
     <Reveal open={undo !== null}>
@@ -644,6 +682,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {saveBanner}
 
       {tab === 'intake' && (
         <Intake medicines={medicines} onSave={handleSaveMedicine} toRoot={rootSignal} openDay={reminderDay} />

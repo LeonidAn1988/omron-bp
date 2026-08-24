@@ -47,6 +47,50 @@ interface SyncOutcome {
 
 type Busy = null | 'download' | 'pair' | 'inspect'
 
+/**
+ * Отказы Bluetooth по-русски и с выходом.
+ *
+ * Свои протокольные ошибки приложение и так пишет словами, но самые частые
+ * отказы прилетают от радиомодуля и от системного моста: «GATT Server is
+ * disconnected», «Connection Attempt Failed», «NetworkError». Показывать их как
+ * есть — это тупик: ни причины, ни следующего шага, да ещё и по-английски.
+ * Здесь у каждого частого отказа есть причина и действие.
+ */
+function explainBleError(message: string): { причина: string; действие: string } | null {
+  const m = message.toLowerCase()
+  if (m.includes('disconnect') || m.includes('gatt server')) {
+    return {
+      причина: 'Прибор отключился, не договорив.',
+      действие: 'Он засыпает примерно через минуту. Нажмите кнопку Bluetooth на тонометре и повторите сразу.',
+    }
+  }
+  if (m.includes('connection attempt failed') || m.includes('connectgatt') || m.includes('timeout')) {
+    return {
+      причина: 'Прибор не отозвался.',
+      действие: 'Нажмите кнопку Bluetooth на тонометре — значок связи должен мигать — и повторите.',
+    }
+  }
+  if (m.includes('networkerror') || m.includes('unreachable')) {
+    return {
+      причина: 'Соединение с прибором оборвалось.',
+      действие: 'Поднесите телефон ближе к тонометру и повторите.',
+    }
+  }
+  if (m.includes('not supported') || m.includes('unsupported')) {
+    return {
+      причина: 'Это устройство не поддерживает подключение к тонометру.',
+      действие: 'Выгрузку нужно делать с телефона, где есть Bluetooth.',
+    }
+  }
+  if (m.includes('permission') || m.includes('denied')) {
+    return {
+      причина: 'Система не дала доступ к Bluetooth.',
+      действие: 'Разрешите приложению «Устройства поблизости» в настройках телефона и повторите.',
+    }
+  }
+  return null
+}
+
 export function Sync({
   pairingKey,
   onImport,
@@ -285,12 +329,29 @@ export function Sync({
 
           <Reveal open={error !== null}>
             <div style={{ paddingTop: 'var(--space-4)' }} role="alert">
-              {error && (
-                <Banner tone="critical">
-                  <b>Не получилось</b>
-                  <div style={{ marginTop: 4 }}>{error}</div>
-                </Banner>
-              )}
+              {error &&
+                (() => {
+                  const разбор = explainBleError(error)
+                  return (
+                    <Banner tone="critical">
+                      <b>{разбор ? разбор.причина : 'Не получилось'}</b>
+                      <div style={{ marginTop: 4 }}>{разбор ? разбор.действие : error}</div>
+                      <div className="row" style={{ marginTop: 'var(--space-3)', gap: 'var(--space-2)' }}>
+                        <button className="btn btn--sm btn--primary" onClick={handleDownload} disabled={busy !== null}>
+                          Повторить
+                        </button>
+                        <button className="btn btn--sm" onClick={() => setShowDebug((v) => !v)}>
+                          {showDebug ? 'Скрыть подробности' : 'Подробности'}
+                        </button>
+                      </div>
+                      {разбор && showDebug && (
+                        <div className="muted" style={{ marginTop: 'var(--space-2)', wordBreak: 'break-word' }}>
+                          {error}
+                        </div>
+                      )}
+                    </Banner>
+                  )
+                })()}
             </div>
           </Reveal>
 
