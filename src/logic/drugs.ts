@@ -190,6 +190,40 @@ function innOf(drug: Drug): string {
   return value
 }
 
+/**
+ * Все дозировки препарата одной приведённой строкой.
+ *
+ * Нужны поиску: набрав «конкор 2,5», человек ищет вполне определённую коробку,
+ * а дозировка лежит внутри записи и в поиске раньше не участвовала вовсе. У
+ * «Конкора» их четыре записи, и та, что с 2,5 мг, называется «Конкор® Кор» —
+ * угадать это по названию невозможно, приходилось открывать каждую.
+ */
+const normalizedDoses = new WeakMap<Drug, string>()
+
+function dosesOf(drug: Drug): string {
+  let value = normalizedDoses.get(drug)
+  if (value === undefined) {
+    value = normalize((drug.v ?? []).flatMap(([, doses]) => doses ?? []).join(' '))
+    normalizedDoses.set(drug, value)
+  }
+  return value
+}
+
+/**
+ * Разделить запрос на название и дозировку.
+ *
+ * «конкор 2 5» → название «конкор», дозировка «2 5». Границей считается первое
+ * слово, начинающееся с цифры: названий, которые начинаются с числа, в реестре
+ * хватает («9 месяцев Фолиевая кислота»), но там число стоит первым — и тогда
+ * названия не остаётся, а значит и делить нечего.
+ */
+function splitQuery(needle: string): { text: string; dose: string } {
+  const words = needle.split(' ').filter(Boolean)
+  const at = words.findIndex((word) => /^\d/.test(word))
+  if (at <= 0) return { text: needle, dose: '' }
+  return { text: words.slice(0, at).join(' '), dose: words.slice(at).join(' ') }
+}
+
 function makersOfIndex(makers: string[]): string[] {
   let value = normalizedMakers.get(makers)
   if (value === undefined) {
@@ -203,7 +237,7 @@ function makersOfIndex(makers: string[]): string[] {
 export const SUGGEST_LIMIT = 8
 
 /** По какому полю нашёлся препарат — подсказка показывает это словами. */
-export type MatchField = 'name' | 'inn' | 'maker'
+export type MatchField = 'name' | 'inn' | 'maker' | 'dose'
 
 export interface DrugHit {
   drug: Drug
@@ -228,20 +262,45 @@ export function searchHits(
   const needle = normalize(query)
   if (needle.length < 2) return []
 
-  const buckets: DrugHit[][] = [[], [], [], []]
+  const { text, dose } = splitQuery(needle)
+
+  // Шесть корзин. Первые две — совпавшие и по названию, и по дозировке:
+  // сначала простая дозировка, потом комбинированная. Спросив «конкор 2,5»,
+  // человек ищет «Конкор® Кор» с 2,5 мг, а не «Конкор® НСТ» с «2,5 мг +
+  // 6,25 мг» — тот тоже содержит эту цифру, но это другой препарат.
+  // Дальше всё остальное в прежнем порядке.
+  const buckets: DrugHit[][] = [[], [], [], [], [], []]
   const makerIndex = makersOfIndex(makers)
 
   for (const item of items) {
     const name = nameOf(item)
-    if (name.startsWith(needle)) buckets[0].push({ drug: item, field: 'name' })
-    else if (name.includes(needle)) buckets[1].push({ drug: item, field: 'name' })
-    else if (innOf(item).includes(needle)) buckets[2].push({ drug: item, field: 'inn' })
+
+    if (dose && text) {
+      const подходит =
+        name.includes(text) ||
+        innOf(item).includes(text) ||
+        (item.m ?? []).some((index) => (makerIndex[index] ?? '').includes(text))
+      if (подходит && dosesOf(item).includes(dose)) {
+        // Простая дозировка — та, где нет знака сложения: «2,5 мг» против
+        // «2,5 мг + 6,25 мг».
+        const простая = (item.v ?? []).some((variant) =>
+          (variant[1] ?? []).some((one) => !one.includes('+') && normalize(one).includes(dose)),
+        )
+        buckets[простая ? 0 : 1].push({ drug: item, field: 'dose' })
+        if (buckets[0].length >= limit) break
+        continue
+      }
+    }
+
+    if (name.startsWith(needle)) buckets[2].push({ drug: item, field: 'name' })
+    else if (name.includes(needle)) buckets[3].push({ drug: item, field: 'name' })
+    else if (innOf(item).includes(needle)) buckets[4].push({ drug: item, field: 'inn' })
     else if ((item.m ?? []).some((index) => (makerIndex[index] ?? '').includes(needle)))
-      buckets[3].push({ drug: item, field: 'maker' })
+      buckets[5].push({ drug: item, field: 'maker' })
 
     // Раньше выхода нет: точные совпадения могут встретиться в конце реестра,
     // а он отсортирован по алфавиту, а не по важности.
-    if (buckets[0].length >= limit) break
+    if (buckets[2].length >= limit) break
   }
 
   return buckets.flat().slice(0, limit)
@@ -264,7 +323,13 @@ export function describeDrug(drug: Drug, forms: string[] = [], group = ''): stri
   const match = group ? variants.find(([index]) => formGroup(forms[index] ?? '') === group) : undefined
   const chosen = match ?? variants[0]
   const form = chosen ? forms[chosen[0]] : undefined
-  return [drug.i, form?.toLowerCase()].filter(Boolean).join(' · ')
+  // Дозировки — в подписи, а не внутри карточки. У «Конкора» четыре записи, и
+  // без цифры они выглядят одинаково: человек открывал каждую, чтобы найти
+  // свои 2,5 мг. Больше трёх не показываем — строка перестаёт читаться.
+  const doses = chosen?.[1] ?? []
+  const дозировки =
+    doses.length === 0 ? '' : doses.length <= 3 ? doses.join(', ') : `${doses.slice(0, 3).join(', ')} и ещё ${doses.length - 3}`
+  return [drug.i, form?.toLowerCase(), дозировки].filter(Boolean).join(' · ')
 }
 
 /**

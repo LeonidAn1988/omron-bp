@@ -73,7 +73,14 @@ function loadBook(notify: (book: DrugBook | null) => void): () => void {
   }
 }
 
-const FIELD_LABEL = { name: '', inn: 'по веществу', maker: 'по производителю' } as const
+const FIELD_LABEL = {
+  name: '',
+  inn: 'по веществу',
+  maker: 'по производителю',
+  // Совпало и название, и дозировка — про это не пишем: человек сам набрал
+  // цифру и видит её в подписи.
+  dose: '',
+} as const
 
 /** «14 августа 2026» — дата выгрузки реестра словами. */
 const BOOK_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -247,7 +254,7 @@ export function DrugPicker({
                     {describeDrug(drug, book?.forms ?? [], group ?? '')}
                     {/* Говорим, по какому полю нашлось: иначе непонятно, почему
                         по запросу «ибупрофен» выпал «Нурофен». */}
-                    {field !== 'name' && <span className="suggest__why"> · найдено {FIELD_LABEL[field]}</span>}
+                    {FIELD_LABEL[field] && <span className="suggest__why"> · найдено {FIELD_LABEL[field]}</span>}
                   </span>
                 )}
               </button>
