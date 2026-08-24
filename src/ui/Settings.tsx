@@ -31,6 +31,19 @@ const THEMES: { key: ThemeChoice; title: string }[] = [
   { key: 'dark', title: 'Тёмная' },
 ]
 
+
+const TEXT_SCALES: { key: SettingsData['textScale']; title: string }[] = [
+  { key: 'small', title: 'Мельче' },
+  { key: 'normal', title: 'Обычный' },
+  { key: 'large', title: 'Крупный' },
+  { key: 'xlarge', title: 'Очень крупный' },
+]
+
+const DENSITIES: { key: SettingsData['density']; title: string }[] = [
+  { key: 'compact', title: 'Плотно' },
+  { key: 'normal', title: 'Обычно' },
+  { key: 'roomy', title: 'Просторно' },
+]
 export function Settings({
   settings,
   onChange,
@@ -161,6 +174,43 @@ export function Settings({
         </div>
         <p className="muted" style={{ marginTop: 'var(--space-3)', marginBottom: 0 }}>
           «Как в системе» — приложение темнеет вместе с телефоном или компьютером.
+        </p>
+
+        <div className="tile__label" style={{ margin: 'var(--space-5) 0 var(--space-2)' }}>
+          Размер текста
+        </div>
+        <div className="segmented segmented--fill" role="group" aria-label="Размер текста">
+          {TEXT_SCALES.map(({ key, title }) => (
+            <button key={key} aria-pressed={settings.textScale === key} onClick={() => patch({ textScale: key })}>
+              {title}
+            </button>
+          ))}
+        </div>
+
+        <div className="tile__label" style={{ margin: 'var(--space-5) 0 var(--space-2)' }}>
+          Плотность
+        </div>
+        <div className="segmented segmented--fill" role="group" aria-label="Плотность вёрстки">
+          {DENSITIES.map(({ key, title }) => (
+            <button key={key} aria-pressed={settings.density === key} onClick={() => patch({ density: key })}>
+              {title}
+            </button>
+          ))}
+        </div>
+
+        {/* Образец меняется вместе с настройкой: выбирать размер вслепую, а
+            потом искать, где посмотреть результат, — лишний шаг там, где он не
+            нужен. Здесь и заголовок, и обычный текст, и подпись: по одному
+            слову размер не оценишь. */}
+        <div className="sample">
+          <div style={{ fontSize: 'var(--fs-3)', fontWeight: 600 }}>Утренний приём — 08:00</div>
+          <div style={{ fontSize: 'var(--fs-2)', marginTop: 'var(--space-2)' }}>Периндоприл 5 мг, до еды</div>
+          <div className="muted" style={{ marginTop: 'var(--space-1)' }}>так будет выглядеть текст в приложении</div>
+        </div>
+
+        <p className="muted" style={{ marginTop: 'var(--space-3)', marginBottom: 0 }}>
+          Размер меняет буквы, плотность — расстояния между блоками. Их выбирают порознь: «плохо вижу» и «не хочу
+          листать» — разные просьбы. Кнопки при этом не становятся меньше — по ним и так надо попадать.
         </p>
       </div>
 

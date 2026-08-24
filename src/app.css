@@ -74,12 +74,21 @@
   --lh-tight: 1.2;
   --lh-base: 1.5;
 
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 24px;
-  --space-6: 32px;
+  /*
+   * Отступы выводятся из одной единицы, а не заданы каждый сам по себе.
+   *
+   * Плотность вёрстки — настройка человека: «плохо вижу» и «не хочу листать»
+   * это разные запросы, и вторым нужны более тесные отступы, а не более мелкие
+   * буквы. Одна ручка на всё не даёт ни того, ни другого, поэтому здесь только
+   * отступы, а размер текста — отдельно, через размер шрифта корня.
+   */
+  --space-unit: 4px;
+  --space-1: var(--space-unit);
+  --space-2: calc(var(--space-unit) * 2);
+  --space-3: calc(var(--space-unit) * 3);
+  --space-4: calc(var(--space-unit) * 4);
+  --space-5: calc(var(--space-unit) * 6);
+  --space-6: calc(var(--space-unit) * 8);
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -91,8 +100,36 @@
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
-  --tap: 44px;
+  /* Цель нажатия растёт вместе с просторной вёрсткой, но никогда не падает
+     ниже 44 px: тесная вёрстка — это про отступы между блоками, а не про то,
+     чтобы в кнопку стало труднее попасть. */
+  --tap: max(44px, calc(var(--space-unit) * 11));
   --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+/*
+ * Размер текста и плотность вёрстки — выбор человека.
+ *
+ * Размеры в проекте заданы в `rem`, поэтому весь текст масштабируется одним
+ * размером шрифта корня. Системная настройка Android до WebView не доходит, и
+ * без этой пары приложение оставалось бы с одним-единственным размером для
+ * всех — а пользуются им и те, кому шрифт по умолчанию крупен.
+ */
+:root[data-text='small'] {
+  font-size: 93.75%;
+}
+:root[data-text='large'] {
+  font-size: 112.5%;
+}
+:root[data-text='xlarge'] {
+  font-size: 131.25%;
+}
+
+:root[data-density='compact'] {
+  --space-unit: 3px;
+}
+:root[data-density='roomy'] {
+  --space-unit: 5px;
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
@@ -1055,6 +1092,16 @@ details > summary::before {
 }
 details[open] > summary::before {
   transform: rotate(45deg);
+}
+
+/* Образец текста в настройках. Не карточка: карточка внутри карточки — то,
+   чего в этом проекте нет нигде, и заводить исключение ради примера незачем. */
+.sample {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--page);
 }
 
 /* ── таблицы ────────────────────────────────────────────────────────────── */

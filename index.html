@@ -16,8 +16,15 @@
          синхронно и только для этой строчки. -->
     <script>
       try {
+        var root = document.documentElement
         var choice = localStorage.getItem('theme')
-        if (choice === 'light' || choice === 'dark') document.documentElement.dataset.theme = choice
+        if (choice === 'light' || choice === 'dark') root.dataset.theme = choice
+        // Размер текста и плотность — по той же причине: иначе вёрстка успеет
+        // отрисоваться одним размером и прыгнуть на другой.
+        var text = localStorage.getItem('textScale')
+        if (text === 'small' || text === 'large' || text === 'xlarge') root.dataset.text = text
+        var density = localStorage.getItem('density')
+        if (density === 'compact' || density === 'roomy') root.dataset.density = density
       } catch (e) {
         /* приватный режим может запретить хранилище — тогда остаётся системная тема */
       }

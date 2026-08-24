@@ -35,7 +35,7 @@ import {
   startOfDay,
 } from './logic/medicines'
 import type { ImportResult } from './logic/io'
-import { applyTheme } from './ui/theme'
+import { applyDisplay, applyTheme } from './ui/theme'
 import { useBackup } from './ui/useBackup'
 import { useReminders } from './ui/useReminders'
 import { BackupNudge } from './ui/Backup'
@@ -155,6 +155,12 @@ export default function App() {
   useEffect(() => {
     applyTheme(settings.theme)
   }, [settings.theme])
+
+  // Размер текста и плотность — тем же порядком: скрипт в index.html ставит их
+  // до первой отрисовки, здесь они приводятся в соответствие с настройками.
+  useEffect(() => {
+    applyDisplay(settings.textScale, settings.density)
+  }, [settings.textScale, settings.density])
 
   const refresh = useCallback(async () => setMeasurements(await getAllMeasurements()), [])
   const refreshMedicines = useCallback(async () => setMedicines(await getAllMedicines()), [])

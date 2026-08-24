@@ -1,4 +1,4 @@
-import type { ThemeChoice } from '../types'
+import type { Density, TextScale, ThemeChoice } from '../types'
 
 /**
  * Применение выбранной темы к документу.
@@ -10,6 +10,8 @@ import type { ThemeChoice } from '../types'
  */
 
 const KEY = 'theme'
+const TEXT_KEY = 'textScale'
+const DENSITY_KEY = 'density'
 
 export function applyTheme(choice: ThemeChoice): void {
   const root = document.documentElement
@@ -61,3 +63,32 @@ function paintBrowserChrome(choice: ThemeChoice): void {
 /** Запасные значения на случай, если стили ещё не применились. Совпадают с `--page`. */
 const DARK_PAGE = '#0d0d0d'
 const LIGHT_PAGE = '#f0efec'
+
+
+/**
+ * Размер текста и плотность вёрстки.
+ *
+ * Дублируются в localStorage по той же причине, что и тема: настройки лежат в
+ * IndexedDB и читаются асинхронно, а вёрстку надо разложить до первой
+ * отрисовки — иначе экран успевает нарисоваться одним размером и прыгнуть на
+ * другой. Читает дубликат тот же маленький скрипт в index.html.
+ */
+export function applyDisplay(text: TextScale, density: Density): void {
+  const root = document.documentElement
+
+  if (text === 'normal') delete root.dataset.text
+  else root.dataset.text = text
+
+  if (density === 'normal') delete root.dataset.density
+  else root.dataset.density = density
+
+  try {
+    if (text === 'normal') localStorage.removeItem(TEXT_KEY)
+    else localStorage.setItem(TEXT_KEY, text)
+    if (density === 'normal') localStorage.removeItem(DENSITY_KEY)
+    else localStorage.setItem(DENSITY_KEY, density)
+  } catch {
+    // Приватный режим может запретить хранилище: в этой сессии всё работает,
+    // следующий запуск начнётся с обычного размера.
+  }
+}
