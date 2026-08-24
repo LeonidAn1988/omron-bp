@@ -39,6 +39,8 @@ export function Reminders({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [checking, setChecking] = useState<string | null>(null)
+  /** Системный экран не открылся: на нестандартных прошивках такое бывает. */
+  const [noSettings, setNoSettings] = useState(false)
   const [batteryRestricted, setBatteryRestricted] = useState<boolean | null>(null)
   const [exact, setExact] = useState<boolean | null>(null)
   const [quiet, setQuiet] = useState<boolean | null>(null)
@@ -176,10 +178,26 @@ export function Reminders({
             <button
               className="btn btn--sm"
               style={{ marginTop: 'var(--space-3)' }}
-              onClick={() => void port.openBatterySettings()}
+              onClick={() => void port.openBatterySettings().then((ok) => setNoSettings(!ok))}
             >
               Открыть настройки приложения
             </button>
+          </Banner>
+        </div>
+      </Reveal>
+
+      {/*
+        Нажали кнопку, а системный экран не открылся — так бывает на
+        нестандартных прошивках. Молчать нельзя: человек решит, что нажал мимо,
+        и будет жать ещё.
+      */}
+      <Reveal open={noSettings}>
+        <div style={{ paddingTop: 'var(--space-4)' }}>
+          <Banner tone="warning">
+            <b>Телефон не открыл нужный экран</b>
+            <div style={{ marginTop: 4 }}>
+              Откройте его сами: настройки телефона → «Приложения» → «Дневник здоровья». Там и уведомления, и батарея.
+            </div>
           </Banner>
         </div>
       </Reveal>
@@ -192,7 +210,7 @@ export function Reminders({
             <button
               className="btn btn--sm"
               style={{ marginTop: 'var(--space-3)' }}
-              onClick={() => void port.openBatterySettings()}
+              onClick={() => void port.openBatterySettings().then((ok) => setNoSettings(!ok))}
             >
               Открыть настройки приложения
             </button>
@@ -260,7 +278,7 @@ export function Reminders({
           </div>
 
           <div>
-            <button className="btn btn--sm" onClick={() => void port.openSoundSettings(sound)}>
+            <button className="btn btn--sm" onClick={() => void port.openSoundSettings(sound).then((ok) => setNoSettings(!ok))}>
               Громкость и вибрация
             </button>
             <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
@@ -285,7 +303,7 @@ export function Reminders({
               <button
                 className="btn btn--sm"
                 style={{ marginTop: 'var(--space-3)' }}
-                onClick={() => void port.openSoundSettings(sound)}
+                onClick={() => void port.openSoundSettings(sound).then((ok) => setNoSettings(!ok))}
               >
                 Включить уведомления
               </button>
@@ -307,7 +325,7 @@ export function Reminders({
               <button
                 className="btn btn--sm"
                 style={{ marginTop: 'var(--space-3)' }}
-                onClick={() => void port.openSoundSettings(sound)}
+                onClick={() => void port.openSoundSettings(sound).then((ok) => setNoSettings(!ok))}
               >
                 Открыть настройки уведомления
               </button>
@@ -362,7 +380,7 @@ export function Reminders({
               <button
                 className="btn btn--sm"
                 style={{ marginTop: 'var(--space-3)' }}
-                onClick={() => void port.openBatterySettings()}
+                onClick={() => void port.openBatterySettings().then((ok) => setNoSettings(!ok))}
               >
                 Разрешить работу без ограничений
               </button>

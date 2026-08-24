@@ -126,14 +126,29 @@ export function Intake({
   medicines,
   onSave,
   toRoot = 0,
+  openDay = null,
 }: {
   medicines: Medicine[]
   onSave: (item: Medicine) => Promise<void>
   /** Меняется, когда человек нажал на уже активную вкладку: вернуться на сегодня. */
   toRoot?: number
+  /**
+   * День, который надо показать: приходит от нажатия по напоминанию.
+   *
+   * Напоминание может быть о вчерашнем приёме — например, человек нажал
+   * «Принял» утром на уведомлении, которое пришло вечером. Открыть при этом
+   * сегодняшний день значит показать не то, что он только что отметил.
+   */
+  openDay?: number | null
 }) {
   const [now, setNow] = useState(() => Date.now())
-  const [selected, setSelected] = useState(() => Date.now())
+  const [selected, setSelected] = useState(() => openDay ?? Date.now())
+
+  // День из уведомления главнее текущего выбора: человек только что нажал
+  // «Принял» именно на нём.
+  useEffect(() => {
+    if (openDay !== null) setSelected(openDay)
+  }, [openDay])
 
   // Уйдя листать прошлую неделю, вернуться к сегодняшнему дню человек будет
   // именно нажатием на вкладку — искать «Сегодня» в ленте из шести десятков

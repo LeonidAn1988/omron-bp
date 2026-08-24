@@ -95,6 +95,8 @@ export default function App() {
   const started = useRef(false)
   /** Приложение открылось нажатием по напоминанию — стартовый экран не навязываем. */
   const openedByReminder = useRef(false)
+  /** День из напоминания: экран приёма обязан открыться именно на нём. */
+  const [reminderDay, setReminderDay] = useState<number | null>(null)
   const [ready, setReady] = useState(false)
   /** Хранилище не ответило. Молчать нельзя: экран «Загрузка…» висел бы вечно. */
   const [storageFailed, setStorageFailed] = useState(false)
@@ -325,12 +327,14 @@ export default function App() {
     sound: settings.reminderSound,
     repeat: settings.remindersRepeat,
     ready,
-    onOpen: () => {
+    onOpen: (day) => {
       openedByReminder.current = true
+      setReminderDay(startOfDay(day))
       setTab('intake')
     },
     onTaken: (day, slot) => {
       openedByReminder.current = true
+      setReminderDay(startOfDay(day))
       void handleReminderTaken(day, slot)
     },
   })
@@ -641,7 +645,9 @@ export default function App() {
         </div>
       )}
 
-      {tab === 'intake' && <Intake medicines={medicines} onSave={handleSaveMedicine} toRoot={rootSignal} />}
+      {tab === 'intake' && (
+        <Intake medicines={medicines} onSave={handleSaveMedicine} toRoot={rootSignal} openDay={reminderDay} />
+      )}
 
       {tab === 'cabinet' && (
         <>
