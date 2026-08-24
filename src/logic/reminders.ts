@@ -24,7 +24,7 @@
  * чем промолчать.
  */
 
-import { dosesOn, normalizeTimes, parseTime, perTimeOf, startOfDay } from './medicines'
+import { dosesOn, normalizeTimes, parseTime, perTimeOf } from './medicines'
 import type { Reminder } from '../platform/ports'
 import type { Medicine } from '../types'
 
@@ -99,8 +99,42 @@ export const formatSlot = (minutes: number) =>
  * половиной лет) × 128 приёмов × 8 повторов.
  */
 export function reminderId(day: number, slotIndex: number, step: number): number {
-  const сутки = Math.round(startOfDay(day) / СУТКИ) % 2048
-  return сутки * 1024 + (slotIndex % 128) * 8 + (step % 8)
+  return (dayNumber(day) % 2048) * 1024 + (slotIndex % 128) * 8 + (step % 8)
+}
+
+/**
+ * Номер суток по **местному календарю**, а не делением метки времени на сутки.
+ *
+ * Деление ошибается там, где сутки не равны двадцати четырём часам: в ночь
+ * перевода часов соседние местные дни могут попасть в одну ячейку, и
+ * идентификаторы напоминаний за разные дни совпадут. Чей-то приём тогда снимет
+ * чужой.
+ */
+function dayNumber(ts: number): number {
+  const d = new Date(ts)
+  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / СУТКИ)
+}
+
+/** Местная полночь дня, отстоящего от `from` на `сдвиг` календарных суток. */
+function addDays(from: Date, сдвиг: number): Date {
+  const d = new Date(from)
+  d.setDate(d.getDate() + сдвиг)
+  // Ещё раз к полуночи: в ночь перевода часов сложение дат оставляет час-другой.
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+/** Момент приёма как местное время дня, а не «полночь плюс минуты». */
+function momentOf(день: Date, минуты: number): number {
+  return new Date(
+    день.getFullYear(),
+    день.getMonth(),
+    день.getDate(),
+    Math.floor(минуты / 60),
+    минуты % 60,
+    0,
+    0,
+  ).getTime()
 }
 
 export interface ReminderOptions {
@@ -138,12 +172,19 @@ export function buildReminders(
 
   const набор: Reminder[] = []
 
+  const первый = new Date(now)
+  первый.setHours(0, 0, 0, 0)
+
   for (let сдвиг = 0; сдвиг < horizon; сдвиг++) {
-    const день = startOfDay(now + сдвиг * СУТКИ)
+    // Календарные сутки, а не «плюс двадцать четыре часа»: в ночь перевода
+    // часов сложение метки времени либо повторяет день, либо перескакивает
+    // через него, и горизонт теряет сутки целиком.
+    const дата = addDays(первый, сдвиг)
+    const день = дата.getTime()
 
     времена.forEach((time, slotIndex) => {
       const минуты = parseTime(time)!
-      const момент = день + минуты * МИНУТА
+      const момент = momentOf(дата, минуты)
 
       // Что из назначенного на этот приём ещё не отмечено. Отмеченное в списке
       // не показываем: человек уже принял, напоминать об этом — путать.

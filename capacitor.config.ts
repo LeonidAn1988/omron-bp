@@ -49,6 +49,21 @@ const config: CapacitorConfig = {
         noDeviceFound: 'Ничего не нашлось. Нажмите кнопку Bluetooth на тонометре и попробуйте снова.',
       },
     },
+
+    LocalNotifications: {
+      /**
+       * Свой значок в строке состояния вместо системного «i».
+       *
+       * Строка состояния берёт **только альфа-канал** значка и красит его сама,
+       * поэтому картинка белая на прозрачном — рисуется `tools/icons.py` и
+       * лежит в ресурсах Android, а не в `assets/`. Без этой настройки Android
+       * подставляет заглушку, и человек не понимает, от какого приложения
+       * пришло напоминание, пока не откроет шторку.
+       */
+      smallIcon: 'ic_stat_omron',
+      /** Тот же синий, что у знака приложения: значок в шторке подкрашивается им. */
+      iconColor: '#1c62b8',
+    },
   },
 
   android: {
@@ -68,6 +83,7 @@ const config: CapacitorConfig = {
      */
     webContentsDebuggingEnabled: process.env.OMRON_RELEASE !== '1',
   },
+
 }
 
 export default config

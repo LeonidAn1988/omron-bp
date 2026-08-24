@@ -5,6 +5,7 @@
  * слипание препаратов по времени, повторы до отметки, снятие повторов уже
  * отмеченного приёма, прошедшие моменты и устойчивость идентификаторов.
  */
+import { execFileSync } from 'node:child_process'
 import {
   HORIZON_DAYS,
   MAX_REMINDERS,
@@ -187,6 +188,62 @@ export function run() {
   )
   check('приём записан как в расписании', один.every((r) => r.slot === '08:00'))
   check('сутки — начало дня, а не момент приёма', один.every((r) => r.day === начало(0)))
+
+
+  // ── перевод часов ────────────────────────────────────────────────────────
+  //
+  // В Москве часы не переводят с 2014 года, поэтому здесь запускается дочерний
+  // процесс в поясе, где переводят. Иначе дефект не воспроизвести: он живёт
+  // ровно в тех сутках, которые длятся не двадцать четыре часа.
+  //
+  // 25 октября 2026 в Берлине сутки длятся 25 часов. Прежний код шагал по
+  // горизонту сложением «плюс двадцать четыре часа»: от полуночи 24 октября он
+  // давал 24, 25, **25**, 26, 27 — день повторялся, а 28 терялся целиком.
+  // Посев именно у полуночи: ближе к полудню лишний час съедается округлением
+  // до начала суток, и дефект не воспроизводится.
+  {
+    const код = `
+      const { buildReminders } = await import('${new URL('./build/api.mjs', import.meta.url).href}');
+      const med = { id: 'a', name: 'Лозартан', dose: '', left: 30, perDay: null, expires: null, times: ['08:00'] };
+      const старт = new Date(2026, 9, 24, 0, 30, 0).getTime();
+      const набор = buildReminders([med], старт, { repeat: false, horizonDays: 5 });
+      const дни = набор.map((r) => new Date(r.at));
+      console.log(JSON.stringify({
+        даты: дни.map((d) => d.getDate()),
+        часы: dni_hours(дни),
+        идентификаторы: набор.map((r) => r.id),
+      }));
+      function dni_hours(list) { return list.map((d) => d.getHours() * 60 + d.getMinutes()); }
+    `
+    let итог = null
+    try {
+      const вывод = execFileSync(process.execPath, ['--input-type=module', '-e', код], {
+        env: { ...process.env, TZ: 'Europe/Berlin' },
+        encoding: 'utf8',
+      })
+      итог = JSON.parse(вывод.trim().split('\n').pop())
+    } catch (e) {
+      итог = { ошибка: String(e && e.message).slice(0, 120) }
+    }
+
+    check(
+      'горизонт не теряет сутки при переводе часов',
+      JSON.stringify(итог.даты) === JSON.stringify([24, 25, 26, 27, 28]),
+      `получилось ${JSON.stringify(итог.даты ?? итог)}`,
+    )
+    check(
+      'приём остаётся на 08:00 по местному времени',
+      Array.isArray(итог.часы) && итог.часы.every((м) => м === 8 * 60),
+      `минуты от полуночи: ${JSON.stringify(итог.часы)}`,
+    )
+    check(
+      'идентификаторы соседних суток не совпадают',
+      Array.isArray(итог.идентификаторы) &&
+        new Set(итог.идентификаторы).size === итог.идентификаторы.length,
+      JSON.stringify(итог.идентификаторы),
+    )
+  }
+
 
   return failures
 }
