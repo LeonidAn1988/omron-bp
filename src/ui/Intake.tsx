@@ -257,12 +257,17 @@ function PartCard({
   onSave: (item: Medicine) => Promise<void>
 }) {
   const done = rows.every((row) => row.takenAt !== null || row.medicine.autoDeduct)
+  const времена = [...new Set(rows.map((row) => row.time))].sort()
+  const часыКарточки = времена.length > 1 ? `${времена[0]}–${времена[времена.length - 1]}` : времена[0]
 
   return (
     <div className="card intake" data-done={done ? 'true' : undefined}>
       <div className="card__head">
         <h2>{DAY_PART_TITLE[part]}</h2>
-        <span className="muted">{rows[0]?.time}</span>
+        {/* Часть суток может держать несколько приёмов: «Вечер» это и 20:00, и
+            21:00. Раньше в заголовок шло время первой строки, и карточка
+            уверяла, что весь вечер — двадцать ноль-ноль. */}
+        <span className="muted">{часыКарточки}</span>
       </div>
 
       <ul className="doses">
@@ -272,7 +277,9 @@ function PartCard({
             className="dose"
             data-done={row.takenAt !== null ? 'true' : undefined}
           >
-            <span className="dose__time">{row.time}</span>
+            {/* Когда приём в карточке один, час уже стоит в заголовке —
+                повторять его у каждой строки значит писать одно число трижды. */}
+            <span className="dose__time">{времена.length > 1 ? row.time : ''}</span>
 
             <span className="dose__body">
               <span className="dose__name">{row.medicine.name}</span>
@@ -301,7 +308,13 @@ function PartCard({
                   </button>
                 </span>
               )}
-              {row.overdue && row.takenAt === null && <span className="dose__late">● время прошло</span>}
+              {/* Тревога только там, где есть что сделать. У препарата с
+                  автосписанием кнопки «Принял» нет вовсе, и остаток списывается
+                  сам — «время прошло» на нём это тревога без повода и без
+                  выхода, да ещё и набранная ярче отмеченных строк. */}
+              {row.overdue && row.takenAt === null && !row.medicine.autoDeduct && (
+                <span className="dose__late">● время прошло</span>
+              )}
             </span>
 
             {row.medicine.autoDeduct ? (
