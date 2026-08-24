@@ -128,7 +128,7 @@ export function TrendChart({
         {yTicks(model.yMin, model.yMax).map((tick) => (
           <g key={tick}>
             <line x1={pad.left} x2={pad.left + plotW} y1={y(tick)} y2={y(tick)} stroke="var(--grid)" strokeWidth="1" />
-            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="12" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" className="chart__tick" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {tick}
             </text>
           </g>
@@ -140,7 +140,7 @@ export function TrendChart({
             x={x(ts)}
             y={height - 8}
             textAnchor={i === 0 ? 'start' : i === dateTicks.length - 1 ? 'end' : 'middle'}
-            fontSize="12"
+            className="chart__tick"
             fill="var(--text-muted)"
           >
             {SHORT_DATE.format(ts)}
@@ -159,7 +159,7 @@ export function TrendChart({
               strokeWidth="1"
               opacity="0.45"
             />
-            <text x={pad.left + 4} y={y(s.target) - 5} fontSize="11" fill="var(--text-muted)">
+            <text x={pad.left + 4} y={y(s.target) - 5} className="chart__tick" fill="var(--text-muted)">
               цель {s.target}
             </text>
           </g>
@@ -184,7 +184,7 @@ export function TrendChart({
                 <text
                   x={x(last.ts) + 9}
                   y={y(last[s.key]) + 5}
-                  fontSize="13"
+                  className="chart__label"
                   fontWeight="600"
                   fill="var(--text-primary)"
                   style={{ fontVariantNumeric: 'tabular-nums' }}
@@ -261,7 +261,7 @@ export function PulseChart({ readings }: { readings: BpReading[] }) {
         {yTicks(model.yMin, model.yMax).map((tick) => (
           <g key={tick}>
             <line x1={pad.left} x2={pad.left + plotW} y1={y(tick)} y2={y(tick)} stroke="var(--grid)" strokeWidth="1" />
-            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="12" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" className="chart__tick" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {tick}
             </text>
           </g>
@@ -273,7 +273,7 @@ export function PulseChart({ readings }: { readings: BpReading[] }) {
             x={x(model.tMin + f * model.span)}
             y={height - 8}
             textAnchor={i === 0 ? 'start' : i === 2 ? 'end' : 'middle'}
-            fontSize="12"
+            className="chart__tick"
             fill="var(--text-muted)"
           >
             {SHORT_DATE.format(model.tMin + f * model.span)}
@@ -293,7 +293,7 @@ export function PulseChart({ readings }: { readings: BpReading[] }) {
             <text
               x={x(last.ts) + 9}
               y={y(last.bpm!) + 5}
-              fontSize="13"
+              className="chart__label"
               fontWeight="600"
               fill="var(--text-primary)"
               style={{ fontVariantNumeric: 'tabular-nums' }}
@@ -369,7 +369,7 @@ export function DayPartChart({ readings }: { readings: BpReading[] }) {
         {yTicks(0, yMax).map((tick) => (
           <g key={tick}>
             <line x1={pad.left} x2={pad.left + plotW} y1={y(tick)} y2={y(tick)} stroke="var(--grid)" strokeWidth="1" />
-            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="12" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" className="chart__tick" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {tick}
             </text>
           </g>
@@ -392,7 +392,7 @@ export function DayPartChart({ readings }: { readings: BpReading[] }) {
                     x={bar.cx}
                     y={y(bar.value) - 7}
                     textAnchor="middle"
-                    fontSize="12"
+                    className="chart__tick"
                     fontWeight="600"
                     fill="var(--text-primary)"
                     style={{ fontVariantNumeric: 'tabular-nums' }}
@@ -401,10 +401,10 @@ export function DayPartChart({ readings }: { readings: BpReading[] }) {
                   </text>
                 </g>
               ))}
-              <text x={center} y={height - 26} textAnchor="middle" fontSize="13" fill="var(--text-secondary)">
+              <text x={center} y={height - 26} textAnchor="middle" className="chart__label" fill="var(--text-secondary)">
                 {group.label}
               </text>
-              <text x={center} y={height - 8} textAnchor="middle" fontSize="11" fill="var(--text-muted)">
+              <text x={center} y={height - 8} textAnchor="middle" className="chart__tick" fill="var(--text-muted)">
                 {group.hours} · {group.count}
               </text>
             </g>
@@ -488,7 +488,7 @@ export function GlucoseChart({
         {yTicks(model.yMin, model.yMax, model.yMax - model.yMin > 14 ? 5 : 2).map((tick) => (
           <g key={tick}>
             <line x1={pad.left} x2={pad.left + plotW} y1={y(tick)} y2={y(tick)} stroke="var(--grid)" strokeWidth="1" />
-            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" fontSize="12" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+            <text x={pad.left - 8} y={y(tick) + 4} textAnchor="end" className="chart__tick" fill="var(--text-muted)" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {tick}
             </text>
           </g>
@@ -500,7 +500,7 @@ export function GlucoseChart({
             x={x(ts)}
             y={height - 8}
             textAnchor={i === 0 ? 'start' : i === dateTicks.length - 1 ? 'end' : 'middle'}
-            fontSize="12"
+            className="chart__tick"
             fill="var(--text-muted)"
           >
             {SHORT_DATE.format(ts)}
@@ -518,7 +518,7 @@ export function GlucoseChart({
               strokeWidth="1"
               opacity="0.4"
             />
-            <text x={pad.left + 4} y={y(guide.value) - 5} fontSize="11" fill="var(--text-muted)">
+            <text x={pad.left + 4} y={y(guide.value) - 5} className="chart__tick" fill="var(--text-muted)">
               {guide.label}
             </text>
           </g>
@@ -537,7 +537,7 @@ export function GlucoseChart({
             <text
               x={x(last.ts) + 9}
               y={y(last.mmol) + 5}
-              fontSize="13"
+              className="chart__label"
               fontWeight="600"
               fill="var(--text-primary)"
               style={{ fontVariantNumeric: 'tabular-nums' }}
