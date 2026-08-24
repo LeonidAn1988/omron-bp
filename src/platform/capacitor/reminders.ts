@@ -39,6 +39,9 @@ interface SystemSettingsPlugin {
   openAppDetails(): Promise<{ opened: boolean }>
   isBatteryRestricted(): Promise<{ restricted: boolean | null }>
   isDoNotDisturbOn(): Promise<{ on: boolean | null }>
+  createMedsChannel(options: { id: string; sound?: string }): Promise<{ bypassDnd: boolean }>
+  canBypassDoNotDisturb(): Promise<{ allowed: boolean }>
+  openDoNotDisturbAccess(): Promise<{ opened: boolean }>
   openBatteryOptimization(): Promise<{ opened: boolean }>
 }
 
@@ -60,7 +63,7 @@ const SOUNDS: ReminderSound[] = [
  * изменения в коде на уже созданный канал не действуют — новый вид канала
  * требует нового имени.
  */
-const CHANNEL_PREFIX = 'omron-meds-v1-'
+const CHANNEL_PREFIX = 'omron-meds-v2-'
 
 /**
  * Кнопки прямо в уведомлении — главный выигрыш всей затеи.
@@ -128,17 +131,13 @@ function toPermission(display: string): ReminderPermission {
  */
 async function ensureChannel(soundId: string, cleanup = true) {
   const wanted = channelId(soundId)
-  await LocalNotifications.createChannel({
+  // Канал создаёт наш нативный код, а не плагин: плагин не умеет `bypassDnd`,
+  // а без него в режиме «Не беспокоить» напоминание приходит молча. Там же
+  // звук объявляется будильником, а не письмом, — громкость идёт по той шкале,
+  // на которую человек и рассчитывает.
+  await SystemSettings.createMedsChannel({
     id: wanted,
-    name: 'Приём лекарств',
-    description: 'Напоминания принять препарат по расписанию',
-    // Наивысшая достижимая важность: уведомление всплывает и звучит, иначе
-    // оно теряется в ленте и смысла в нём нет. Пятёрку (IMPORTANCE_MAX)
-    // Android не отдаёт — проверено на устройстве, канал создаётся с четвёркой.
-    importance: 4,
-    visibility: 1,
-    vibration: true,
-    ...(soundId === 'system' ? {} : { sound: `${soundId}.wav` }),
+    ...(soundId === 'system' ? {} : { sound: soundId }),
   })
 
   // Уборка лишних каналов — только когда мелодию выбрал человек. Из обработчика
@@ -391,6 +390,24 @@ export const capacitorReminders: RemindersPort = {
       } catch {
         return false
       }
+    }
+  },
+
+  async canBypassQuietMode() {
+    try {
+      const { allowed } = await SystemSettings.canBypassDoNotDisturb()
+      return allowed
+    } catch {
+      return null
+    }
+  },
+
+  async requestQuietModeBypass() {
+    try {
+      const { opened } = await SystemSettings.openDoNotDisturbAccess()
+      return opened
+    } catch {
+      return false
     }
   },
 

@@ -1,8 +1,10 @@
 package io.github.leonidan1988.omronbp;
 
+import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
@@ -97,6 +99,96 @@ public class SystemSettings extends Plugin {
             result.put("restricted", null);
         }
         call.resolve(result);
+    }
+
+    /**
+     * Создать канал напоминаний своими руками.
+     *
+     * Плагин уведомлений канал создать умеет, но не умеет главного —
+     * `setBypassDnd`. В режиме «Не беспокоить» напоминание приходит молча, а
+     * беззвучное напоминание о лекарстве равно отсутствующему: телефон лежит
+     * экраном вниз, и человек про таблетку не узнаёт.
+     *
+     * Обход тихого режима система отдаёт только приложениям, которым человек
+     * выдал доступ к политике уведомлений. Не выдал — канал создаётся обычным,
+     * и приложение об этом честно пишет, а не делает вид, что всё в порядке.
+     *
+     * Звук задаётся с `USAGE_ALARM`: напоминание о лекарстве ближе к будильнику,
+     * чем к письму, и громкостью должно идти по той же шкале.
+     */
+    @PluginMethod
+    public void createMedsChannel(PluginCall call) {
+        String id = call.getString("id");
+        String sound = call.getString("sound");
+        if (id == null) {
+            call.reject("не указан канал");
+            return;
+        }
+        JSObject result = new JSObject();
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            // До Android 8 каналов нет: звук задаёт само уведомление.
+            result.put("bypassDnd", false);
+            call.resolve(result);
+            return;
+        }
+        try {
+            NotificationManager manager =
+                    (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+            if (manager == null) {
+                call.reject("система не отдала менеджер уведомлений");
+                return;
+            }
+
+            NotificationChannel channel = new NotificationChannel(
+                    id, "Приём лекарств", NotificationManager.IMPORTANCE_HIGH);
+            channel.setDescription("Напоминания принять препарат по расписанию");
+            channel.enableVibration(true);
+            channel.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
+
+            if (sound != null && !sound.isEmpty()) {
+                Uri uri = Uri.parse("android.resource://" + getContext().getPackageName() + "/raw/" + sound);
+                channel.setSound(uri, new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build());
+            }
+
+            boolean allowed = manager.isNotificationPolicyAccessGranted();
+            if (allowed) channel.setBypassDnd(true);
+
+            manager.createNotificationChannel(channel);
+            result.put("bypassDnd", allowed);
+            call.resolve(result);
+        } catch (Exception error) {
+            call.reject("не удалось создать канал", error);
+        }
+    }
+
+    /** Выдан ли доступ к политике уведомлений — без него тихий режим не обойти. */
+    @PluginMethod
+    public void canBypassDoNotDisturb(PluginCall call) {
+        JSObject result = new JSObject();
+        try {
+            NotificationManager manager =
+                    (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+            result.put("allowed", manager != null
+                    && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                    && manager.isNotificationPolicyAccessGranted());
+        } catch (Exception error) {
+            result.put("allowed", false);
+        }
+        call.resolve(result);
+    }
+
+    /** Экран, где этот доступ выдаётся. */
+    @PluginMethod
+    public void openDoNotDisturbAccess(PluginCall call) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            openAppNotifications(call);
+            return;
+        }
+        start(new Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), call);
     }
 
     /**

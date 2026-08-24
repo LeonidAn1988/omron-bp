@@ -44,6 +44,7 @@ export function Reminders({
   const [batteryRestricted, setBatteryRestricted] = useState<boolean | null>(null)
   const [exact, setExact] = useState<boolean | null>(null)
   const [quiet, setQuiet] = useState<boolean | null>(null)
+  const [canBypass, setCanBypass] = useState<boolean | null>(null)
   const [health, setHealth] = useState<ReminderHealth | null>(null)
 
   const времена = reminderTimes(medicines)
@@ -54,6 +55,7 @@ export function Reminders({
     setBatteryRestricted(await port.isBatteryRestricted())
     setExact(await port.exactTiming())
     setQuiet(await port.isQuietModeOn())
+    setCanBypass(await port.canBypassQuietMode())
     setHealth(await port.health(sound))
   }, [port, supported, sound])
 
@@ -315,21 +317,26 @@ export function Reminders({
             напоминание о лекарстве равно отсутствующему. Проверено на живом
             телефоне: уведомление пришло вовремя и молча.
           */}
-          {quiet === true && (
+          {quiet === true && canBypass !== true && (
             <Banner tone="warning">
               <b>Сейчас включён режим «Не беспокоить»</b>
               <div style={{ marginTop: 4 }}>
-                Напоминание придёт, но без звука — его легко не заметить. Разрешите этому приложению звучать и в тихом
-                режиме: в открывшемся экране включите «Переопределить режим „Не беспокоить“».
+                Напоминание придёт, но без звука — его легко не заметить. Разрешите приложению звучать и в тихом режиме:
+                в открывшемся списке найдите «Дневник здоровья» и включите его.
               </div>
               <button
                 className="btn btn--sm"
                 style={{ marginTop: 'var(--space-3)' }}
-                onClick={() => void port.openSoundSettings(sound).then((ok) => setNoSettings(!ok))}
+                onClick={() => void port.requestQuietModeBypass().then((ok) => setNoSettings(!ok))}
               >
-                Открыть настройки уведомления
+                Разрешить звучать в тихом режиме
               </button>
             </Banner>
+          )}
+          {quiet === true && canBypass === true && (
+            <div className="muted">
+              Сейчас включён режим «Не беспокоить», но напоминаниям о приёме разрешено звучать и в нём.
+            </div>
           )}
 
           {/*
