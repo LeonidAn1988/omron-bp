@@ -28,6 +28,11 @@
   --border: #e4e3de;
   --border-strong: #d3d2cb;
   --grid: #e1e0d9;
+  /* Ось графика и перекрестье при наведении.
+     Токен был потерян: три места в Charts.tsx на него ссылались, а объявления
+     не было нигде. Недопустимое значение `var(--axis)` откатывает `stroke` к
+     исходному `none` — ни ось, ни перекрестье не рисовались вовсе. */
+  --axis: #b9b7ae;
 
   /* Акцент интерфейса */
   --accent: #1c62b8;         /* белый текст 6.0:1 */
@@ -106,6 +111,7 @@
   --dark--border: #33322f;
   --dark--border-strong: #45443f;
   --dark--grid: #2c2c2a;
+  --dark--axis: #4a4a46;
   --dark--accent: #7cb1f0;
   --dark--accent-hover: #a3c9f5;
   --dark--accent-ink: #0b0b0b;
@@ -129,6 +135,7 @@
     --border: var(--dark--border);
     --border-strong: var(--dark--border-strong);
     --grid: var(--dark--grid);
+    --axis: var(--dark--axis);
     --accent: var(--dark--accent);
     --accent-hover: var(--dark--accent-hover);
     --accent-ink: var(--dark--accent-ink);
@@ -152,6 +159,7 @@
   --border: var(--dark--border);
   --border-strong: var(--dark--border-strong);
   --grid: var(--dark--grid);
+  --axis: var(--dark--axis);
   --accent: var(--dark--accent);
   --accent-hover: var(--dark--accent-hover);
   --accent-ink: var(--dark--accent-ink);
