@@ -1,4 +1,5 @@
 import type { Medicine } from '../types'
+import { plural } from './plural'
 
 /**
  * Правила аптечки: когда препарат кончается и когда истекает срок.
@@ -639,7 +640,18 @@ export function restockText(list: RestockItem[]): string {
     .map(({ medicine, need }) => {
       const parts = [medicine.name, medicine.dose, shortForm(medicine.form)].filter(Boolean)
       const inn = medicine.inn && medicine.inn !== medicine.name ? ` (${medicine.inn})` : ''
-      const count = need !== null ? ` — ${need} шт.` : ''
+      // Штуки — основная единица, и это не случайность: размер пачки у разных
+      // производителей разный, и «возьми одну пачку» в аптеке, где лежит
+      // только №20, даёт двадцать таблеток при потребности в двадцать восемь.
+      // Но экран считает пачками, а в тексте их не было вовсе — получателю
+      // нечем перевести одно в другое. Пачки идут подсказкой следом.
+      const packs = packsNeeded(medicine, need)
+      const count =
+        need === null
+          ? ''
+          : packs === null
+            ? ` — ${need} шт.`
+            : ` — ${need} шт. (${packs} ${plural(packs, 'пачка', 'пачки', 'пачек')} по ${medicine.packSize})`
       return `${parts.join(', ')}${inn}${count}`
     })
     .join('\n')
