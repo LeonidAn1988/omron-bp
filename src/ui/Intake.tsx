@@ -7,10 +7,8 @@ import {
   KEEP_INTAKES_DAYS,
   dayStatus,
   dosesOn,
-  markTakenAt,
   partOfDay,
   startOfDay,
-  undoTaken,
   type DayPart,
   type DayStatus,
 } from '../logic/medicines'
@@ -133,12 +131,20 @@ interface Slot {
 
 export function Intake({
   medicines,
-  onSave,
+  onMark,
   toRoot = 0,
   openDay = null,
 }: {
   medicines: Medicine[]
-  onSave: (item: Medicine) => Promise<void>
+  /**
+   * Отметить или снять отметку приёма.
+   *
+   * Экран передаёт только «какой препарат и какой приём», а новое состояние
+   * собирается там, где видно настоящее содержимое хранилища. Собирать его
+   * здесь было нельзя: пропс — слепок последней отрисовки, и второе нажатие
+   * подряд строило отметку на препарате без первой, стирая её.
+   */
+  onMark: (id: string, plannedTs: number, undo?: boolean) => Promise<void>
   /** Меняется, когда человек нажал на уже активную вкладку: вернуться на сегодня. */
   toRoot?: number
   /**
@@ -233,7 +239,7 @@ export function Intake({
       )}
 
       {byPart.map(({ part, rows }) => (
-        <PartCard key={part} part={part} rows={rows} future={future} onSave={onSave} />
+        <PartCard key={part} part={part} rows={rows} future={future} onMark={onMark} />
       ))}
     </div>
   )
@@ -250,12 +256,12 @@ function PartCard({
   part,
   rows,
   future,
-  onSave,
+  onMark,
 }: {
   part: DayPart
   rows: Slot[]
   future: boolean
-  onSave: (item: Medicine) => Promise<void>
+  onMark: (id: string, plannedTs: number, undo?: boolean) => Promise<void>
 }) {
   const done = rows.every((row) => row.takenAt !== null || row.medicine.autoDeduct)
   const [занят, setЗанят] = useState(false)
@@ -270,7 +276,7 @@ function PartCard({
       // По очереди, а не разом: каждая отметка меняет остаток препарата, и
       // параллельная запись затёрла бы соседнюю — обе читают одно состояние.
       for (const row of неотмеченных) {
-        await onSave(markTakenAt(row.medicine, row.planned, Date.now()))
+        await onMark(row.medicine.id, row.planned)
       }
     } finally {
       setЗанят(false)
@@ -340,7 +346,7 @@ function PartCard({
                       отметка хранит плановый час (по нему приём и опознаётся),
                       честнее не называть час вовсе. */}
                   ✓ принято
-                  <button className="dose__undo" onClick={() => void onSave(undoTaken(row.medicine, row.takenAt!))}>
+                  <button className="dose__undo" onClick={() => void onMark(row.medicine.id, row.takenAt!, true)}>
                     убрать отметку
                   </button>
                 </span>
@@ -360,7 +366,7 @@ function PartCard({
               <button
                 className="btn btn--primary"
                 disabled={future}
-                onClick={() => void onSave(markTakenAt(row.medicine, row.planned, Date.now()))}
+                onClick={() => void onMark(row.medicine.id, row.planned)}
               >
                 Принял
               </button>

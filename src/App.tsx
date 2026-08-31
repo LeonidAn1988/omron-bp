@@ -35,6 +35,7 @@ import {
   parseTime,
   pendingToday,
   startOfDay,
+  undoTaken,
 } from './logic/medicines'
 import type { ImportResult } from './logic/io'
 import { applyDisplay, applyTheme } from './ui/theme'
@@ -285,6 +286,32 @@ export default function App() {
         setSaveFailed(caught instanceof Error ? caught.message : String(caught))
         // Пробрасываем дальше: форма обязана остаться открытой и сказать своё.
         throw caught
+      }
+      await refreshMedicines()
+    },
+    [refreshMedicines],
+  )
+
+  /**
+   * Отметить или снять отметку приёма.
+   *
+   * Препарат читается из хранилища, а не берётся из пропса экрана. Пропс —
+   * слепок последней отрисовки, и два нажатия подряд собирали новое состояние
+   * из одного и того же слепка: вторая отметка строилась на препарате без
+   * первой и стирала её. Особенно верно для «Принял всё», где нажатие одно, а
+   * отметок несколько.
+   */
+  const handleMarkTaken = useCallback(
+    async (id: string, plannedTs: number, undo = false) => {
+      const cabinet = await getAllMedicines()
+      const found = cabinet.find((item) => item.id === id)
+      if (!found) return
+      const now = Date.now()
+      try {
+        await putMedicine(undo ? undoTaken(found, plannedTs) : markTakenAt(found, plannedTs, now))
+        setSaveFailed(null)
+      } catch (caught) {
+        setSaveFailed(caught instanceof Error ? caught.message : String(caught))
       }
       await refreshMedicines()
     },
@@ -771,7 +798,7 @@ export default function App() {
       {saveBanner}
 
       {tab === 'intake' && (
-        <Intake medicines={medicines} onSave={handleSaveMedicine} toRoot={rootSignal} openDay={reminderDay} />
+        <Intake medicines={medicines} onMark={handleMarkTaken} toRoot={rootSignal} openDay={reminderDay} />
       )}
 
       {tab === 'cabinet' && (
