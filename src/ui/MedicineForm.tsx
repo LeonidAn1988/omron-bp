@@ -126,6 +126,8 @@ export function MedicineForm({
     medicine?.perDay !== null && medicine?.perDay !== undefined ? String(medicine.perDay).replace('.', ',') : '',
   )
   const [month, setMonth] = useState(medicine?.expires ? expiryToMonth(medicine.expires) : '')
+  /** «Принимаю с» — месяц со слов человека, для ответа врачу. */
+  const [startedMonth, setStartedMonth] = useState(medicine?.startedAt ? expiryToMonth(medicine.startedAt) : '')
   const [note, setNote] = useState(medicine?.note ?? '')
   const [inn, setInn] = useState(medicine?.inn ?? '')
   const [form, setForm] = useState(medicine?.form ?? '')
@@ -171,6 +173,7 @@ export function MedicineForm({
         left: numberOrNull(left),
         perDay: numberOrNull(perDay),
         expires: month ? monthToExpiry(month) : null,
+        startedAt: startedMonth ? (monthToExpiry(startedMonth) ?? undefined) : undefined,
         note: note.trim() || undefined,
         autoDeduct: autoDeduct || undefined,
         times: times.length > 0 ? times : undefined,
@@ -394,6 +397,15 @@ export function MedicineForm({
 
       <Field label="Годен до — месяц с упаковки">
         <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+      </Field>
+
+      {/* Необязательное поле, и спрашивается месяцем, а не днём: день начала
+          приёма человек не помнит, а спрашивать то, чего не помнят, — верный
+          способ получить выдуманное число. Отвечает на вопрос врача «как
+          давно принимаете», на который дневник иначе ответить не может: он
+          знает только, когда завели карточку. */}
+      <Field label="Принимаю с — если помните, месяц и год">
+        <input type="month" value={startedMonth} onChange={(e) => setStartedMonth(e.target.value)} />
       </Field>
 
       <Field label="Примечание">

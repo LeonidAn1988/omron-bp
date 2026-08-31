@@ -98,6 +98,13 @@ function Adherence({ medicines, from, now }: { medicines: Medicine[]; from: numb
                       другая не отвечают на вопрос «сколько лет принимаете»:
                       до приложения человек мог пить его годами, и честного
                       ответа у нас пока нет. */}
+                  {/* «Принимает с» — со слов человека, и это единственная из
+                      трёх дат, которая отвечает на вопрос врача «как давно».
+                      Стоит первой и без оговорок. Остальные две про дневник, а
+                      не про лечение, и названы своими именами. */}
+                  {row.medicine.startedAt !== undefined && (
+                    <div>принимает с {MONTH_YEAR.format(row.medicine.startedAt)}</div>
+                  )}
                   <div className="muted">отметки с {DAY_MONTH.format(row.from)}</div>
                   {row.medicine.since !== undefined && startOfDay(row.medicine.since) < row.from && (
                     <div className="muted">в дневнике с {DAY_MONTH.format(row.medicine.since)}</div>
@@ -137,6 +144,8 @@ function Adherence({ medicines, from, now }: { medicines: Medicine[]; from: numb
 }
 
 /** Десятичный разделитель по-русски — запятая. */
+const MONTH_YEAR = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' })
+
 const десятичная = (value: number) => value.toFixed(1).replace('.', ',')
 
 export function Report({
