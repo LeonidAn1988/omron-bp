@@ -39,6 +39,13 @@ const TEXT_SCALES: { key: SettingsData['textScale']; title: string }[] = [
   { key: 'xlarge', title: 'Очень крупный' },
 ]
 
+const INTAKE_SLOTS: { key: keyof SettingsData['intakeTimes']; title: string }[] = [
+  { key: 'morning', title: 'Утром' },
+  { key: 'day', title: 'Днём' },
+  { key: 'evening', title: 'Вечером' },
+  { key: 'night', title: 'На ночь' },
+]
+
 const DENSITIES: { key: SettingsData['density']; title: string }[] = [
   { key: 'compact', title: 'Плотно' },
   { key: 'normal', title: 'Обычно' },
@@ -223,6 +230,32 @@ export function Settings({
         repeat={settings.remindersRepeat}
         onPatch={patch}
       />
+
+      <div className="card">
+        <div className="card__head">
+          <h2>Часы приёма</h2>
+        </div>
+        <p className="muted" style={{ marginTop: 0 }}>
+          Это кнопки в форме препарата: «Утром», «Днём», «Вечером», «На ночь». Раньше часы были зашиты намертво, и
+          тому, у кого утро в шесть, приходилось вводить время руками для каждого лекарства.
+        </p>
+        <div className="stack" style={{ gap: 'var(--space-3)' }}>
+          {INTAKE_SLOTS.map(({ key, title }) => (
+            <Field key={key} label={title}>
+              <input
+                type="time"
+                value={settings.intakeTimes[key]}
+                onChange={(e) =>
+                  patch({ intakeTimes: { ...settings.intakeTimes, [key]: e.target.value || settings.intakeTimes[key] } })
+                }
+              />
+            </Field>
+          ))}
+        </div>
+        <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
+          Уже заведённые препараты не меняются: у них своё время, и переписывать его за человека нельзя.
+        </div>
+      </div>
 
       <div className="card">
         <div className="card__head">

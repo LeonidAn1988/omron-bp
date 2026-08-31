@@ -30,6 +30,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // мессенджера, иначе человек перестаёт на него реагировать.
   reminderSound: 'kolokolchik',
   remindersRepeat: true,
+  intakeTimes: { morning: '08:00', day: '13:00', evening: '19:00', night: '22:00' },
   onboarded: false,
   nudgesUntil: { backup: 0, cabinet: 0 },
   backupLastAt: null,

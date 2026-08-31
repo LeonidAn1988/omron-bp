@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Medicine } from '../types'
+import type { IntakeTimes, Medicine } from '../types'
 import { expiryToMonth, formatTime, monthToExpiry, normalizeTimes, parseTime } from '../logic/medicines'
 import { formGroup as formGroupOf, FORM_GROUPS, type Drug, type DrugVariant } from '../logic/drugs'
 import { NumberField } from './NumberField'
@@ -20,13 +20,23 @@ const MEALS: { key: Medicine['meal']; title: string }[] = [
   { key: 'after', title: 'После еды' },
 ]
 
-/** Готовые времена: почти все схемы приёма укладываются в эти четыре. */
-const PRESETS = [
-  { time: '08:00', title: 'Утром' },
-  { time: '13:00', title: 'Днём' },
-  { time: '19:00', title: 'Вечером' },
-  { time: '22:00', title: 'На ночь' },
-]
+/**
+ * Готовые времена: почти все схемы приёма укладываются в эти четыре.
+ *
+ * Часы приходят из настроек, а не зашиты сюда: у кого-то утро в шесть, а вечер
+ * в семнадцать, и таким людям приходилось вводить время руками для каждого
+ * препарата.
+ */
+type Presets = { time: string; title: string }[]
+
+function presetsOf(times: IntakeTimes): Presets {
+  return [
+    { time: times.morning, title: 'Утром' },
+    { time: times.day, title: 'Днём' },
+    { time: times.evening, title: 'Вечером' },
+    { time: times.night, title: 'На ночь' },
+  ]
+}
 
 /**
  * Время приёма кнопками плюс поле для своего.
@@ -34,7 +44,15 @@ const PRESETS = [
  * Набирать время руками на телефоне пожилому человеку тяжело, а четыре готовых
  * значения покрывают почти все назначения. Своё время остаётся для остальных.
  */
-function TimePicker({ times, onChange }: { times: string[]; onChange: (next: string[]) => void }) {
+function TimePicker({
+  times,
+  presets,
+  onChange,
+}: {
+  times: string[]
+  presets: Presets
+  onChange: (next: string[]) => void
+}) {
   const [custom, setCustom] = useState('')
 
   const toggle = (time: string) =>
@@ -46,12 +64,12 @@ function TimePicker({ times, onChange }: { times: string[]; onChange: (next: str
     setCustom('')
   }
 
-  const extra = times.filter((t) => !PRESETS.some((p) => p.time === t))
+  const extra = times.filter((t) => !presets.some((p) => p.time === t))
 
   return (
     <>
       <div className="chips">
-        {PRESETS.map(({ time, title }) => (
+        {presets.map(({ time, title }) => (
           <button key={time} type="button" className="chip" aria-pressed={times.includes(time)} onClick={() => toggle(time)}>
             {title} <span className="muted">{time}</span>
           </button>
@@ -91,10 +109,13 @@ function TimePicker({ times, onChange }: { times: string[]; onChange: (next: str
  */
 export function MedicineForm({
   medicine,
+  intakeTimes,
   onSave,
   onCancel,
 }: {
   medicine?: Medicine
+  /** Часы стандартных приёмов из настроек. */
+  intakeTimes: IntakeTimes
   onSave: (item: Medicine) => Promise<void>
   onCancel: () => void
 }) {
@@ -310,7 +331,7 @@ export function MedicineForm({
         <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
           Когда принимать
         </div>
-        <TimePicker times={times} onChange={setTimes} />
+        <TimePicker times={times} presets={presetsOf(intakeTimes)} onChange={setTimes} />
         {times.length > 0 && (
           <div className="row" style={{ marginTop: 'var(--space-3)', alignItems: 'flex-end' }}>
             <div style={{ maxWidth: 150 }}>

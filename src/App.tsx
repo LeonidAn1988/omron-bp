@@ -769,6 +769,7 @@ export default function App() {
           {undoBanner}
           <Cabinet
             medicines={medicines}
+            intakeTimes={settings.intakeTimes}
             onSave={handleSaveMedicine}
             onDelete={handleDeleteMedicine}
             toRoot={rootSignal}

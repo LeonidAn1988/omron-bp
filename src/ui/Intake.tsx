@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Medicine } from '../types'
+import { plural } from '../logic/plural'
 import {
   DAY_PARTS,
   DAY_PART_TITLE,
@@ -257,6 +258,24 @@ function PartCard({
   onSave: (item: Medicine) => Promise<void>
 }) {
   const done = rows.every((row) => row.takenAt !== null || row.medicine.autoDeduct)
+  const [занят, setЗанят] = useState(false)
+
+  // Что в этой карточке ещё не отмечено. Препараты с автосписанием не считаем:
+  // кнопки «Принял» у них нет вовсе, и отмечать за них нечего.
+  const неотмеченных = rows.filter((row) => row.takenAt === null && !row.medicine.autoDeduct)
+
+  async function принятьВсё() {
+    setЗанят(true)
+    try {
+      // По очереди, а не разом: каждая отметка меняет остаток препарата, и
+      // параллельная запись затёрла бы соседнюю — обе читают одно состояние.
+      for (const row of неотмеченных) {
+        await onSave(markTakenAt(row.medicine, row.planned, Date.now()))
+      }
+    } finally {
+      setЗанят(false)
+    }
+  }
   const времена = [...new Set(rows.map((row) => row.time))].sort()
   const часыКарточки = времена.length > 1 ? `${времена[0]}–${времена[времена.length - 1]}` : времена[0]
 
@@ -269,6 +288,22 @@ function PartCard({
             уверяла, что весь вечер — двадцать ноль-ноль. */}
         <span className="muted">{часыКарточки}</span>
       </div>
+
+      {/*
+        Отметить весь приём разом.
+        Утром человек подходит к аптечке один раз и принимает всё назначенное —
+        нажимать «Принял» пять раз подряд значит заставлять его повторять то, что
+        он сделал одним действием. Кнопка появляется, только когда отмечать есть
+        что и таких строк больше одной: на единственной она была бы вторым
+        способом сделать то же самое.
+      */}
+      {!future && неотмеченных.length > 1 && (
+        <div className="row" style={{ marginBottom: 'var(--space-3)' }}>
+          <button className="btn btn--primary" disabled={занят} onClick={() => void принятьВсё()}>
+            {занят ? 'Отмечаю…' : `Принял всё — ${неотмеченных.length} ${plural(неотмеченных.length, 'препарат', 'препарата', 'препаратов')}`}
+          </button>
+        </div>
+      )}
 
       <ul className="doses">
         {rows.map((row) => (
