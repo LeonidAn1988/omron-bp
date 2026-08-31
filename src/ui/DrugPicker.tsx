@@ -27,7 +27,7 @@ import {
 let cached: DrugBook | null = null
 let loading: Promise<void> | null = null
 /** Кому сообщить, когда доедет вторая половина справочника. */
-const waiting = new Set<(book: DrugBook | null) => void>()
+const waiting = new Set<(book: DrugBook | null, failed: boolean) => void>()
 
 const fetchBook = (name: string): Promise<DrugBook | null> =>
   fetch(new URL(name, document.baseURI))
@@ -47,14 +47,23 @@ const fetchBook = (name: string): Promise<DrugBook | null> =>
  * доехали вовсе, поиск работает по лекарствам: половина справочника лучше
  * пустого поля.
  */
-function loadBook(notify: (book: DrugBook | null) => void): () => void {
+/** Справочник не доехал: поле обязано сказать об этом, а не молчать. */
+let failed = false
+
+/** Загрузить заново после отказа. */
+export function retryBook(): void {
+  failed = false
+  loading = null
+}
+
+function loadBook(notify: (book: DrugBook | null, failed: boolean) => void): () => void {
   // Подписываемся всегда, даже когда что-то уже есть: между приездом лекарств
   // и приездом добавок форму могли открыть заново, и без подписки такое поле
   // так и осталось бы без БАДов до перезагрузки страницы.
   waiting.add(notify)
-  if (cached) notify(cached)
+  if (cached) notify(cached, failed)
 
-  const announce = () => waiting.forEach((listener) => listener(cached))
+  const announce = () => waiting.forEach((listener) => listener(cached, failed))
   if (!loading) {
     loading = fetchBook('drugs.json')
       .then((drugs) => {
@@ -66,7 +75,15 @@ function loadBook(notify: (book: DrugBook | null) => void): () => void {
         cached = cached ? mergeBooks(cached, supplements) : supplements
         announce()
       })
-      .catch(() => {})
+      .catch(() => {
+        // Отказ больше не проглатывается. Раньше `loading` оставался
+        // выполненным обещанием, и повторить загрузку было нечем до
+        // перезагрузки приложения: поле молча уверяло, что препарата нет в
+        // реестре, хотя реестра просто не было.
+        failed = true
+        loading = null
+        announce()
+      })
   }
   return () => {
     waiting.delete(notify)
@@ -107,6 +124,10 @@ export function DrugPicker({
   onPick: (drug: Drug, variants: DrugVariant[], makers: string[]) => void
 }) {
   const [book, setBook] = useState<DrugBook | null>(cached)
+  /** Справочник не доехал — это не то же самое, что «препарата нет в реестре». */
+  const [bookFailed, setBookFailed] = useState(false)
+  /** Растёт по нажатию «Повторить»: перезапускает загрузку. */
+  const [попытка, setПопытка] = useState(0)
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(-1)
   const [touched, setTouched] = useState(false)
@@ -118,7 +139,14 @@ export function DrugPicker({
 
   // Отписка возвращена самим loadBook: без неё пришедшие следом добавки
   // дёргали бы состояние уже размонтированного поля.
-  useEffect(() => loadBook(setBook), [])
+  useEffect(
+    () =>
+      loadBook((next, отказ) => {
+        setBook(next)
+        setBookFailed(отказ)
+      }),
+    [попытка],
+  )
 
   // Клик мимо закрывает подсказку. Без этого на телефоне она перекрывает
   // соседние поля и остаётся висеть.
@@ -286,6 +314,31 @@ export function DrugPicker({
           ровно в ту секунду, когда препарат не нашёлся. Справочник стареет, и
           «его нет в реестре» и «реестру полгода» — разные объяснения, между
           которыми человек вправе выбирать сам. */}
+      {/* Справочник ещё едет — поле не вправе утверждать, что препарата нет. */}
+      {!book && !bookFailed && touched && value.trim().length >= 2 && (
+        <div className="muted" style={{ marginTop: 'var(--space-1)' }}>
+          Справочник загружается… Название можно вписать руками, так тоже правильно.
+        </div>
+      )}
+
+      {bookFailed && touched && (
+        <div className="muted" style={{ marginTop: 'var(--space-1)' }}>
+          Справочник не загрузился. Впишите название с упаковки — так тоже правильно.{' '}
+          <button
+            className="btn btn--sm"
+            type="button"
+            style={{ marginTop: 'var(--space-2)' }}
+            onClick={() => {
+              retryBook()
+              setBookFailed(false)
+              setПопытка((n) => n + 1)
+            }}
+          >
+            Повторить
+          </button>
+        </div>
+      )}
+
       {book && touched && value.trim().length >= 2 && found.length === 0 && (
         <div className="muted" style={{ marginTop: 'var(--space-1)' }}>
           В реестре не нашлось — впишите название с упаковки, так тоже правильно.

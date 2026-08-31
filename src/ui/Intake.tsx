@@ -94,8 +94,27 @@ function DayStrip({
     strip.scrollLeft = active.offsetLeft - strip.clientWidth / 2 + active.clientWidth / 2
   }, [selected])
 
+  /**
+   * Стрелки двигают выбор, табуляция проходит ленту одной остановкой.
+   *
+   * Лента объявлена `tablist`, а вела себя как шестьдесят восемь отдельных
+   * кнопок: чтобы добраться клавиатурой до содержимого дня, приходилось
+   * нажимать Tab шестьдесят восемь раз, и стрелки при этом не делали ничего.
+   * Образец для вкладок обратный: в обходе одна остановка — выбранная, —
+   * а между ними ходят стрелками.
+   */
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    const шаг =
+      event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : event.key === 'Home' ? -days.length : event.key === 'End' ? days.length : 0
+    if (шаг === 0) return
+    event.preventDefault()
+    const текущий = days.findIndex((day) => startOfDay(day) === startOfDay(selected))
+    const следующий = Math.min(days.length - 1, Math.max(0, (текущий < 0 ? days.length - 1 : текущий) + шаг))
+    onSelect(days[следующий])
+  }
+
   return (
-    <div className="daystrip" ref={stripRef} role="tablist" aria-label="Выбор дня">
+    <div className="daystrip" ref={stripRef} role="tablist" aria-label="Выбор дня" onKeyDown={onKeyDown}>
       {days.map((day) => {
         const status = statusOf(day)
         const active = startOfDay(day) === startOfDay(selected)
@@ -105,6 +124,8 @@ function DayStrip({
             ref={active ? activeRef : undefined}
             role="tab"
             aria-selected={active}
+            // В обходе табуляции — только выбранный день.
+            tabIndex={active ? 0 : -1}
             className="daystrip__day"
             data-status={status}
             data-today={startOfDay(day) === startOfDay(today) ? 'true' : undefined}
