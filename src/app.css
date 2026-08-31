@@ -60,7 +60,10 @@
   --c-ht3: #d03b3b;
 
   --good: #0ca30c;
-  --warning: #fab219;
+  /* Жёлтый предупреждения — фон точек и полос, а не текст. На светлой карточке
+     #fab219 давал 1,79:1: точка «нужно внимание» была практически невидима.
+     Здесь он затемнён до 3:1 к карточке, в тёмной теме остаётся прежним. */
+  --warning: #a56a00;
   --critical: #d03b3b;
 
   /* Типографика: ряд с отношением ~1.15, фиксированный (продуктовый регистр) */
@@ -149,6 +152,7 @@
   --dark--text-primary: #ffffff; /* 17.4 / 19.4 */
   --dark--text-secondary: #c3c2b7; /*  9.7 / 10.9 */
   --dark--text-muted: #898781; /*  4.9 /  5.4 */
+  --dark--warning: #fab219;
   --dark--critical-text: #ef7d7d; /*  6.6 /  7.3 */
   --dark--border: #33322f;
   /* 3,03:1 к карточке, 3,38:1 к странице. Прежние #45443f — 1,78:1. */
@@ -175,6 +179,7 @@
     --text-secondary: var(--dark--text-secondary);
     --text-muted: var(--dark--text-muted);
     --critical-text: var(--dark--critical-text);
+    --warning: var(--dark--warning);
     --border: var(--dark--border);
     --border-strong: var(--dark--border-strong);
     --grid: var(--dark--grid);
@@ -199,6 +204,7 @@
   --text-secondary: var(--dark--text-secondary);
   --text-muted: var(--dark--text-muted);
   --critical-text: var(--dark--critical-text);
+  --warning: var(--dark--warning);
   --border: var(--dark--border);
   --border-strong: var(--dark--border-strong);
   --grid: var(--dark--grid);
@@ -2352,6 +2358,11 @@ kbd {
   /* Печать из тёмной темы иначе уходит белым по чёрному. */
   :root {
     color-scheme: light !important;
+    /* Размер текста и плотность — настройка экрана, а не бумаги. Без сброса
+       выбранный «очень крупный» уезжал в документ для врача и переворачивал
+       кегли: подписи становились крупнее заголовков таблицы. */
+    font-size: 100% !important;
+    --space-unit: 4px !important;
     --surface: #fff;
     --page: #fff;
     --text-primary: #000;

@@ -113,6 +113,8 @@ export function DrugPicker({
   const listId = useId()
   const boxRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
+  /** Откуда палец начал касание: по нему отличается нажатие от прокрутки. */
+  const touchFrom = useRef<{ x: number; y: number } | null>(null)
 
   // Отписка возвращена самим loadBook: без неё пришедшие следом добавки
   // дёргали бы состояние уже размонтированного поля.
@@ -241,7 +243,24 @@ export function DrugPicker({
                   event.preventDefault()
                   choose(drug)
                 }}
-                onTouchStart={() => choose(drug)}
+                // Пальцем выбираем по отпусканию и только если палец не ехал.
+                // Раньше стоял `onTouchStart`, и прокрутка списка подсказок
+                // выбирала то лекарство, по которому человек случайно провёл, —
+                // список нельзя было пролистать вовсе.
+                onTouchStart={(event) => {
+                  const t = event.touches[0]
+                  touchFrom.current = t ? { x: t.clientX, y: t.clientY } : null
+                }}
+                onTouchEnd={(event) => {
+                  const from = touchFrom.current
+                  touchFrom.current = null
+                  const t = event.changedTouches[0]
+                  if (!from || !t) return
+                  // Десять пикселей — обычный допуск на дрожание пальца.
+                  if (Math.abs(t.clientX - from.x) > 10 || Math.abs(t.clientY - from.y) > 10) return
+                  event.preventDefault()
+                  choose(drug)
+                }}
               >
                 <span className="suggest__name">
                   {drug.n}
