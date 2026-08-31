@@ -411,6 +411,12 @@ export function Settings({
         {confirmClear ? (
           <div className="row">
             <span style={{ fontSize: '0.875rem' }}>Удалить все измерения без возможности восстановления?</span>
+            {/* Безопасное действие первым, опасное дальше — тем же порядком,
+                что на карточке препарата: подтверждение не должно вставать под
+                палец, который только что нажал «Очистить базу». */}
+            <button className="btn btn--sm" onClick={() => setConfirmClear(false)}>
+              Отмена
+            </button>
             <button
               className="btn btn--danger btn--sm"
               onClick={async () => {
@@ -420,9 +426,6 @@ export function Settings({
               }}
             >
               Да, удалить всё
-            </button>
-            <button className="btn btn--sm" onClick={() => setConfirmClear(false)}>
-              Отмена
             </button>
           </div>
         ) : (

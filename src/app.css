@@ -634,7 +634,13 @@ input[type='radio'] {
 }
 .segmented--fill button {
   flex: 1 1 0;
-  min-width: 0;
+  /* Не уже самого длинного слова: с `min-width: 0` ячейка сжималась сильнее
+     подписи, слово вылезало наружу, а соседняя кнопка закрывала его своим
+     фоном — получалась обрезка посреди слова. Особенно скверно у самой
+     настройки размера текста: человек шёл сюда за читаемостью и получал
+     «Обычнь» и «Крупнь». */
+  min-width: min-content;
+  overflow-wrap: anywhere;
   padding: var(--space-2);
   white-space: normal;
   line-height: 1.2;
@@ -900,7 +906,16 @@ input[type='radio'] {
   color: var(--text-secondary);
   font: inherit;
   font-size: var(--fs-1);
-  white-space: nowrap;
+  /* Названия форм выпуска приходят из реестра целиком: «Таблетки
+     пролонгированного действия, покрытые пленочной оболочкой» — это 498 px
+     при карточке в 344. С запретом переноса чип выезжал за карточку на
+     сто восемьдесят пикселей и утаскивал вбок всю страницу вместе с
+     прилипшей навигацией. Сокращать подпись нельзя: «таблетки, покрытые
+     оболочкой» и «таблетки пролонгированного действия» схлопнулись бы в
+     одинаковое, и выбирать стало бы не из чего. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 100%;
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease),
     border-color var(--dur-fast) var(--ease);

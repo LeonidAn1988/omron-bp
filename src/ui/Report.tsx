@@ -169,7 +169,7 @@ export function Report({
   // а не в общей шапке приложения. Ограничений по периоду нет: «Всё время»
   // доступно всегда и бесплатно.
   const picker = (
-    <div className="segmented no-print" role="group" aria-label="Период отчёта">
+    <div className="segmented segmented--fill no-print" role="group" aria-label="Период отчёта">
       {PERIODS.map((item) => (
         <button key={item.key} aria-pressed={period === item.key} onClick={() => onPeriodChange(item.key)}>
           {item.label}

@@ -197,11 +197,17 @@ export function MedicineCard({
           </a>
           {confirming ? (
             <>
-              <button className="btn btn--danger" onClick={onDelete}>
-                Удалить насовсем
-              </button>
+              {/* «Отмена» занимает место, где только что была кнопка
+                  «Удалить». Раньше туда вставало «Удалить насовсем», и второе
+                  нажатие подряд — обычное дело у пожилого человека и на
+                  медленном телефоне — стирало препарат без единого вопроса.
+                  Опасное действие обязано переехать, а не подставиться под
+                  палец. */}
               <button className="btn" onClick={() => setConfirming(false)}>
                 Отмена
+              </button>
+              <button className="btn btn--danger" onClick={onDelete}>
+                Удалить насовсем
               </button>
             </>
           ) : (
