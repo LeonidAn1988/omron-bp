@@ -154,15 +154,25 @@ export default function App() {
 
   // Тему ставит и скрипт в index.html — до первой отрисовки. Здесь она
   // приводится в соответствие с настройками: они главный источник истины.
+  /*
+   * Оформление применяется только после того, как настройки прочитаны.
+   *
+   * Раньше эффект срабатывал и на монтировании — с умолчаниями, потому что
+   * база читается асинхронно. А умолчания это «как в системе» и «обычный
+   * размер»: применение стирало и атрибуты, уже поставленные скриптом в
+   * index.html, и дубликат в localStorage, из которого тот скрипт читает.
+   * Экран мигал, а закройся приложение до конца загрузки — выбор пропадал
+   * совсем. До готовности трогать нечего: скрипт всё поставил верно.
+   */
   useEffect(() => {
+    if (!ready) return
     applyTheme(settings.theme)
-  }, [settings.theme])
+  }, [ready, settings.theme])
 
-  // Размер текста и плотность — тем же порядком: скрипт в index.html ставит их
-  // до первой отрисовки, здесь они приводятся в соответствие с настройками.
   useEffect(() => {
+    if (!ready) return
     applyDisplay(settings.textScale, settings.density)
-  }, [settings.textScale, settings.density])
+  }, [ready, settings.textScale, settings.density])
 
   const refresh = useCallback(async () => setMeasurements(await getAllMeasurements()), [])
   const refreshMedicines = useCallback(async () => setMedicines(await getAllMedicines()), [])
