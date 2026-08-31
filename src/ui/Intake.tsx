@@ -219,7 +219,11 @@ export function Intake({
 
       <div className="intake__head">
         <h2>{dayName(selected, now)}</h2>
-        <span className="muted">
+        {/* Живая область: отметка приёма — самое частое действие в
+            приложении, и до этого она проходила совсем молча. Экранный
+            диктор теперь произносит, сколько осталось, сразу после
+            нажатия. */}
+        <span className="muted" role="status" aria-live="polite">
           {slots.length === 0
             ? 'приёмов нет'
             : left === 0

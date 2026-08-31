@@ -13,6 +13,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { HORIZON_DAYS, REPEAT_INTERVAL_MIN, REPEATS, reminderTimes } from '../logic/reminders'
+import { plural } from '../logic/plural'
 import { platform } from '../platform/ports'
 import type { ReminderHealth, ReminderPermission } from '../platform/ports'
 import type { Medicine } from '../types'
@@ -232,7 +233,8 @@ export function Reminders({
               <span className="optrow__title">
                 Повторять, пока не отмечу приём
                 <span className="fact__note">
-                  ещё {REPEATS} раза каждые {REPEAT_INTERVAL_MIN} минут, потом приложение замолчит
+                  ещё {REPEATS} {plural(REPEATS, 'раз', 'раза', 'раз')} каждые {REPEAT_INTERVAL_MIN}{' '}
+                  {plural(REPEAT_INTERVAL_MIN, 'минуту', 'минуты', 'минут')}, потом приложение замолчит
                 </span>
               </span>
             </label>
@@ -288,11 +290,11 @@ export function Reminders({
             </div>
             <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
               {health && health.scheduled > 0 && health.until
-                ? `Сейчас в телефоне ${health.scheduled} напоминаний, последнее — ${new Intl.DateTimeFormat('ru-RU', {
+                ? `Сейчас в телефоне ${health.scheduled} ${plural(health.scheduled, 'напоминание', 'напоминания', 'напоминаний')}, последнее — ${new Intl.DateTimeFormat('ru-RU', {
                     day: 'numeric',
                     month: 'long',
                   }).format(health.until)}. Список продлевается каждый раз, когда вы открываете приложение.`
-                : `Напоминания расставляются на ${HORIZON_DAYS} дней вперёд и продлеваются каждый раз, когда вы открываете приложение.`}
+                : `Напоминания расставляются на ${HORIZON_DAYS} ${plural(HORIZON_DAYS, 'день', 'дня', 'дней')} вперёд и продлеваются каждый раз, когда вы открываете приложение.`}
             </div>
           </div>
 

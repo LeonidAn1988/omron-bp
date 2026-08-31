@@ -108,6 +108,12 @@
      чтобы в кнопку стало труднее попасть. */
   --tap: max(44px, calc(var(--space-unit) * 11));
   --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* Моноширинная гарнитура — журнал обмена и клавиши в тексте.
+     Была объявлена внутри блока плотности «просторно», то есть при трёх
+     режимах из четырёх токен не существовал вовсе: `var(--mono)` оказывался
+     недопустимым, и журнал прибора терял выравнивание по столбцам, ради
+     которого моноширинный шрифт и нужен. Гарнитура не зависит от отступов. */
+  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /*
@@ -133,7 +139,6 @@
 }
 :root[data-density='roomy'] {
   --space-unit: 5px;
-  --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -1139,10 +1144,31 @@ details[open] > summary::before {
 
 /* ── таблицы ────────────────────────────────────────────────────────────── */
 
+/* Таблица, которая шире экрана, обязана показать, что вправо есть ещё.
+   Без этого последние столбцы отчёта не видел никто: прокрутка была, а
+   признака её существования — нет. Тень у края появляется, только когда
+   прокручивать действительно есть куда: приём с двумя фонами, из которых
+   один прибит к содержимому, а второй к самому блоку. */
 .table-scroll {
   overflow-x: auto;
   margin: 0 calc(var(--space-4) * -1);
   padding: 0 var(--space-4);
+  background:
+    linear-gradient(to right, var(--surface) 30%, transparent),
+    linear-gradient(to left, var(--surface) 30%, transparent),
+    linear-gradient(to right, rgba(0, 0, 0, 0.22), transparent 14px),
+    linear-gradient(to left, rgba(0, 0, 0, 0.22), transparent 14px);
+  background-repeat: no-repeat;
+  background-size: 28px 100%, 28px 100%, 14px 100%, 14px 100%;
+  background-position: left center, right center, left center, right center;
+  background-attachment: local, local, scroll, scroll;
+}
+
+/* Проза не должна тянуться во всю ширину: строки по сто с лишним знаков
+   читаются вдвое медленнее, глаз теряет начало следующей. Мера — те же
+   65–75 знаков, что и в любой книге. */
+.card p {
+  max-width: 68ch;
 }
 
 table {

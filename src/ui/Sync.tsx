@@ -112,6 +112,8 @@ export function Sync({
   const [progress, setProgress] = useState(0)
   const [outcome, setOutcome] = useState<SyncOutcome | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /** Какое действие сорвалось: «Повторить» обязано повторить именно его. */
+  const [failedKind, setFailedKind] = useState<Exclude<Busy, null> | null>(null)
   const [needsPairing, setNeedsPairing] = useState(false)
   const [paired, setPaired] = useState(false)
   const [showAll, setShowAll] = useState(false)
@@ -164,6 +166,7 @@ export function Sync({
   async function run(kind: Exclude<Busy, null>, action: (device: GattDevice) => Promise<void>) {
     setBusy(kind)
     setError(null)
+    setFailedKind(null)
     setNeedsPairing(false)
     setPaired(false)
     setProgress(0)
@@ -179,6 +182,7 @@ export function Sync({
       } else if (!isCancellation(caught)) {
         // Закрытый пользователем системный диалог выбора — не ошибка, молчим.
         setError(message)
+        setFailedKind(kind)
         log('error', message)
       }
     } finally {
@@ -337,8 +341,16 @@ export function Sync({
                       <b>{разбор ? разбор.причина : 'Не получилось'}</b>
                       <div style={{ marginTop: 4 }}>{разбор ? разбор.действие : error}</div>
                       <div className="row" style={{ marginTop: 'var(--space-3)', gap: 'var(--space-2)' }}>
-                        <button className="btn btn--sm btn--primary" onClick={handleDownload} disabled={busy !== null}>
-                          Повторить
+                        {/* Повторяем то, что сорвалось, а не выгрузку всегда.
+                            Раньше после неудачного сопряжения кнопка запускала
+                            чтение памяти — то есть человек нажимал «Повторить»
+                            и получал другой отказ, ничего не поняв. */}
+                        <button
+                          className="btn btn--sm btn--primary"
+                          onClick={failedKind === 'pair' ? handlePair : handleDownload}
+                          disabled={busy !== null}
+                        >
+                          {failedKind === 'pair' ? 'Повторить сопряжение' : 'Повторить'}
                         </button>
                         <button className="btn btn--sm" onClick={() => setShowDebug((v) => !v)}>
                           {showDebug ? 'Скрыть подробности' : 'Подробности'}

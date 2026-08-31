@@ -111,7 +111,10 @@ export function Settings({
 
         <div className="stack" style={{ gap: 'var(--space-3)' }}>
           {SECTIONS.map((item) => (
-            <label className="badge" key={item.key}>
+            {/* `.optrow__label`, а не `.badge`: тот центрирует содержимое по
+                вертикали, и на двухстрочной подписи галка вставала между
+                строк, а сама подпись не переносилась и уезжала за карточку. */}
+            <label className="optrow__label" key={item.key}>
               <input
                 type="checkbox"
                 checked={settings.sections[item.key]}
@@ -131,7 +134,7 @@ export function Settings({
                   patch({ sections, startTab })
                 }}
               />
-              <span>
+              <span className="optrow__title">
                 {item.title}
                 <span className="fact__note">
                   {locked === item.key ? 'последний раздел — скрыть его нельзя' : item.hint}

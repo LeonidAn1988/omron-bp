@@ -37,6 +37,8 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
   const [arm, setArm] = useState<'' | 'left' | 'right'>('')
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
+  /** Запись идёт: кнопка глохнет, второе нажатие не заводит дубль. */
+  const [busy, setBusy] = useState(false)
   /** Что именно записали — для подтверждения, которое человек может сверить. */
   const [saved, setSaved] = useState<{ sys: number; dia: number; bpm: number | null; ts: number } | null>(null)
 
@@ -55,6 +57,7 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
+    if (busy) return
     setSaved(null)
 
     if (!Number.isFinite(sysValue) || sysValue < 40 || sysValue > 300) {
@@ -87,7 +90,12 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
       arm: arm || undefined,
       note: note.trim() || undefined,
     }
-    await onAdd(reading)
+    setBusy(true)
+    try {
+      await onAdd(reading)
+    } finally {
+      setBusy(false)
+    }
 
     setError(null)
     // Что именно ушло в дневник. Форма после записи очищается и выглядит ровно
@@ -174,8 +182,11 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
       </Reveal>
 
       <div className="row form-actions" style={{ marginTop: 'var(--space-4)' }}>
-        <button className="btn btn--primary" type="submit">
-          Добавить
+        {/* Кнопка глохнет на время записи: без этого второе нажатие на
+            медленном телефоне заводило второе измерение с теми же цифрами, а
+            дубль в дневнике давления врач читает как две разные попытки. */}
+        <button className="btn btn--primary" type="submit" disabled={busy}>
+          {busy ? 'Записываю…' : 'Добавить'}
         </button>
       </div>
 

@@ -1,10 +1,11 @@
+import { useState } from 'react'
 import { platform } from '../platform/ports'
 import { GLUCOSE_CONTEXT_LABELS, type BpReading, type GlucoseContext, type GlucoseReading, type Medicine } from '../types'
 import { PERIODS, type GlucoseSummary, type PeriodKey, type Summary } from '../logic/stats'
 import { DAY_PART_LABELS, classify, classifyGlucose, glucoseCeiling, type DayPart, type GlucoseTargets } from '../logic/classify'
 import { Readings } from './Readings'
 import { GlucoseList } from './Glucose'
-import { CategoryBadge } from './bits'
+import { Banner, CategoryBadge } from './bits'
 import { adherence, KEEP_INTAKES_DAYS, perDayOf, startOfDay } from '../logic/medicines'
 import { KIND_LABEL } from '../logic/drugs'
 import { plural } from '../logic/plural'
@@ -64,7 +65,8 @@ function Adherence({ medicines, from, now }: { medicines: Medicine[]; from: numb
             </Row>
             <Row label="Учтено с">
               {DAY_MONTH.format(report.from)}
-              {report.clipped && ` · отметки хранятся ${KEEP_INTAKES_DAYS} дней, поэтому срок короче периода отчёта`}
+              {report.clipped &&
+                ` · отметки хранятся ${KEEP_INTAKES_DAYS} ${plural(KEEP_INTAKES_DAYS, 'день', 'дня', 'дней')}, поэтому срок короче периода отчёта`}
             </Row>
           </tbody>
         </table>
@@ -165,6 +167,9 @@ export function Report({
   /** Аптечка попадает в отчёт: на приёме врачу нужен список того, что человек принимает. */
   medicines: Medicine[]
 }) {
+  /** Системная печать не открылась — на нестандартной прошивке так бывает. */
+  const [printFailed, setPrintFailed] = useState(false)
+
   // Период — орган управления отчётом, поэтому стоит рядом с кнопкой печати,
   // а не в общей шапке приложения. Ограничений по периоду нет: «Всё время»
   // доступно всегда и бесплатно.
@@ -196,11 +201,28 @@ export function Report({
   return (
     <div className="stack">
       <div className="row no-print">
-        <button className="btn btn--primary" onClick={() => void platform().files.print('Отчёт врачу')}>
+        {/* Отказ печати больше не уходит в никуда: на нестандартной прошивке
+            системного диалога может не быть вовсе, и кнопка, которая молча
+            ничего не делает, хуже отсутствующей. */}
+        <button
+          className="btn btn--primary"
+          onClick={() => void platform().files.print('Отчёт врачу').then((ok) => setPrintFailed(!ok))}
+        >
           Печать или сохранение в PDF
         </button>
         {picker}
       </div>
+      {printFailed && (
+        <div className="no-print" style={{ marginTop: 'var(--space-3)' }} role="alert">
+          <Banner tone="warning">
+            <b>Телефон не открыл печать</b>
+            <div style={{ marginTop: 4 }}>
+              Сохраните отчёт иначе: снимок экрана или «Поделиться» в настройках. Отчёт при этом остаётся на экране.
+            </div>
+          </Banner>
+        </div>
+      )}
+
       <div className="muted no-print" style={{ marginTop: 'calc(var(--space-3) * -1)' }}>
         В диалоге печати выберите «Сохранить как PDF», чтобы отправить отчёт врачу файлом.
       </div>
@@ -329,19 +351,30 @@ export function Report({
               <tbody>
                 <Row label="Замеров">{glucoseSummary.count}</Row>
                 <Row label="Средний сахар">
-                  <b>{glucoseSummary.avg.toFixed(1)}</b> ммоль/л (от {glucoseSummary.min.toFixed(1)} до{' '}
-                  {glucoseSummary.max.toFixed(1)})
+                  {/* Десятичный разделитель по-русски запятая. Раньше сахар
+                      печатался через точку рядом с разбросом давления через
+                      запятую — в одном документе два разных правила. */}
+                  <b>{десятичная(glucoseSummary.avg)}</b>&nbsp;ммоль/л{' '}
+                  <span className="nowrap">
+                    (от {десятичная(glucoseSummary.min)} до {десятичная(glucoseSummary.max)})
+                  </span>
                 </Row>
-                <Row label="Разброс">±{glucoseSummary.sd.toFixed(1)} ммоль/л</Row>
+                <Row label="Разброс">
+                  <span className="nowrap">±{десятичная(glucoseSummary.sd)}&nbsp;ммоль/л</span>
+                </Row>
                 <Row label="В целевом диапазоне">
                   {Math.round(glucoseSummary.withinTarget * 100)}% замеров — с учётом момента замера: ниже{' '}
-                  {glucoseTargets.fastingMax.toFixed(1)} натощак и {glucoseTargets.postMealMax.toFixed(1)} через два часа
+                  {десятичная(glucoseTargets.fastingMax)} натощак и {десятичная(glucoseTargets.postMealMax)} через два
+                  часа
                   после еды
                 </Row>
                 <Row label="Ниже порога">
-                  {glucoseSummary.lowCount} раз ниже {glucoseTargets.low.toFixed(1)} ммоль/л
+                  {glucoseSummary.lowCount} {plural(glucoseSummary.lowCount, 'раз', 'раза', 'раз')} ниже{' '}
+                  {десятичная(glucoseTargets.low)} ммоль/л
                 </Row>
-                <Row label="Выше цели">{glucoseSummary.highCount} раз</Row>
+                <Row label="Выше цели">
+                  {glucoseSummary.highCount} {plural(glucoseSummary.highCount, 'раз', 'раза', 'раз')}
+                </Row>
               </tbody>
             </table>
           </div>

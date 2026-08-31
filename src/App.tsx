@@ -644,26 +644,6 @@ export default function App() {
         <div className="stack">
           <LatestAlert latest={latestBp} />
 
-          {/* Предупреждение о копии стоит здесь, а не в настройках: до настроек
-              человек не дойдёт, а потеря дневника необратима. После «Понятно»
-              оно уходит на неделю, а сигнал остаётся точкой на кнопке
-              «Настройки» — тихо, но не молча. */}
-          {!nudgeHidden.backup && (
-            <BackupNudge
-              status={backup}
-              onOpenSettings={() => setTab('settings')}
-              onDismiss={() => snoozeNudge('backup')}
-            />
-          )}
-
-          {!nudgeHidden.cabinet && (
-            <MedicineNudge
-              count={medicineAlerts}
-              onOpen={() => setTab('cabinet')}
-              onDismiss={() => snoozeNudge('cabinet')}
-            />
-          )}
-
           {measurements.length === 0 ? (
             <Banner tone="info">
               <b>Дневник пока пуст.</b>
@@ -681,6 +661,32 @@ export default function App() {
               {summary && (
                 <>
                   <SummaryTiles summary={summary} targetSys={settings.targetSys} targetDia={settings.targetDia} />
+
+                  {/*
+                    Просьбы стоят после данных, а не перед ними.
+                    Раньше два жёлтых баннера занимали весь первый экран, и
+                    цифра давления — единственное, ради чего этот экран
+                    существует, — оказывалась за кромкой; на крупном тексте её
+                    не было видно вовсе. Медицинское предупреждение остаётся
+                    первым: оно про здоровье, а не про порядок в приложении.
+                    Сигнал при этом никуда не делся — точки на кнопках горят
+                    всегда, даже когда баннер спрятан.
+                  */}
+                  {!nudgeHidden.backup && (
+                    <BackupNudge
+                      status={backup}
+                      onOpenSettings={() => setTab('settings')}
+                      onDismiss={() => snoozeNudge('backup')}
+                    />
+                  )}
+
+                  {!nudgeHidden.cabinet && (
+                    <MedicineNudge
+                      count={medicineAlerts}
+                      onOpen={() => setTab('cabinet')}
+                      onDismiss={() => snoozeNudge('cabinet')}
+                    />
+                  )}
 
                   <div className="card">
                     <div className="card__head">
