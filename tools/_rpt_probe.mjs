@@ -67,7 +67,7 @@ async function seed(page, now) {
 const overflowProbe = () => {
   const out = []
   const docW = document.documentElement.clientWidth
-  for (const el of document.querySelectorAll('main *, header *')) {
+  for (const el of document.querySelectorAll('body *')) {
     const r = el.getBoundingClientRect()
     if (r.width === 0 && r.height === 0) continue
     if (r.right > docW + 0.5 || r.left < -0.5) {
@@ -79,6 +79,7 @@ const overflowProbe = () => {
         txt: (el.textContent||'').trim().slice(0,40), scrollW: el.scrollWidth, clientW: el.clientWidth })
     }
   }
+  out.push({ what: 'doc', docScrollW: document.documentElement.scrollWidth, docClientW: docW, bodyScrollW: document.body.scrollWidth })
   return out
 }
 
@@ -100,7 +101,7 @@ async function run(text, density, tag) {
   const page = await ctx.newPage()
   await page.clock.install({ time: new Date(FROZEN) })
   await page.goto(URL, { waitUntil: 'domcontentloaded' })
-  await page.waitForSelector('nav.tabs', { timeout: 15000 })
+  await page.waitForTimeout(1500)
   await seed(page, FROZEN)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await page.waitForSelector('nav.tabs', { timeout: 15000 })

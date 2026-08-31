@@ -5,7 +5,7 @@ import { DAY_PART_LABELS, classify, classifyGlucose, glucoseCeiling, type DayPar
 import { Readings } from './Readings'
 import { GlucoseList } from './Glucose'
 import { CategoryBadge } from './bits'
-import { adherence, KEEP_INTAKES_DAYS, perDayOf } from '../logic/medicines'
+import { adherence, KEEP_INTAKES_DAYS, perDayOf, startOfDay } from '../logic/medicines'
 import { KIND_LABEL } from '../logic/drugs'
 import { plural } from '../logic/plural'
 
@@ -88,7 +88,18 @@ function Adherence({ medicines, from, now }: { medicines: Medicine[]; from: numb
               <tr key={row.medicine.id}>
                 <td>
                   {row.medicine.name}
-                  <div className="muted">с {DAY_MONTH.format(row.from)}</div>
+                  {/* Две разные даты, и путать их нельзя.
+                      «Отметки с» — с какого дня есть данные о соблюдении: это
+                      первая отметка, и раньше она стояла просто как «с», а врач
+                      читает такое как «начал принимать тогда-то».
+                      «В дневнике с» — день, когда препарат завели. Ни та, ни
+                      другая не отвечают на вопрос «сколько лет принимаете»:
+                      до приложения человек мог пить его годами, и честного
+                      ответа у нас пока нет. */}
+                  <div className="muted">отметки с {DAY_MONTH.format(row.from)}</div>
+                  {row.medicine.since !== undefined && startOfDay(row.medicine.since) < row.from && (
+                    <div className="muted">в дневнике с {DAY_MONTH.format(row.medicine.since)}</div>
+                  )}
                 </td>
                 <td>
                   {row.taken} из {row.planned}
