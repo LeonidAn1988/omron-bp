@@ -41,6 +41,7 @@ const suites = [
   ['Расписание в календарь', await import('./calendar.test.mjs')],
   ['Напоминания о приёме', await import('./reminders.test.mjs')],
   ['Шифрование копии', await import('./crypto.test.mjs')],
+  ['История изменений', await import('./changelog.test.mjs')],
   ['Переносимость ядра', await import('./portability.test.mjs')],
 ]
 

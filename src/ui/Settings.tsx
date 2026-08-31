@@ -6,10 +6,16 @@ import { download, parseImportFile, toCsv, toJson, type ImportResult } from '../
 import { decryptBackup, isEncrypted } from '../logic/crypto'
 import { platform } from '../platform/ports'
 import { Banner, Field } from './bits'
+import { About } from './About'
+import { parseChangelog } from '../logic/changelog'
+import changelogSource from '../../CHANGELOG.md?raw'
 import { DataSafety } from './Backup'
 import type { BackupStatus } from './useBackup'
 
 const today = () => new Date().toISOString().slice(0, 10)
+
+/** История читается один раз: файл в бандле, и меняться в работе ему негде. */
+const releases = parseChangelog(changelogSource)
 
 /**
  * Разделы, которые можно скрыть.
@@ -572,29 +578,7 @@ export function Settings({
         </div>
       </div>
 
-      <div className="card">
-        <div className="card__head">
-          <h2>О приложении</h2>
-        </div>
-        <div style={{ fontSize: '0.875rem', lineHeight: 1.6, color: 'var(--text-secondary)' }}>
-          <p style={{ marginTop: 0 }}>
-            Дневник артериального давления для Omron RS7 Intelli IT (модель HEM-6232T). Читает историю измерений прямо
-            из памяти прибора по Bluetooth, без приложения Omron Connect и без передачи данных на чужие серверы.
-          </p>
-          <p>
-            Выгрузка работает только на чтение: единственная запись в прибор за всё время — разовый ключ сопряжения.
-            Часы тонометра приложение не переставляет.
-          </p>
-          <p style={{ marginBottom: 0 }}>
-            Разбор протокола основан на открытом проекте{' '}
-            <a href="https://github.com/userx14/omblepy" target="_blank" rel="noreferrer">
-              omblepy
-            </a>{' '}
-            (лицензия MIT). Приложение не является медицинским изделием и не ставит диагноз — решения о лечении
-            принимает врач.
-          </p>
-        </div>
-      </div>
+      <About releases={releases} />
     </div>
   )
 }

@@ -49,6 +49,8 @@ export const SCREENS = [
   { name: 'Настройки', tool: 'Настройки' },
   // Пароль копии — новое состояние экрана, и оно не видно, пока галка снята.
   { name: 'Настройки — пароль копии', tool: 'Настройки', check: 'Закрыть копию паролем' },
+  // История версий свёрнута по умолчанию — иначе в снимок попадает одна строка.
+  { name: 'Настройки — история версий', tool: 'Настройки', expand: 'Прежние версии' },
   { name: 'Прибор', tool: 'Прибор' },
 ]
 
@@ -181,6 +183,12 @@ export async function go(page, screen) {
   }
   // Галка, а не кнопка: раскрывашки в настройках открываются переключателем, и
   // без этого их содержимое в снимок не попадает вовсе.
+  if (screen.expand) {
+    await page.locator('details', { hasText: screen.expand }).first().evaluate((el) => {
+      el.open = true
+    })
+    await page.waitForTimeout(300)
+  }
   if (screen.check) {
     await page.locator('label', { hasText: screen.check }).locator('input[type=checkbox]').first().check()
     await page.waitForTimeout(300)

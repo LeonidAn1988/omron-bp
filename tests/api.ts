@@ -117,5 +117,6 @@ export {
   NO_BACKUP,
   recordsBehind,
 } from '../src/logic/backup'
+export { parseChangelog, currentVersion } from '../src/logic/changelog'
 
 export { installWebPlatform, useIndexedDbFactory } from '../src/platform/web'
