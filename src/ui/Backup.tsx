@@ -1,7 +1,8 @@
 import { describeBackupAge, STALE_DAYS } from '../logic/backup'
+import { useEffect, useRef, useState } from 'react'
 import { plural } from '../logic/plural'
 import { platform } from '../platform/ports'
-import { Banner } from './bits'
+import { Banner, Field, Reveal } from './bits'
 import type { BackupStatus } from './useBackup'
 
 /**
@@ -23,14 +24,56 @@ const isNative = () => platform().kind === 'native'
  * — ему нужно знать одно: копия есть или копии нет.
  */
 
-export function DataSafety({ status }: { status: BackupStatus }) {
-  const { supported, target, durable, lastAt, count, busy, failed } = status
+export function DataSafety({
+  status,
+  encrypt,
+  onEncryptChange,
+}: {
+  status: BackupStatus
+  /** Шифровать ли копию паролем. */
+  encrypt: boolean
+  onEncryptChange: (next: boolean) => void
+}) {
+  const { supported, target, durable, lastAt, count, busy, failed, stalled, password, locked } = status
+  const [показать, setПоказать] = useState(false)
+  /**
+   * Набранное в поле и применённое к копиям — разные вещи, и держать их вместе
+   * нельзя: каждая буква уходила бы в файл как ключ шифрования, а первая же
+   * запись отмечала бы копию сохранённой. Применяем целиком — по уходу из
+   * поля, по Enter и при закрытии экрана.
+   */
+  const [черновик, setЧерновик] = useState(password)
+  const применён = черновик === password
+
+  const свежий = useRef({ черновик, password, setPassword: status.setPassword })
+  свежий.current = { черновик, password, setPassword: status.setPassword }
+  useEffect(
+    () => () => {
+      const { черновик: draft, password: applied, setPassword } = свежий.current
+      if (draft !== applied) setPassword(draft)
+    },
+    [],
+  )
+
+  const применить = () => {
+    if (!применён) status.setPassword(черновик)
+  }
 
   return (
     <div className="card">
       <div className="card__head">
         <h2>Сохранность данных</h2>
       </div>
+
+      {stalled && !failed && (
+        <Banner tone="warning">
+          <b>Последняя копия не записалась</b>
+          <div style={{ marginTop: 4 }}>
+            Файл на месте и доступ к нему цел — недоступна сама папка. Так бывает, когда облако не отвечает или сети
+            нет. Приложение повторит само при следующем изменении.
+          </div>
+        </Banner>
+      )}
 
       {failed && (
         <Banner tone="critical">
@@ -57,22 +100,27 @@ export function DataSafety({ status }: { status: BackupStatus }) {
           </div>
           {target && (
             <div className="muted" style={{ marginTop: 4 }}>
-              Сохраняется само в файл <b>{target}</b> при каждом изменении. От потери самого устройства это спасёт,
-              только если файл лежит в облачной папке.
+              Сохраняется само в файл <b>{target}</b> при каждом изменении
+              {encrypt ? ', закрытый паролем' : ''}. От потери самого телефона это спасёт, только если файл лежит в
+              облачной папке: в памяти телефона он пропадёт вместе с ним.
             </div>
           )}
         </div>
 
         <div className="row">
           {status.canShare && (
-            <button className="btn btn--primary" onClick={() => void status.shareNow()} disabled={busy || count === 0}>
+            <button
+              className="btn btn--primary"
+              onClick={() => void status.shareNow()}
+              disabled={busy || count === 0 || locked}
+            >
               Отправить копию
             </button>
           )}
           <button
             className={status.canShare ? 'btn' : 'btn btn--primary'}
             onClick={() => void status.saveNow()}
-            disabled={busy || count === 0}
+            disabled={busy || count === 0 || locked}
           >
             Сохранить в файл
           </button>
@@ -86,6 +134,101 @@ export function DataSafety({ status }: { status: BackupStatus }) {
                 Выбрать файл для автокопий
               </button>
             ))}
+        </div>
+
+        {supported && (
+          <p className="muted" style={{ margin: 0 }}>
+            Файл можно положить куда угодно: в облачную папку — Яндекс.Диск, Google Drive — или прямо в память
+            телефона, в «Загрузки», «Документы». Облако нужно только чтобы копия пережила потерю телефона; во всём
+            остальном разницы нет.
+          </p>
+        )}
+
+        {/* Шифрование не под `supported`: оно относится ко всем копиям, включая
+            ручную отправку, а она работает и там, где автокопий нет. */}
+        <div>
+          <label className="optrow__label">
+            <input
+              type="checkbox"
+              checked={encrypt}
+              onChange={(event) => {
+                onEncryptChange(event.target.checked)
+                if (!event.target.checked) {
+                  setЧерновик('')
+                  status.setPassword('')
+                }
+              }}
+            />
+            <span className="optrow__title">
+              Закрыть копию паролем
+              <span className="fact__note">
+                тогда её не прочитает и облако: состав аптечки восстанавливает диагноз однозначно
+              </span>
+            </span>
+          </label>
+
+          <Reveal open={encrypt}>
+            <div style={{ paddingTop: 'var(--space-3)' }}>
+              {/* Кнопка «Показать» вне `Field`: тот оборачивает содержимое в
+                  `label`, а кнопка внутри подписи к полю — и лишний повод
+                  промахнуться, и путаница для скринридера. */}
+              <div className="row" style={{ gap: 'var(--space-2)', alignItems: 'flex-end' }}>
+                <div style={{ flex: '1 1 12ch' }}>
+                  <Field label="Пароль копии">
+                    <input
+                      type={показать ? 'text' : 'password'}
+                      value={черновик}
+                      // Не `off`: пусть менеджер паролей предложит сохранить.
+                      // Забытый пароль здесь стоит всего дневника, и записать
+                      // его в надёжное место — лучшее, что человек может
+                      // сделать.
+                      autoComplete="new-password"
+                      placeholder="придумайте и запишите"
+                      onChange={(event) => setЧерновик(event.target.value)}
+                      onBlur={применить}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') применить()
+                      }}
+                    />
+                  </Field>
+                </div>
+                <button className="btn" type="button" onClick={() => setПоказать((v) => !v)}>
+                  {показать ? 'Скрыть' : 'Показать'}
+                </button>
+              </div>
+
+              {/* Одно сообщение за раз. Иначе «пароль не задан» и «пароль
+                  набран, но не применён» висели бы вместе и противоречили друг
+                  другу прямо на глазах у человека. */}
+              <div style={{ marginTop: 'var(--space-3)' }}>
+                {!применён ? (
+                  <Banner tone="warning">
+                    <b>Пароль набран, но ещё не применён.</b>
+                    <div style={{ marginTop: 4 }}>
+                      Коснитесь экрана вне поля или нажмите на клавиатуре «Готово» — тогда копия перешифруется. До
+                      этого она не сохраняется.
+                    </div>
+                  </Banner>
+                ) : locked ? (
+                  <Banner tone="critical">
+                    <b>Пароль не задан — копии не делаются.</b>
+                    <div style={{ marginTop: 4 }}>
+                      Записать открытый дневник туда, где вы ждёте зашифрованный, приложение не станет. Введите
+                      пароль или снимите галку.
+                    </div>
+                  </Banner>
+                ) : (
+                  <Banner tone="warning">
+                    <b>Запишите пароль и храните отдельно от телефона.</b>
+                    <div style={{ marginTop: 4 }}>
+                      Забытый пароль — это потеря всего дневника: восстановить копию будет нечем. Приложение его не
+                      подскажет и подобрать не сможет.
+                    </div>
+                  </Banner>
+                )}
+              </div>
+            </div>
+          </Reveal>
         </div>
 
         {!supported && (
@@ -165,11 +308,16 @@ export function BackupNudge({
     <Banner tone="warning">
       <b>{NUDGE_TITLE[status.warning]}</b>
       <div style={{ marginTop: 4 }}>{explain}</div>
+      {status.locked && (
+        <div className="critical-text" style={{ marginTop: 4 }}>
+          Копии закрыты паролем, а пароль не задан — пока он не введён в настройках, копия не сделается.
+        </div>
+      )}
       <div className="row" style={{ marginTop: 'var(--space-3)' }}>
         <button
           className="btn btn--primary"
           onClick={() => void (status.canShare ? status.shareNow() : status.saveNow())}
-          disabled={status.busy}
+          disabled={status.busy || status.locked}
         >
           {status.canShare ? 'Отправить копию' : 'Сохранить копию'}
         </button>

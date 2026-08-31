@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
         // Свои плагины регистрируются до создания моста, иначе к моменту
         // загрузки страницы их в нём не окажется.
         registerPlugin(SystemSettings.class);
+        registerPlugin(BackupFile.class);
         super.onCreate(savedInstanceState);
     }
 }

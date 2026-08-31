@@ -13,7 +13,7 @@
  * предложит сохранять копию вручную.
  */
 
-import type { BackupPort } from '../ports'
+import type { BackupPort, BackupWriteResult } from '../ports'
 
 /** Описатель файла лежит в своей базе: он существует только в вебе, дневнику о нём знать незачем. */
 const DB_NAME = 'omron-backup'
@@ -28,6 +28,7 @@ const KEY = 'target'
 interface FileHandle {
   name: string
   createWritable(): Promise<{ write(data: string): Promise<void>; close(): Promise<void> }>
+  getFile(): Promise<Blob>
   queryPermission(descriptor: { mode: 'readwrite' }): Promise<PermissionState>
   requestPermission(descriptor: { mode: 'readwrite' }): Promise<PermissionState>
 }
@@ -111,19 +112,31 @@ export const webBackup: BackupPort = {
     return state === 'granted' ? handle.name : null
   },
 
-  async write(content) {
+  async write(content): Promise<BackupWriteResult> {
     const handle = await readHandle()
-    if (!handle) return false
-    if ((await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') return false
+    if (!handle) return 'lost'
+    if ((await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') return 'lost'
     try {
       const stream = await handle.createWritable()
       await stream.write(content)
       await stream.close()
-      return true
+      return 'ok'
     } catch {
-      // Файл могли удалить или переместить. Молча теряться нельзя — приложение
-      // по false покажет предупреждение и предложит выбрать файл заново.
-      return false
+      // Файл могли удалить или переместить — а могли просто отобрать диск или
+      // занять файл другой программой. Разрешение цело — значит цель на месте
+      // и отвязывать её нельзя, повторим при следующем изменении.
+      return (await handle.queryPermission({ mode: 'readwrite' })) === 'granted' ? 'retry' : 'lost'
+    }
+  },
+
+  async read() {
+    const handle = await readHandle()
+    if (!handle) return null
+    if ((await handle.queryPermission({ mode: 'readwrite' })) !== 'granted') return null
+    try {
+      return await (await handle.getFile()).text()
+    } catch {
+      return null
     }
   },
 

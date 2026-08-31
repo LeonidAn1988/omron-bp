@@ -52,6 +52,37 @@ export function shouldAutoBackup(state: BackupState, count: number): boolean {
   return count > 0 && (state.lastAt === null || state.lastCount !== count)
 }
 
+/**
+ * Пора ли переписать файл копии.
+ *
+ * Одних счётчиков записей мало. Файл стареет ещё двумя способами, и оба
+ * успели проявиться дефектами:
+ *
+ * - **сменился замок.** Человек включил шифрование или поменял пароль. Число
+ *   записей при этом не изменилось, `shouldAutoBackup` промолчал бы — и экран
+ *   говорил бы «сохраняется, закрытый паролем», пока в файле лежит открытый
+ *   дневник;
+ * - **файл только что выбран** (`force`). Он пуст, а счётчики могут сойтись —
+ *   тогда человек остался бы с пустым файлом под надписью «сохраняется само».
+ *
+ * `written: null` — про содержимое файла мы ещё ничего не знаем: это первый
+ * заход после запуска. Считаем, что в нём лежит то, чем его закрывали в
+ * прошлый раз, иначе каждый старт приложения означал бы лишнюю запись в облако.
+ */
+export function shouldWriteBackup(
+  state: BackupState,
+  count: number,
+  lock: { written: string | null; current: string },
+  force: boolean,
+): boolean {
+  // Пустой дневник не пишем ни при каких условиях: записать поверх копии
+  // пустоту — это потерять её. Ни смена пароля, ни свежий файл того не стоят.
+  if (count === 0) return false
+  if (force) return true
+  if (lock.written !== null && lock.written !== lock.current) return true
+  return shouldAutoBackup(state, count)
+}
+
 export type BackupWarning =
   /** Копий нет вовсе, а данные уже есть. */
   | 'never'

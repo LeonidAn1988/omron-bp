@@ -3,6 +3,7 @@ import type { Measurement, Medicine, SectionKey, Settings as SettingsData, Theme
 import { DEFAULT_PAIRING_KEY } from '../ble/session'
 import { Reminders } from './Reminders'
 import { download, parseImportFile, toCsv, toJson, type ImportResult } from '../logic/io'
+import { decryptBackup, isEncrypted } from '../logic/crypto'
 import { platform } from '../platform/ports'
 import { Banner, Field } from './bits'
 import { DataSafety } from './Backup'
@@ -73,21 +74,74 @@ export function Settings({
   const fileRef = useRef<HTMLInputElement>(null)
   const [message, setMessage] = useState<{ tone: 'good' | 'critical'; text: string } | null>(null)
   const [confirmClear, setConfirmClear] = useState(false)
+  /** Зашифрованный файл, ждущий пароля. Держим текст, а не сам файл: второй раз его не прочитать. */
+  const [закрытый, setЗакрытый] = useState<{ name: string; text: string } | null>(null)
+  const [пароль, setПароль] = useState('')
 
   const patch = (fields: Partial<SettingsData>) => onChange({ ...settings, ...fields })
 
-  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
+  async function восстановить(name: string, text: string) {
     try {
-      const parsed = parseImportFile(file.name, await file.text())
+      const parsed = parseImportFile(name, text)
       const { added, medicines, settingsRestored } = await onRestore(parsed)
       const parts = [`Разобрано записей: ${parsed.measurements.length}, добавлено новых: ${added}.`]
       if (medicines > 0) parts.push(`Добавлено препаратов в аптечку: ${medicines}.`)
       if (settingsRestored) parts.push('Настройки восстановлены.')
       if (parsed.skipped) parts.push(`Пропущено нечитаемых строк: ${parsed.skipped}.`)
       setMessage({ tone: 'good', text: parts.join(' ') })
+      setЗакрытый(null)
+      setПароль('')
+    } catch (error) {
+      setMessage({ tone: 'critical', text: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    const text = await file.text()
+    // Зашифрованный файл не разбираем, а просим пароль: сказать «файл
+    // нечитаемый» о собственной защищённой копии — верный способ убедить
+    // человека, что дневник потерян.
+    if (isEncrypted(text)) {
+      setMessage(null)
+      setЗакрытый({ name: file.name, text })
+      return
+    }
+    setЗакрытый(null)
+    await восстановить(file.name, text)
+  }
+
+  /**
+   * Восстановление из того файла, куда идут автокопии.
+   *
+   * Системный выбор файла это тоже умеет, но там человеку надо опознать
+   * `дневник-копия.json` среди своих файлов. Тому, кто откатывает случайное
+   * удаление, короткий путь важнее.
+   */
+  async function изФайлаКопий() {
+    const text = await backup.readTarget()
+    if (text === null) {
+      setMessage({ tone: 'critical', text: 'Файл копии не читается: его удалили, переместили или отозвали доступ.' })
+      return
+    }
+    if (isEncrypted(text)) {
+      setMessage(null)
+      setЗакрытый({ name: backup.target ?? 'копия.json', text })
+      return
+    }
+    setЗакрытый(null)
+    await восстановить('копия.json', text)
+  }
+
+  async function расшифровать() {
+    if (!закрытый) return
+    try {
+      const открытый = await decryptBackup(закрытый.text, пароль)
+      // Имя берём исходное, но разбор всегда как JSON: зашифрованной бывает
+      // только полная копия, а расширение у файла может быть любым.
+      await восстановить(закрытый.name.endsWith('.json') ? закрытый.name : `${закрытый.name}.json`, открытый)
     } catch (error) {
       setMessage({ tone: 'critical', text: error instanceof Error ? error.message : String(error) })
     }
@@ -224,7 +278,11 @@ export function Settings({
         </p>
       </div>
 
-      <DataSafety status={backup} />
+      <DataSafety
+        status={backup}
+        encrypt={settings.backupEncrypt}
+        onEncryptChange={(next) => patch({ backupEncrypt: next })}
+      />
 
       <Reminders
         medicines={medicines}
@@ -388,6 +446,11 @@ export function Settings({
           <button className="btn" onClick={() => fileRef.current?.click()}>
             Импорт из файла
           </button>
+          {backup.target && (
+            <button className="btn" onClick={() => void изФайлаКопий()}>
+              Вернуть из «{backup.target}»
+            </button>
+          )}
           <input ref={fileRef} type="file" accept=".csv,.json,.tsv,text/csv,application/json" onChange={handleFile} hidden />
         </div>
 
@@ -402,6 +465,43 @@ export function Settings({
             <kbd>ubpm.json</kbd> с <kbd>user1.csv</kbd> от omblepy. Совпадающие измерения не задваиваются.
           </div>
         </div>
+
+        {закрытый && (
+          <div className="card card--inset" style={{ marginTop: 12 }}>
+            <div className="card__head">
+              <h3>Копия закрыта паролем</h3>
+            </div>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Файл <b>{закрытый.name}</b> зашифрован. Введите пароль, которым он был закрыт.
+            </p>
+            <Field label="Пароль копии">
+              <input
+                type="password"
+                value={пароль}
+                autoComplete="off"
+                autoFocus
+                onChange={(event) => setПароль(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void расшифровать()
+                }}
+              />
+            </Field>
+            <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+              <button className="btn btn--primary" onClick={() => void расшифровать()} disabled={!пароль}>
+                Расшифровать и восстановить
+              </button>
+              <button
+                className="btn"
+                onClick={() => {
+                  setЗакрытый(null)
+                  setПароль('')
+                }}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        )}
 
         {message && (
           <div style={{ marginTop: 12 }}>

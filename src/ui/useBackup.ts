@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { encryptBackup } from '../logic/crypto'
 import type { Measurement, Medicine, Settings } from '../types'
 import { backupTarget, requestDurability } from '../db/store'
 import { canShareFile, download, shareFile, toJson } from '../logic/io'
@@ -6,7 +7,7 @@ import {
   backupFilename,
   backupWarning,
   recordsBehind,
-  shouldAutoBackup,
+  shouldWriteBackup,
   type BackupWarning,
 } from '../logic/backup'
 
@@ -34,6 +35,8 @@ export interface BackupStatus {
   busy: boolean
   /** Автоматическая запись не прошла: файл удалили или отозвали доступ. */
   failed: boolean
+  /** Записать не вышло, но файл на месте: облачная папка недоступна, диск занят. Повторим сами. */
+  stalled: boolean
   chooseTarget: () => Promise<void>
   forgetTarget: () => Promise<void>
   saveNow: () => Promise<void>
@@ -41,6 +44,45 @@ export interface BackupStatus {
   canShare: boolean
   /** Передать копию в облако, мессенджер или почту — чтобы она пережила устройство. */
   shareNow: () => Promise<void>
+  /** Применённый пароль копии — тот, которым закрывается файл. Пустая строка, если пароля нет. */
+  password: string
+  /** Применить пароль. Не на каждую букву: см. комментарий у `setPassword` в реализации. */
+  setPassword: (value: string) => void
+  /** Шифрование включено, но пароля нет: копии не делаются вообще, ни сами, ни руками. */
+  locked: boolean
+  /** Прочитать копию из выбранного файла — короткий путь к восстановлению. `null`, если файла нет. */
+  readTarget: () => Promise<string | null>
+}
+
+/**
+ * Пароль копии живёт на устройстве, и это не небрежность.
+ *
+ * Он защищает файл **в облаке**, а не телефон: сам дневник и так лежит здесь
+ * открытым, и у того, кто получил разблокированный телефон, он уже есть. Держать
+ * пароль только в памяти означало бы, что после каждого перезапуска
+ * автоматические копии молча перестают идти, — а молчащая копия хуже
+ * отсутствующей.
+ *
+ * В резервную копию он не попадает никогда: копия, в которой лежит пароль от
+ * неё же, не защищена ничем.
+ */
+const PASSWORD_KEY = 'omron.backup-password'
+
+export function backupPassword(): string {
+  try {
+    return localStorage.getItem(PASSWORD_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function setBackupPassword(value: string): void {
+  try {
+    if (value) localStorage.setItem(PASSWORD_KEY, value)
+    else localStorage.removeItem(PASSWORD_KEY)
+  } catch {
+    // Без памяти под пароль шифрование в этой сессии просто не включится.
+  }
 }
 
 export function useBackup(
@@ -54,6 +96,47 @@ export function useBackup(
   const [durable, setDurable] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [stalled, setStalled] = useState(false)
+  /**
+   * Пароль, **применённый** к копиям, — не то же самое, что набранный в поле.
+   *
+   * Разница не косметическая. Запись копии запускается изменением данных, а
+   * дневник почти всегда разошёлся с файлом; если бы сюда попадала каждая
+   * нажатая клавиша, первая же буква ушла бы в файл как ключ шифрования, копия
+   * отметилась бы сохранённой, и настоящий пароль в файл уже не попал бы —
+   * `shouldAutoBackup` больше не сработал бы. В облаке осталась бы копия,
+   * закрытая одной буквой.
+   *
+   * Поэтому экран держит черновик у себя и применяет его целиком.
+   */
+  const [password, setPasswordState] = useState(backupPassword)
+
+  const setPassword = useCallback((value: string) => {
+    setBackupPassword(value)
+    setPasswordState(value)
+  }, [])
+
+  const locked = settings.backupEncrypt && !password
+
+  /**
+   * Каким замком закрыт файл.
+   *
+   * Смена замка старит файл сама по себе, сколько бы записей в дневнике ни
+   * было. Без этого включение шифрования при сошедшихся счётчиках не
+   * перезаписывало файл вовсе: экран говорил «сохраняется, закрытый паролем», а
+   * в файле лежал открытый дневник.
+   */
+  const lock = settings.backupEncrypt ? `on:${password}` : 'off'
+  const writtenLock = useRef<string | null>(null)
+
+  /**
+   * Записать при первой же возможности, не спрашивая счётчиков.
+   *
+   * Нужно после выбора файла: файл только что создан и пуст, а счётчики могут
+   * сойтись — тогда `shouldAutoBackup` вернул бы `false` и человек остался бы с
+   * пустым файлом при надписи «сохраняется само».
+   */
+  const force = useRef(false)
 
   const supported = backupTarget.isSupported()
   /**
@@ -82,6 +165,24 @@ export function useBackup(
     return toJson({ measurements: items, medicines: pills, settings: rest })
   }
 
+  /**
+   * Что уходит наружу — открытый дневник или конверт.
+   *
+   * Одна на все три пути: автокопию, «сохранить в файл» и «поделиться».
+   * Раздельно это уже разошлось — конверт готовила только автокопия, а кнопка
+   * «поделиться» при включённом шифровании отправляла в облако открытый
+   * дневник. Молча и ровно туда, от чего пароль и защищает.
+   *
+   * `null` означает «не пишем»: шифрование включено, а пароля нет.
+   */
+  const envelope = useCallback(async (): Promise<string | null> => {
+    const plain = snapshot()
+    if (!latest.current.settings.backupEncrypt) return plain
+    const пароль = backupPassword()
+    if (!пароль) return null
+    return encryptBackup(plain, пароль).catch(() => null)
+  }, [])
+
   useEffect(() => {
     void requestDurability().then(setDurable)
     void backupTarget.current().then(setTarget)
@@ -97,25 +198,52 @@ export function useBackup(
     if (!ready || !target) return
     const { settings: current, measurements: items, medicines: pills } = latest.current
     const total = items.length + pills.length
-    if (!shouldAutoBackup({ lastAt: current.backupLastAt, lastCount: current.backupLastCount }, total)) return
+
+    const надо = shouldWriteBackup(
+      { lastAt: current.backupLastAt, lastCount: current.backupLastCount },
+      total,
+      { written: writtenLock.current, current: lock },
+      force.current,
+    )
+    // Замок запоминаем и когда не пишем: молчание означает «в файле уже то,
+    // чем его закрывали», и следующая смена пароля должна это заметить.
+    if (!надо) {
+      writtenLock.current = lock
+      return
+    }
 
     let cancelled = false
     void (async () => {
-      const ok = await backupTarget.write(snapshot())
+      const содержимое = await envelope()
+      // Пароля нет — молчим и цель не сбрасываем: это не пропавший файл, а
+      // незаконченная настройка, и о ней экран говорит своими словами. Замок
+      // при этом не запоминаем: в файле по-прежнему прежнее содержимое.
+      if (содержимое === null) return
+      const result = await backupTarget.write(содержимое)
       if (cancelled) return
-      if (ok) {
+      if (result === 'ok') {
+        force.current = false
+        writtenLock.current = lock
         setFailed(false)
+        setStalled(false)
         markDone(total)
+      } else if (result === 'retry') {
+        // Файл на месте, доступ цел — недоступна сама папка. Отвязывать её
+        // из-за выключенной сети нельзя: человек будет искать файл заново.
+        setStalled(true)
       } else {
         // Цель пропала. Молчать нельзя: человек считает, что копии идут.
         setFailed(true)
+        setStalled(false)
         setTarget(null)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [ready, target, count, settings.backupLastCount, settings.backupLastAt, markDone])
+  }, [ready, target, count, settings.backupLastCount, settings.backupLastAt, lock, markDone, envelope])
+
+  const readTarget = useCallback(() => backupTarget.read(), [])
 
   const chooseTarget = useCallback(async () => {
     setBusy(true)
@@ -124,6 +252,11 @@ export function useBackup(
       if (name) {
         setTarget(name)
         setFailed(false)
+        setStalled(false)
+        // Новый файл пуст. Пишем в него сразу, не глядя на счётчики: иначе он
+        // так и останется пустым под надписью «сохраняется само».
+        writtenLock.current = null
+        force.current = true
       }
     } finally {
       setBusy(false)
@@ -134,13 +267,16 @@ export function useBackup(
     await backupTarget.forget()
     setTarget(null)
     setFailed(false)
+    setStalled(false)
   }, [])
 
   /** Ручное сохранение — работает везде, в том числе там, где автокопий нет. */
   const saveNow = useCallback(async () => {
     setBusy(true)
     try {
-      const saved = await download(backupFilename(Date.now()), snapshot(), 'application/json')
+      const содержимое = await envelope()
+      if (содержимое === null) return
+      const saved = await download(backupFilename(Date.now()), содержимое, 'application/json')
       // Отметку ставим только при подтверждённом сохранении — ровно как в
       // shareNow ниже. На телефоне «сохранить» проходит через системное окно, и
       // отказ от него означает, что копии нет.
@@ -148,7 +284,7 @@ export function useBackup(
     } finally {
       setBusy(false)
     }
-  }, [markDone])
+  }, [markDone, envelope])
 
   /**
    * Передача копии наружу. На телефоне это важнее скачивания: скачанный файл
@@ -157,14 +293,16 @@ export function useBackup(
   const shareNow = useCallback(async () => {
     setBusy(true)
     try {
-      const sent = await shareFile(backupFilename(Date.now()), snapshot(), 'application/json')
+      const содержимое = await envelope()
+      if (содержимое === null) return
+      const sent = await shareFile(backupFilename(Date.now()), содержимое, 'application/json')
       // Отметку ставим только при подтверждённой передаче: закрытое окно
       // «поделиться» означает, что копии нет, и делать вид иначе нельзя.
       if (sent) markDone(latest.current.measurements.length + latest.current.medicines.length)
     } finally {
       setBusy(false)
     }
-  }, [markDone])
+  }, [markDone, envelope])
 
   return {
     supported,
@@ -180,10 +318,15 @@ export function useBackup(
     count,
     busy,
     failed,
+    stalled,
     chooseTarget,
     forgetTarget,
     saveNow,
     canShare: canShareFile(),
     shareNow,
+    password,
+    setPassword,
+    locked,
+    readTarget,
   }
 }

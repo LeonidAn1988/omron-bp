@@ -33,6 +33,7 @@ export const DEFAULT_SETTINGS: Settings = {
   intakeTimes: { morning: '08:00', day: '13:00', evening: '19:00', night: '22:00' },
   onboarded: false,
   nudgesUntil: { backup: 0, cabinet: 0 },
+  backupEncrypt: false,
   backupLastAt: null,
   backupLastCount: 0,
 }
@@ -132,5 +133,6 @@ export const backupTarget = {
   choose: (suggestedName: string) => platform().backup.choose(suggestedName),
   current: () => platform().backup.target(),
   write: (content: string) => platform().backup.write(content),
+  read: () => platform().backup.read(),
   forget: () => platform().backup.forget(),
 }

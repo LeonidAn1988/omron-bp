@@ -1,6 +1,7 @@
 /** Когда дневник считается незащищённым и когда пора делать копию. */
 import {
   shouldAutoBackup,
+  shouldWriteBackup,
   backupWarning,
   describeBackupAge,
   backupFilename,
@@ -82,6 +83,50 @@ export function run() {
 
   const name = backupFilename(new Date(2026, 0, 5, 9, 0, 0).getTime())
   check('имя файла с датой в начале', name === 'дневник-здоровья-2026-01-05.json', name)
+
+  // ── замок файла ──────────────────────────────────────────────────────────
+  // Файл стареет не только от новых записей. Оба случая ниже были дефектами:
+  // экран обещал зашифрованную копию, пока в файле лежал открытый дневник.
+  const сошлись = { lastAt: Date.now(), lastCount: 7 }
+
+  check(
+    'счётчики сошлись, замок прежний — не пишем',
+    shouldWriteBackup(сошлись, 7, { written: 'off', current: 'off' }, false) === false,
+  )
+  check(
+    'включили шифрование при сошедшихся счётчиках — переписываем',
+    shouldWriteBackup(сошлись, 7, { written: 'off', current: 'on:секрет' }, false) === true,
+  )
+  check(
+    'сменили пароль — переписываем',
+    shouldWriteBackup(сошлись, 7, { written: 'on:старый', current: 'on:новый' }, false) === true,
+  )
+  check(
+    'выключили шифрование — переписываем открытым',
+    shouldWriteBackup(сошлись, 7, { written: 'on:секрет', current: 'off' }, false) === true,
+  )
+  check(
+    'первый заход после запуска лишней записи не делает',
+    shouldWriteBackup(сошлись, 7, { written: null, current: 'on:секрет' }, false) === false,
+  )
+  check(
+    'только что выбранный файл пишем, даже когда счётчики сошлись',
+    shouldWriteBackup(сошлись, 7, { written: null, current: 'off' }, true) === true,
+  )
+  check(
+    'новые записи при прежнем замке — пишем как раньше',
+    shouldWriteBackup({ lastAt: Date.now(), lastCount: 5 }, 7, { written: 'off', current: 'off' }, false) === true,
+  )
+  // Записать поверх копии пустоту — потерять её. Ни смена пароля, ни свежий
+  // файл того не стоят.
+  check(
+    'пустой дневник не пишем даже при смене замка',
+    shouldWriteBackup({ lastAt: null, lastCount: 0 }, 0, { written: 'off', current: 'on:x' }, false) === false,
+  )
+  check(
+    'пустой дневник не пишем и в только что выбранный файл',
+    shouldWriteBackup({ lastAt: null, lastCount: 0 }, 0, { written: null, current: 'off' }, true) === false,
+  )
 
   return failures
 }

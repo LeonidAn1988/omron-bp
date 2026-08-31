@@ -17,6 +17,8 @@ export {
 
 export { toCsv, toJson, parseCsv, parseJson, parseImportFile } from '../src/logic/io'
 
+export { encryptBackup, decryptBackup, isEncrypted } from '../src/logic/crypto'
+
 export {
   getAllMeasurements,
   putMeasurements,
@@ -106,6 +108,7 @@ export {
 
 export {
   shouldAutoBackup,
+  shouldWriteBackup,
   backupWarning,
   describeBackupAge,
   backupFilename,

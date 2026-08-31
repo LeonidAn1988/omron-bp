@@ -47,6 +47,8 @@ export const SCREENS = [
   { name: 'Форма препарата', tab: 'Аптечка', click: 'Добавить препарат' },
   { name: 'Отчёт врачу', tool: 'Отчёт' },
   { name: 'Настройки', tool: 'Настройки' },
+  // Пароль копии — новое состояние экрана, и оно не видно, пока галка снята.
+  { name: 'Настройки — пароль копии', tool: 'Настройки', check: 'Закрыть копию паролем' },
   { name: 'Прибор', tool: 'Прибор' },
 ]
 
@@ -132,7 +134,9 @@ export async function seed(page, frozen) {
       medicines.forEach((m) => tx.objectStore('medicines').put(m))
       readings.forEach((r) => tx.objectStore('readings').put(r))
       // Дневник сахара включаем явно: иначе раздел прячется и снимок пустой.
-      tx.objectStore('meta').put({ trackGlucose: true }, 'settings')
+      // `onboarded` — тоже явно: без него приложение на пустом дневнике
+      // показывает экран знакомства, а не себя.
+      tx.objectStore('meta').put({ trackGlucose: true, onboarded: true }, 'settings')
       tx.oncomplete = resolve
       tx.onerror = () => reject(tx.error)
     })
@@ -143,6 +147,19 @@ export async function seed(page, frozen) {
 /** Ждём, пока React отрисует: без этого снимок ловит «Загрузка…». */
 export const settle = async (page) => {
   await page.waitForSelector('nav.tabs', { timeout: 15_000 })
+  await page.waitForTimeout(400)
+}
+
+/**
+ * То же самое, но до засева.
+ *
+ * На пустом дневнике приложение показывает экран знакомства, а у него нет
+ * вкладок — и ожидание `nav.tabs` валило весь прогон на первом же шаге, ещё до
+ * единого снимка. Здесь достаточно дождаться, что React вообще отрисовал: база
+ * к этому моменту уже создана, а засевать можно с любого экрана.
+ */
+export const settleAny = async (page) => {
+  await page.waitForSelector('.app', { timeout: 15_000 })
   await page.waitForTimeout(400)
 }
 
@@ -161,6 +178,12 @@ export async function go(page, screen) {
   if (screen.click) {
     await page.locator('button', { hasText: screen.click }).first().click()
     await page.waitForTimeout(250)
+  }
+  // Галка, а не кнопка: раскрывашки в настройках открываются переключателем, и
+  // без этого их содержимое в снимок не попадает вовсе.
+  if (screen.check) {
+    await page.locator('label', { hasText: screen.check }).locator('input[type=checkbox]').first().check()
+    await page.waitForTimeout(300)
   }
   // Прокрутка вверх: страницу мог утащить предыдущий экран, и снимок начался бы
   // с середины. Percy снимает документ целиком, но позиция влияет на «липкие»
@@ -187,7 +210,7 @@ async function main() {
     await page.clock.install({ time: new Date(FROZEN) })
 
     await page.goto(URL, { waitUntil: 'domcontentloaded' })
-    await settle(page)
+    await settleAny(page)
     await seed(page, FROZEN)
 
     // Перезагрузка, а не обновление состояния: данные читаются один раз при
