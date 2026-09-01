@@ -26,7 +26,7 @@ import { MedicineNudge } from './ui/Medicines'
 import { DeviceIcon, ReportIcon, SettingsIcon } from './ui/icons'
 import { Onboarding } from './ui/Onboarding'
 import { PersonSwitch } from './ui/People'
-import { activePersonOf, deviceUserOf, medicinesOf } from './logic/people'
+import { activePersonOf, deviceUserOf, medicinesOf, ownerOf } from './logic/people'
 import { Intake } from './ui/Intake'
 import { Cabinet } from './ui/Cabinet'
 import { Entry } from './ui/Entry'
@@ -170,10 +170,15 @@ export default function App() {
       // отметок больше нет. Ровно у него история и нужна — врач спрашивает про
       // курс, который закончился.
       void (async () => {
-        const первый = loaded.people?.[0]?.id
+        // Владельца проставляем и чиним: пусто у препаратов, заведённых до
+        // появления людей, а указывать на удалённого человека он может после
+        // удаления. Оба случая ведут к первому в списке — ровно это и обещает
+        // окно подтверждения при удалении.
+        const люди = loaded.people ?? []
         const обработанные = pills.map((m) => {
           const свёрнут = foldHistory(m, Date.now())
-          return !m.owner && первый ? { ...свёрнут, owner: первый } : свёрнут
+          const чей = ownerOf(свёрнут, люди)
+          return чей && свёрнут.owner !== чей ? { ...свёрнут, owner: чей } : свёрнут
         })
         const изменились = обработанные.filter((m, i) => m !== pills[i])
         if (изменились.length === 0) return
