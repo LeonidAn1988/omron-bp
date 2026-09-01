@@ -16,6 +16,7 @@ import { Banner } from './bits'
 import { ChevronIcon } from './icons'
 import { alertText, ALERT_TONE, KindTag, MedicineNudge, Restock, shortFormOf, Supply } from './Medicines'
 import { MedicineCard } from './MedicineCard'
+import { ownerOf } from '../logic/people'
 import { MedicineForm } from './MedicineForm'
 
 /**
@@ -40,20 +41,26 @@ const FILTERS: { key: Filter; title: string }[] = [
 
 export function Cabinet({
   medicines,
+  allMedicines,
   intakeTimes,
   people,
   activePerson,
   onSave,
   onDelete,
+  onPickPerson,
   toRoot = 0,
 }: {
   medicines: Medicine[]
+  /** Вся аптечка семьи — для сводного вида. */
+  allMedicines: Medicine[]
   /** Часы стандартных приёмов из настроек — кнопки в форме препарата. */
   intakeTimes: IntakeTimes
   people: Person[]
   activePerson: string
   onSave: (item: Medicine) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  /** Переключить человека: открывая чужую коробку, надо перейти к её владельцу. */
+  onPickPerson: (id: string) => void
   /** Меняется, когда человек нажал на уже активную вкладку: вернуться к списку. */
   toRoot?: number
 }) {
@@ -61,6 +68,22 @@ export function Cabinet({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
+  /**
+   * Чью аптечку показываем.
+   *
+   * Семейный вид нужен ради двух вопросов, которые в личной аптечке не
+   * задаются: «что вообще заканчивается в доме» и «что купить одним походом».
+   * Он живёт только здесь: приём и отчёт врачу общими быть не могут — отметка
+   * ставится человеку, и отчёт тоже про одного.
+   */
+  const [scope, setScope] = useState<'mine' | 'family'>('mine')
+  const семья = people.length > 1
+  const видимые = семья && scope === 'family' ? allMedicines : medicines
+  const имяВладельца = (item: Medicine) => {
+    if (!семья || scope !== 'family') return null
+    const id = ownerOf(item, people)
+    return people.find((p) => p.id === id)?.name?.trim() || null
+  }
   /** Куда вернуть список после экрана препарата: терять место при возврате нельзя. */
   const scrollRef = useRef(0)
 
@@ -78,7 +101,7 @@ export function Cabinet({
   }, [toRoot])
 
   const now = Date.now()
-  const opened = medicines.find((item) => item.id === openId) ?? null
+  const opened = видимые.find((item) => item.id === openId) ?? allMedicines.find((item) => item.id === openId) ?? null
 
   const back = () => {
     setOpenId(null)
@@ -87,7 +110,7 @@ export function Cabinet({
   }
 
   if (editingId || adding) {
-    const item = medicines.find((m) => m.id === editingId)
+    const item = allMedicines.find((m) => m.id === editingId)
     return (
       <div className="card">
         <div className="card__head">
@@ -130,7 +153,7 @@ export function Cabinet({
     )
   }
 
-  const all = sortMedicines(medicines, now)
+  const all = sortMedicines(видимые, now)
   const rows = all.filter((item) => {
     if (filter === 'all') return true
     const alert = medicineAlert(item, now)
@@ -138,19 +161,33 @@ export function Cabinet({
     return alert?.kind === 'expired' || alert?.kind === 'expiring'
   })
 
-  const events = countCalendarEvents(medicines)
+  const events = countCalendarEvents(видимые)
 
   return (
     <div className="stack">
-      <Restock medicines={medicines} />
+      <Restock medicines={видимые} ownerName={имяВладельца} />
 
       <div className="card">
         <div className="card__head">
           <h2>Аптечка</h2>
-          {medicines.length > 0 && <span className="muted">препаратов: {medicines.length}</span>}
+          {видимые.length > 0 && <span className="muted">препаратов: {видимые.length}</span>}
         </div>
 
-        {medicines.length > 1 && (
+        {/* Сводная аптечка семьи. Появляется вместе со вторым человеком: одному
+            выбирать не из чего, и переключатель был бы лишним. */}
+        {семья && (
+          <div className="segmented segmented--fill no-print" role="group" aria-label="Чья аптечка"
+               style={{ marginBottom: 'var(--space-3)' }}>
+            <button aria-pressed={scope === 'mine'} onClick={() => setScope('mine')}>
+              Моя
+            </button>
+            <button aria-pressed={scope === 'family'} onClick={() => setScope('family')}>
+              Вся семья
+            </button>
+          </div>
+        )}
+
+        {видимые.length > 1 && (
           <div className="segmented segmented--fill no-print" role="group" aria-label="Что показывать">
             {FILTERS.map((item) => (
               <button key={item.key} aria-pressed={filter === item.key} onClick={() => setFilter(item.key)}>
@@ -160,13 +197,13 @@ export function Cabinet({
           </div>
         )}
 
-        {medicines.length === 0 && (
+        {видимые.length === 0 && (
           <div className="chart__empty">
             Аптечка пуста. Внесите препараты — приложение предупредит, когда они кончаются или истекает срок.
           </div>
         )}
 
-        {medicines.length > 0 && rows.length === 0 && (
+        {видимые.length > 0 && rows.length === 0 && (
           <div className="chart__empty">В этой группе пусто — и это хорошая новость.</div>
         )}
 
@@ -177,8 +214,18 @@ export function Cabinet({
                 key={item.id}
                 medicine={item}
                 now={now}
+                owner={имяВладельца(item)}
                 onOpen={() => {
                   scrollRef.current = window.scrollY
+                  // Чужую коробку открываем от имени её владельца: правки и
+                  // отметки должны идти тому, чья она. Иначе отметить приём не
+                  // тому человеку — дело одного нажатия, а найти ошибку потом
+                  // трудно.
+                  const чей = ownerOf(item, people)
+                  if (чей && чей !== activePerson) {
+                    onPickPerson(чей)
+                    setScope('mine')
+                  }
                   setOpenId(item.id)
                 }}
               />
@@ -234,7 +281,18 @@ export function Cabinet({
  * экране препарата: в списке из полутора десятков коробок подробности мешают,
  * а не помогают.
  */
-function CabinetRow({ medicine, now, onOpen }: { medicine: Medicine; now: number; onOpen: () => void }) {
+function CabinetRow({
+  medicine,
+  now,
+  owner,
+  onOpen,
+}: {
+  medicine: Medicine
+  now: number
+  /** Чья коробка. Пусто — своя или человек в дневнике один. */
+  owner?: string | null
+  onOpen: () => void
+}) {
   const { alert, showSupply } = displayAlert(medicine, now)
   const supply = supplyDays(medicine, now)
   const left = effectiveLeft(medicine, now)
@@ -254,6 +312,7 @@ function CabinetRow({ medicine, now, onOpen }: { medicine: Medicine; now: number
 
         <span className="pill__sub">
           {[
+            owner ?? '',
             shortFormOf(medicine.form),
             left === null ? '' : `${estimated ? '≈ ' : ''}${left} шт.`,
             estimated ? (medicine.autoDeduct ? 'списывается само' : 'по расчёту') : '',

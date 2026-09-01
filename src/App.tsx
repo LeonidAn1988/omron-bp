@@ -919,11 +919,13 @@ export default function App() {
           {undoBanner}
           <Cabinet
             medicines={myMedicines}
+            allMedicines={medicines}
             intakeTimes={intakeTimesOf(person, settings.intakeTimes)}
             people={settings.people}
             activePerson={person?.id ?? ''}
             onSave={handleSaveMedicine}
             onDelete={handleDeleteMedicine}
+            onPickPerson={(id) => updateSettings({ ...settingsRef.current, activePerson: id })}
             toRoot={rootSignal}
           />
         </>

@@ -705,10 +705,14 @@ export function restockList(items: Medicine[], now: number): RestockItem[] {
  * читают с экрана у прилавка. Действующее вещество идёт следом за названием:
  * в аптеке предложат аналог, и по веществу его сверяют.
  */
-export function restockText(list: RestockItem[]): string {
+export function restockText(list: RestockItem[], ownerName?: (medicine: Medicine) => string | null): string {
   return list
     .map(({ medicine, need }) => {
-      const parts = [medicine.name, medicine.dose, shortForm(medicine.form)].filter(Boolean)
+      // Имя владельца впереди, когда список общий на семью: у прилавка
+      // спрашивают не только «что», но и «кому» — от этого зависит, брать одну
+      // пачку или две одинаковых.
+      const чей = ownerName?.(medicine)
+      const parts = [чей ? `${чей}:` : '', medicine.name, medicine.dose, shortForm(medicine.form)].filter(Boolean)
       const inn = medicine.inn && medicine.inn !== medicine.name ? ` (${medicine.inn})` : ''
       // Штуки — основная единица, и это не случайность: размер пачки у разных
       // производителей разный, и «возьми одну пачку» в аптеке, где лежит
@@ -722,7 +726,9 @@ export function restockText(list: RestockItem[]): string {
           : packs === null
             ? ` — ${need} шт.`
             : ` — ${need} шт. (${packs} ${plural(packs, 'пачка', 'пачки', 'пачек')} по ${medicine.packSize})`
-      return `${parts.join(', ')}${inn}${count}`
+      // Имя отделяем пробелом, остальное запятыми: «Отец: Метформин, 850 мг».
+      const голова = чей ? `${parts[0]} ${parts.slice(1).join(', ')}` : parts.join(', ')
+      return `${голова}${inn}${count}`
     })
     .join('\n')
 }

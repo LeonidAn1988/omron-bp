@@ -146,12 +146,19 @@ const REASON_LABEL: Record<'out' | 'low' | 'expired' | 'expiring', string> = {
  * отдаётся простым текстом — его вставляют в мессенджер, диктуют по телефону
  * и читают с экрана у прилавка.
  */
-export function Restock({ medicines }: { medicines: Medicine[] }) {
+export function Restock({
+  medicines,
+  ownerName,
+}: {
+  medicines: Medicine[]
+  /** Чья коробка — в сводном списке семьи. Пусто, когда человек один. */
+  ownerName?: (medicine: Medicine) => string | null
+}) {
   const [copied, setCopied] = useState(false)
   const list = restockList(medicines, Date.now())
   if (list.length === 0) return null
 
-  const text = restockText(list)
+  const text = restockText(list, ownerName)
 
   const copy = async () => {
     try {
@@ -179,6 +186,10 @@ export function Restock({ medicines }: { medicines: Medicine[] }) {
           <li key={medicine.id} className="buy__row">
             <span className="buy__body">
               <span className="buy__name">{medicine.name}</span>
+              {/* Имя владельца в строке покупок: без него список «что купить»
+                  на всю семью не говорит, кому именно, а в аптеке это и есть
+                  главный вопрос — брать одну пачку или две. */}
+              {ownerName?.(medicine) && <span className="buy__owner">{ownerName(medicine)}</span>}
               {medicine.dose && <span className="buy__dose">{medicine.dose}</span>}
               <span className="buy__why" data-reason={reason}>
                 {REASON_LABEL[reason]}
@@ -218,7 +229,8 @@ export function Restock({ medicines }: { medicines: Medicine[] }) {
       </div>
 
       <p className="muted" style={{ margin: 'var(--space-3) 0 0' }}>
-        Количество рассчитано на {RESTOCK_DAYS} {plural(RESTOCK_DAYS, 'день', 'дня', 'дней')} по вашему расписанию.
+        Количество рассчитано на {RESTOCK_DAYS} {plural(RESTOCK_DAYS, 'день', 'дня', 'дней')}
+        {ownerName ? ' по расписанию каждого.' : ' по вашему расписанию.'}
         {/* Фраза про просроченную пачку выводилась всегда, даже когда в списке
             одни «кончается». Человек 75 лет читал запрет принимать лекарство,
             шёл искать несуществующую просроченную пачку — а в худшем случае
