@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { IntakeTimes, Medicine } from '../types'
+import type { IntakeTimes, Medicine, Person } from '../types'
 import { expiryToMonth, formatTime, monthToExpiry, normalizeTimes, parseTime } from '../logic/medicines'
 import { formGroup as formGroupOf, FORM_GROUPS, type Drug, type DrugVariant } from '../logic/drugs'
 import { NumberField } from './NumberField'
@@ -110,15 +110,30 @@ function TimePicker({
 export function MedicineForm({
   medicine,
   intakeTimes,
+  people,
+  activePerson,
   onSave,
   onCancel,
 }: {
   medicine?: Medicine
   /** Часы стандартных приёмов из настроек. */
   intakeTimes: IntakeTimes
+  /** Люди в дневнике. Пока он один, выбора владельца в форме нет вовсе. */
+  people: Person[]
+  /** Кто выбран сейчас — ему и достаётся новая коробка. */
+  activePerson: string
   onSave: (item: Medicine) => Promise<void>
   onCancel: () => void
 }) {
+  /**
+   * Чья коробка.
+   *
+   * Поле нужно не при заведении — там владельцем становится выбранный человек, —
+   * а при исправлении ошибки: завели Конкор, глядя на свой экран, а он женин.
+   * Без этого поля исправить это можно только удалив и заведя заново, потеряв
+   * заодно отметки о приёме.
+   */
+  const [owner, setOwner] = useState(medicine?.owner ?? activePerson)
   const [name, setName] = useState(medicine?.name ?? '')
   const [dose, setDose] = useState(medicine?.dose ?? '')
   const [left, setLeft] = useState(medicine?.left !== null && medicine?.left !== undefined ? String(medicine.left) : '')
@@ -163,6 +178,7 @@ export function MedicineForm({
     try {
       await onSave({
         id: medicine?.id ?? '',
+        owner: people.length > 1 ? owner : medicine?.owner,
         name: name.trim(),
         dose: dose.trim(),
         inn: inn.trim() || undefined,
@@ -289,6 +305,32 @@ export function MedicineForm({
         }}
         onDose={setDose}
       />
+
+      {/* Владелец — первым полем и только когда людей больше одного. Ошибиться
+          человеком легко, а найти ошибку потом трудно: коробка просто исчезает
+          из аптечки того, кто её ищет. */}
+      {people.length > 1 && (
+        <div style={{ marginBottom: 'var(--space-4)' }}>
+          <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
+            Чей препарат
+          </div>
+          <div className="segmented segmented--fill" role="group" aria-label="Чей препарат">
+            {/* `type="button"` обязателен: кнопка внутри формы без него —
+                отправка, и нажатие на имя человека сохраняло и закрывало
+                форму вместо того, чтобы выбрать владельца. */}
+            {people.map((person, index) => (
+              <button
+                key={person.id}
+                type="button"
+                aria-pressed={owner === person.id}
+                onClick={() => setOwner(person.id)}
+              >
+                {person.name || `Человек ${index + 1}`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <Field label="Дозировка, как на упаковке">
         <input value={dose} onChange={(e) => setDose(e.target.value)} placeholder="50 мг" />

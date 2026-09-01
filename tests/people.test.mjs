@@ -1,0 +1,69 @@
+/**
+ * Люди отдельно от памяти прибора.
+ *
+ * Главное, что проверяется, — обновление ничего не ломает у того, кто вёл
+ * дневник на себя одного. Он не заводил никаких людей, а после обновления они
+ * появились; если при этом его аптечка окажется ничьей или дневник давления
+ * опустеет, это будет выглядеть как потеря данных, а не как новая возможность.
+ */
+import { firstPerson, activePersonOf, ownerOf, medicinesOf, deviceUserOf, freeDeviceUsers, newPersonId, ПЕРВЫЙ } from './build/api.mjs'
+
+export function run() {
+  let failures = 0
+  const check = (name, condition, detail = '') => {
+    if (condition) console.log(`  ok   ${name}`)
+    else {
+      console.log(`  FAIL ${name}${detail ? ' — ' + detail : ''}`)
+      failures++
+    }
+  }
+
+  // ── первый человек ───────────────────────────────────────────────────────
+  const изКоробки = firstPerson({ userNames: { 1: 'Пользователь 1', 2: 'Пользователь 2' }, activeUser: 1 })
+  check('подпись из коробки именем не считается', изКоробки.name === ПЕРВЫЙ, изКоробки.name)
+  check('первый привязан к памяти прибора', изКоробки.deviceUser === 1)
+
+  const своё = firstPerson({ userNames: { 1: 'Леонид', 2: '' }, activeUser: 1 })
+  check('своё имя переносится', своё.name === 'Леонид')
+
+  const второй = firstPerson({ userNames: { 1: 'Пользователь 1', 2: 'Отец' }, activeUser: 2 })
+  check('берётся имя активного пользователя', второй.name === 'Отец' && второй.deviceUser === 2)
+
+  check('пустая подпись именем не считается', firstPerson({ userNames: {}, activeUser: 1 }).name === ПЕРВЫЙ)
+  check('«Пользователь  2» с лишним пробелом тоже не имя', firstPerson({ userNames: { 1: 'Пользователь  2' }, activeUser: 1 }).name === ПЕРВЫЙ)
+
+  // ── кто выбран ───────────────────────────────────────────────────────────
+  const люди = [{ id: 'p1', name: 'Я', deviceUser: 1 }, { id: 'p2', name: 'Жена' }]
+  check('выбранный находится', activePersonOf({ people: люди, activePerson: 'p2' })?.name === 'Жена')
+  check('пропавший выбранный подменяется первым', activePersonOf({ people: люди, activePerson: 'нет-такого' })?.id === 'p1')
+  check('без людей выбирать некого', activePersonOf({ people: [], activePerson: 'p1' }) === null)
+
+  // ── чей препарат ─────────────────────────────────────────────────────────
+  const ничей = { id: 'm1', name: 'Конкор' }
+  const чужой = { id: 'm2', name: 'Метформин', owner: 'p2' }
+  check('препарат без владельца достаётся первому', ownerOf(ничей, люди) === 'p1')
+  check('владелец уважается', ownerOf(чужой, люди) === 'p2')
+  check('без людей владельца нет', ownerOf(ничей, []) === null)
+
+  // Главное для обновления: пока человек один, аптечка не фильтруется вовсе.
+  check('у одного человека видна вся аптечка',
+    medicinesOf([ничей, чужой], [люди[0]], 'p1').length === 2)
+  check('у двоих аптечка делится', medicinesOf([ничей, чужой], люди, 'p1').map((m) => m.id).join() === 'm1')
+  check('второму достаётся своё', medicinesOf([ничей, чужой], люди, 'p2').map((m) => m.id).join() === 'm2')
+
+  // ── память прибора ───────────────────────────────────────────────────────
+  check('у человека с прибором память есть', deviceUserOf(люди[0]) === 1)
+  check('у человека без прибора памяти нет', deviceUserOf(люди[1]) === null)
+  check('без человека памяти нет', deviceUserOf(null) === null)
+
+  // Занятую память нельзя выдать второму: иначе два дневника давления сольются
+  // в один, и чьё измерение — не разобрать.
+  check('свободна только вторая', freeDeviceUsers(люди).join() === '2')
+  check('своя память остаётся своей при правке', freeDeviceUsers(люди, 'p1').join() === '1,2')
+  check('обе заняты — свободных нет',
+    freeDeviceUsers([{ id: 'a', name: 'A', deviceUser: 1 }, { id: 'b', name: 'B', deviceUser: 2 }]).length === 0)
+
+  check('идентификаторы разные', newPersonId(1) !== newPersonId(2))
+
+  return failures
+}

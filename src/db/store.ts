@@ -7,6 +7,7 @@
  */
 
 import type { BpReading, GlucoseReading, Measurement, Medicine, Settings, Tombstone } from '../types'
+import { firstPerson } from '../logic/people'
 import { platform } from '../platform/ports'
 import { DEFAULT_PAIRING_KEY } from '../ble/protocol'
 
@@ -14,6 +15,8 @@ export const DEFAULT_SETTINGS: Settings = {
   pairingKey: DEFAULT_PAIRING_KEY,
   userNames: { 1: 'Пользователь 1', 2: 'Пользователь 2' },
   activeUser: 1,
+  people: [],
+  activePerson: '',
   targetSys: 135,
   targetDia: 85,
   glucoseFastingMax: 7.0,
@@ -84,7 +87,7 @@ export function clearMeasurements(): Promise<void> {
 
 export async function loadSettings(): Promise<Settings> {
   const stored = await platform().storage.loadSettings()
-  return {
+  const merged = {
     ...DEFAULT_SETTINGS,
     ...(stored ?? {}),
     userNames: { ...DEFAULT_SETTINGS.userNames, ...(stored?.userNames ?? {}) },
@@ -92,6 +95,18 @@ export async function loadSettings(): Promise<Settings> {
     // и без слияния все разделы разом пропали бы из навигации.
     sections: { ...DEFAULT_SETTINGS.sections, ...(stored?.sections ?? {}) },
   }
+
+  /*
+   * Первый человек заводится сам, и это не может подождать.
+   *
+   * До появления людей дневник вёлся на одного, и без него список пуст: аптечка
+   * ничья, отчёт ни на кого, переключать некого. Заводим молча и из того, что
+   * уже известно, — человек не должен отвечать на вопрос «а вы кто» только
+   * потому, что мы поменяли модель данных у себя внутри.
+   */
+  const people = merged.people.length > 0 ? merged.people : [firstPerson(merged)]
+  const activePerson = people.some((p) => p.id === merged.activePerson) ? merged.activePerson : people[0].id
+  return { ...merged, people, activePerson }
 }
 
 export function saveSettings(settings: Settings): Promise<void> {

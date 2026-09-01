@@ -1,0 +1,91 @@
+/**
+ * Люди в дневнике.
+ *
+ * Понятие введено, чтобы отделить человека от памяти прибора. Тонометр помнит
+ * двоих — это две кнопки на его корпусе, а не два человека в семье. Людей может
+ * быть четверо, у ребёнка прибора нет вовсе, и лекарства у него всё равно свои.
+ *
+ * Здесь только чистые правила: как завести первого, как найти нынешнего, что
+ * значит «ничей препарат». Экранов и хранилища этот модуль не касается.
+ */
+
+import type { Medicine, Person, Settings } from '../types'
+
+/** Имя, которое приложение ставит первому человеку, если своего нет. */
+export const ПЕРВЫЙ = 'Я'
+
+/**
+ * Завести первого человека из прежних настроек.
+ *
+ * Вызывается один раз при обновлении: до появления людей дневник вёлся на
+ * одного, и этот один уже где-то назван — подписью пользователя прибора.
+ * Подпись из коробки («Пользователь 1») именем не считаем: человек её не писал,
+ * и видеть её вместо своего имени неприятно.
+ */
+export function firstPerson(settings: Pick<Settings, 'userNames' | 'activeUser'>): Person {
+  const подпись = (settings.userNames[settings.activeUser] ?? '').trim()
+  const своё = подпись.length > 0 && !/^Пользователь\s*\d+$/.test(подпись)
+  const memory: 1 | 2 = settings.activeUser === 2 ? 2 : 1
+  return { id: 'p1', name: своё ? подпись : ПЕРВЫЙ, deviceUser: memory }
+}
+
+/** Новый идентификатор человека. Время в основе: двоих в одну миллисекунду не заводят. */
+export function newPersonId(now: number): string {
+  return `p${now.toString(36)}`
+}
+
+/**
+ * Кто сейчас выбран.
+ *
+ * Возвращает первого, если выбранный пропал: человека могли удалить на другом
+ * устройстве и прислать настройки копией. Пустой экран без объяснения хуже, чем
+ * чужой дневник, — и то и другое человек заметит, но второе он поймёт.
+ */
+export function activePersonOf(settings: Pick<Settings, 'people' | 'activePerson'>): Person | null {
+  if (settings.people.length === 0) return null
+  return settings.people.find((p) => p.id === settings.activePerson) ?? settings.people[0]
+}
+
+/**
+ * Чей это препарат.
+ *
+ * Препараты, заведённые до появления людей, владельца не имеют. Они
+ * принадлежат первому — тому единственному, для кого дневник и вёлся.
+ */
+export function ownerOf(medicine: Medicine, people: Person[]): string | null {
+  if (medicine.owner) return medicine.owner
+  return people[0]?.id ?? null
+}
+
+/**
+ * Препараты выбранного человека.
+ *
+ * Пока человек один, это вся аптечка — и проверка на единственного здесь не
+ * оптимизация, а осторожность: у препаратов, заведённых до появления людей,
+ * владельца нет, и фильтр по нему спрятал бы всю аптечку разом.
+ */
+export function medicinesOf(items: Medicine[], people: Person[], personId: string): Medicine[] {
+  if (people.length <= 1) return items
+  return items.filter((m) => ownerOf(m, people) === personId)
+}
+
+/**
+ * Память прибора, чьи измерения показывать.
+ *
+ * У человека без прибора её нет, и дневник давления у него пустой. Подставлять
+ * ему чужие измерения нельзя: это чужое здоровье под его именем.
+ */
+export function deviceUserOf(person: Person | null): number | null {
+  return person?.deviceUser ?? null
+}
+
+/**
+ * Свободные памяти прибора.
+ *
+ * Их две, и занимать одну дважды нельзя: два человека на одной памяти означают
+ * один дневник давления на двоих, где не разобрать, чьё измерение.
+ */
+export function freeDeviceUsers(people: Person[], exceptId?: string): (1 | 2)[] {
+  const занято = new Set(people.filter((p) => p.id !== exceptId).map((p) => p.deviceUser))
+  return ([1, 2] as const).filter((u) => !занято.has(u))
+}

@@ -6,6 +6,7 @@ import { download, parseImportFile, toCsv, toJson, type ImportResult } from '../
 import { decryptBackup, isEncrypted } from '../logic/crypto'
 import { platform } from '../platform/ports'
 import { Banner, Field } from './bits'
+import { People } from './People'
 import { About } from './About'
 import { parseChangelog } from '../logic/changelog'
 import changelogSource from '../../CHANGELOG.md?raw'
@@ -65,7 +66,6 @@ export function Settings({
   medicines,
   onRestore,
   onClearAll,
-  showUserPicker,
   backup,
 }: {
   settings: SettingsData
@@ -74,7 +74,6 @@ export function Settings({
   measurements: Measurement[]
   onRestore: (incoming: ImportResult) => Promise<{ added: number; medicines: number; settingsRestored: boolean }>
   onClearAll: () => Promise<void>
-  showUserPicker: boolean
   backup: BackupStatus
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -324,46 +323,14 @@ export function Settings({
         </div>
       </div>
 
+      <People settings={settings} medicines={medicines} onChange={patch} />
+
       <div className="card">
         <div className="card__head">
-          <h2>Пользователи и цели</h2>
+          <h2>Целевые значения</h2>
         </div>
 
-        {/* Переключатель уехал из шапки сюда: прибор помнит двух человек, но
-            переключаются между ними от силы раз в жизни — в постоянной навигации
-            он занимал место каждый день ради этого одного случая. */}
-        {showUserPicker && (
-          <div style={{ marginBottom: 'var(--space-4)' }}>
-            <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
-              Чей дневник показывать
-            </div>
-            <div className="segmented" role="group" aria-label="Пользователь прибора">
-              {[1, 2].map((user) => (
-                <button
-                  key={user}
-                  aria-pressed={settings.activeUser === user}
-                  onClick={() => patch({ activeUser: user })}
-                >
-                  {settings.userNames[user] ?? `Пользователь ${user}`}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="grid grid--two">
-          <Field label="Имя пользователя 1 на приборе">
-            <input
-              value={settings.userNames[1] ?? ''}
-              onChange={(e) => patch({ userNames: { ...settings.userNames, 1: e.target.value } })}
-            />
-          </Field>
-          <Field label="Имя пользователя 2 на приборе">
-            <input
-              value={settings.userNames[2] ?? ''}
-              onChange={(e) => patch({ userNames: { ...settings.userNames, 2: e.target.value } })}
-            />
-          </Field>
           <Field label="Целевое верхнее давление">
             <input
               inputMode="numeric"

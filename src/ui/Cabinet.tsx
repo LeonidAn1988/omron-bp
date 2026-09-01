@@ -1,6 +1,6 @@
 import { platform } from '../platform/ports'
 import { useEffect, useRef, useState } from 'react'
-import type { IntakeTimes, Medicine } from '../types'
+import type { IntakeTimes, Medicine, Person } from '../types'
 import {
   displayAlert,
   effectiveLeft,
@@ -41,6 +41,8 @@ const FILTERS: { key: Filter; title: string }[] = [
 export function Cabinet({
   medicines,
   intakeTimes,
+  people,
+  activePerson,
   onSave,
   onDelete,
   toRoot = 0,
@@ -48,6 +50,8 @@ export function Cabinet({
   medicines: Medicine[]
   /** Часы стандартных приёмов из настроек — кнопки в форме препарата. */
   intakeTimes: IntakeTimes
+  people: Person[]
+  activePerson: string
   onSave: (item: Medicine) => Promise<void>
   onDelete: (id: string) => Promise<void>
   /** Меняется, когда человек нажал на уже активную вкладку: вернуться к списку. */
@@ -90,6 +94,8 @@ export function Cabinet({
           <h2>{item ? 'Изменить препарат' : 'Новый препарат'}</h2>
         </div>
         <MedicineForm
+          people={people}
+          activePerson={activePerson}
           medicine={item}
           intakeTimes={intakeTimes}
           onSave={async (next) => {

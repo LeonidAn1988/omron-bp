@@ -25,6 +25,8 @@ import { Readings } from './ui/Readings'
 import { MedicineNudge } from './ui/Medicines'
 import { DeviceIcon, ReportIcon, SettingsIcon } from './ui/icons'
 import { Onboarding } from './ui/Onboarding'
+import { PersonSwitch } from './ui/People'
+import { activePersonOf, deviceUserOf, medicinesOf } from './logic/people'
 import { Intake } from './ui/Intake'
 import { Cabinet } from './ui/Cabinet'
 import { Entry } from './ui/Entry'
@@ -153,15 +155,27 @@ export default function App() {
       }
       setReady(true)
 
-      // Свёртка истории приёма при запуске, а не только при отметке.
+      // Владелец проставляется явно, а не выводится на лету.
+      //
+      // Препараты, заведённые до появления людей, ничьи. Пока человек один, это
+      // незаметно, а на втором превращается в вопрос без ответа: чья коробка.
+      // Разбирать это, когда людей уже двое, поздно — и человек, и приложение
+      // одинаково не знают.
+      //
+      // Свёртка истории — там же: препарат, который перестали отмечать, иначе
+      // не свернулся бы никогда, а история нужна именно у него.
       //
       // Отметки живут шестьдесят дней. Препарат, который перестали отмечать,
       // иначе не свернулся бы никогда: свёртка живёт в обработчике отметки, а
       // отметок больше нет. Ровно у него история и нужна — врач спрашивает про
       // курс, который закончился.
       void (async () => {
-        const свёрнутые = pills.map((m) => foldHistory(m, Date.now()))
-        const изменились = свёрнутые.filter((m, i) => m !== pills[i])
+        const первый = loaded.people?.[0]?.id
+        const обработанные = pills.map((m) => {
+          const свёрнут = foldHistory(m, Date.now())
+          return !m.owner && первый ? { ...свёрнут, owner: первый } : свёрнут
+        })
+        const изменились = обработанные.filter((m, i) => m !== pills[i])
         if (изменились.length === 0) return
         for (const item of изменились) await putMedicine(item).catch(() => undefined)
         setMedicines(await getAllMedicines())
@@ -310,7 +324,17 @@ export default function App() {
       // распространилось бы на всё прошлое, и свежий препарат показал бы
       // пропуски за два месяца назад.
       try {
-        await putMedicine(item.id ? item : { ...item, id: newMedicineId(), since: Date.now() })
+        // Владелец ставится здесь и только здесь — в единственном месте, где
+        // препарат появляется в аптечке. Берётся выбранный человек: коробку
+        // заводят, глядя на его экран, и молча приписать её другому нельзя.
+        //
+        // Человек читается из ссылки на свежие настройки, а не из замыкания:
+        // между открытием формы и сохранением его могли переключить, и тогда
+        // коробка ушла бы тому, кого на экране уже нет.
+        const владелец = activePersonOf(settingsRef.current)?.id
+        await putMedicine(
+          item.id ? item : { ...item, id: newMedicineId(), since: Date.now(), owner: владелец },
+        )
         setSaveFailed(null)
       } catch (caught) {
         setSaveFailed(caught instanceof Error ? caught.message : String(caught))
@@ -448,8 +472,12 @@ export default function App() {
   )
 
   useReminders({
+    // Все препараты, а не только выбранного человека: напоминание жене должно
+    // прийти и тогда, когда на экране открыт дневник мужа. Приложение одно на
+    // телефоне, и молчать про чужую таблетку оно не вправе.
     medicines,
     enabled: settings.remindersOn,
+    people: settings.people,
     sound: settings.reminderSound,
     repeat: settings.remindersRepeat,
     ready,
@@ -474,7 +502,27 @@ export default function App() {
     [settings.glucoseFastingMax, settings.glucosePostMealMax, settings.glucoseLow],
   )
 
-  const mine = useMemo(() => measurements.filter((m) => m.user === settings.activeUser), [measurements, settings.activeUser])
+  /**
+   * Кого показываем и какой памятью прибора он пользуется.
+   *
+   * Память — свойство человека, а не он сам: тонометр помнит двоих, а людей в
+   * дневнике может быть больше. У кого памяти нет, у того дневник давления
+   * пустой, и это нормальное состояние — лекарства и приём у него работают как
+   * у всех.
+   */
+  const person = useMemo(() => activePersonOf(settings), [settings])
+  const deviceUser = deviceUserOf(person)
+
+  /** Аптечка выбранного человека. Пока человек один — вся аптечка целиком. */
+  const myMedicines = useMemo(
+    () => (person ? medicinesOf(medicines, settings.people, person.id) : medicines),
+    [medicines, settings.people, person],
+  )
+
+  const mine = useMemo(
+    () => (deviceUser === null ? [] : measurements.filter((m) => m.user === deviceUser)),
+    [measurements, deviceUser],
+  )
   const bpAll = useMemo(() => mine.filter(isBp), [mine])
   const glucoseAll = useMemo(() => mine.filter(isGlucose), [mine])
 
@@ -488,7 +536,6 @@ export default function App() {
   const glucoseSummary = useMemo(() => summarizeGlucose(glucoseScoped, glucoseTargets), [glucoseScoped, glucoseTargets])
 
   const latestBp = bpAll.length ? bpAll[bpAll.length - 1] : null
-  const hasSecondUser = useMemo(() => measurements.some((m) => m.user !== 1), [measurements])
   const showGlucose = (settings.trackGlucose || glucoseAll.length > 0) && settings.sections.glucose
 
   /**
@@ -521,7 +568,8 @@ export default function App() {
     if (!tabExists) setTab(fallbackTab)
   }, [tabExists, fallbackTab])
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? ''
-  const patientName = settings.userNames[settings.activeUser] ?? `Пользователь ${settings.activeUser}`
+  // Имя пациента в отчёте — имя человека, а не подпись кнопки на приборе.
+  const patientName = person?.name?.trim() || 'Пользователь'
 
   // Знакомство — до всего остального, но только на пустом дневнике: тому, кто
   // обновился с записями, знакомиться не с чем, и показывать ему анкету значит
@@ -639,6 +687,11 @@ export default function App() {
           ))}
         </nav>
       </header>
+
+      {/* Между шапкой и вкладками: смена человека меняет всё, что ниже, и
+          выглядеть частью одного экрана она не должна. Появляется, только
+          когда людей больше одного. */}
+      <PersonSwitch settings={settings} onChange={(fields) => updateSettings({ ...settingsRef.current, ...fields })} />
 
       <nav
         className="tabs"
@@ -769,7 +822,17 @@ export default function App() {
 
       {tab === 'bp' && (
         <div className="stack">
-          <Entry user={settings.activeUser} onAdd={handleAdd} />
+          {deviceUser === null ? (
+            <Banner tone="info">
+              <b>У этого человека нет памяти на тонометре.</b>
+              <div style={{ marginTop: 4 }}>
+                Прибор ведёт память только на двоих, и записывать давление здесь пока некуда. Лекарства и приём
+                работают как у всех. Память назначается в «Настройках», в разделе «Люди».
+              </div>
+            </Banner>
+          ) : (
+            <Entry user={deviceUser} onAdd={handleAdd} />
+          )}
           {undoBanner}
           <div className="card">
             <div className="card__head">
@@ -809,7 +872,16 @@ export default function App() {
 
       {tab === 'glucose' && (
         <div className="stack">
-          <GlucoseEntry user={settings.activeUser} targets={glucoseTargets} onAdd={handleAdd} />
+          {deviceUser === null ? (
+            <Banner tone="info">
+              <b>У этого человека нет памяти на тонометре.</b>
+              <div style={{ marginTop: 4 }}>
+                Дневник сахара привязан к той же памяти. Назначить её можно в «Настройках», в разделе «Люди».
+              </div>
+            </Banner>
+          ) : (
+            <GlucoseEntry user={deviceUser} targets={glucoseTargets} onAdd={handleAdd} />
+          )}
           {undoBanner}
           <div className="card">
             <div className="card__head">
@@ -834,15 +906,17 @@ export default function App() {
       {saveBanner}
 
       {tab === 'intake' && (
-        <Intake medicines={medicines} onMark={handleMarkTaken} toRoot={rootSignal} openDay={reminderDay} />
+        <Intake medicines={myMedicines} onMark={handleMarkTaken} toRoot={rootSignal} openDay={reminderDay} />
       )}
 
       {tab === 'cabinet' && (
         <>
           {undoBanner}
           <Cabinet
-            medicines={medicines}
+            medicines={myMedicines}
             intakeTimes={settings.intakeTimes}
+            people={settings.people}
+            activePerson={person?.id ?? ''}
             onSave={handleSaveMedicine}
             onDelete={handleDeleteMedicine}
             toRoot={rootSignal}
@@ -872,7 +946,7 @@ export default function App() {
           targetSys={settings.targetSys}
           targetDia={settings.targetDia}
           period={period}
-          medicines={medicines}
+          medicines={myMedicines}
           onPeriodChange={setPeriod}
         />
       )}
@@ -885,7 +959,6 @@ export default function App() {
           measurements={measurements}
           onRestore={handleRestore}
           onClearAll={handleClearAll}
-          showUserPicker={hasSecondUser}
           backup={backup}
         />
       )}

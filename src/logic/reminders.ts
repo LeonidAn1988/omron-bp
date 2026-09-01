@@ -63,10 +63,17 @@ function partOfDay(minutes: number): string {
   return 'Приём на ночь'
 }
 
-/** Строка одного препарата внутри уведомления: «Лозартан 50 мг — 2 шт., после еды». */
-export function doseLine(medicine: Medicine): string {
+/**
+ * Строка одного препарата внутри уведомления: «Лозартан 50 мг — 2 шт., после еды».
+ *
+ * Имя человека ставится впереди и только когда людей в дневнике больше одного.
+ * Одному оно ни к чему — он и так знает, чьи таблетки; а в семье уведомление
+ * «Периндоприл, 1 шт.» в восемь утра не говорит главного: кому пить.
+ */
+export function doseLine(medicine: Medicine, owner?: string | null): string {
   const count = perTimeOf(medicine)
-  const голова = [medicine.name, medicine.dose].filter(Boolean).join(' ')
+  const имя = [medicine.name, medicine.dose].filter(Boolean).join(' ')
+  const голова = owner ? `${owner}: ${имя}` : имя
   const хвост = [count > 1 ? `${count} шт.` : '', medicine.meal ? MEAL[medicine.meal] ?? '' : '']
     .filter(Boolean)
     .join(', ')
@@ -142,6 +149,14 @@ export interface ReminderOptions {
   repeat: boolean
   /** Насколько дней вперёд расставлять. */
   horizonDays?: number
+  /**
+   * Как назвать владельца препарата в уведомлении.
+   *
+   * Возвращает `null`, когда человек в дневнике один: подписывать таблетки
+   * именем единственного человека — шум. Функция, а не готовый словарь: список
+   * людей живёт в настройках, а этот модуль о настройках знать не должен.
+   */
+  ownerName?: (medicine: Medicine) => string | null
 }
 
 /**
@@ -196,8 +211,14 @@ export function buildReminders(
       if (!ждут.length) return
 
       const поПорядку = [...ждут].sort((a, b) => a.name.localeCompare(b.name, 'ru'))
-      const подробно = поПорядку.map(doseLine).join('\n')
-      const коротко = shortBody(поПорядку.map((m) => m.name))
+      const чей = (medicine: Medicine) => options.ownerName?.(medicine) ?? null
+      const подробно = поПорядку.map((medicine) => doseLine(medicine, чей(medicine))).join('\n')
+      const коротко = shortBody(
+        поПорядку.map((medicine) => {
+          const owner = чей(medicine)
+          return owner ? `${owner}: ${medicine.name}` : medicine.name
+        }),
+      )
       const шагов = options.repeat ? REPEATS + 1 : 1
 
       for (let step = 0; step < шагов; step++) {

@@ -36,6 +36,16 @@ export {
 } from '../src/db/store'
 
 export { plural, monthYear } from '../src/logic/plural'
+export {
+  firstPerson,
+  activePersonOf,
+  ownerOf,
+  medicinesOf,
+  deviceUserOf,
+  freeDeviceUsers,
+  newPersonId,
+  ПЕРВЫЙ,
+} from '../src/logic/people'
 
 export {
   normalize,

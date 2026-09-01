@@ -12,13 +12,16 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { ownerOf } from '../logic/people'
 import { buildReminders } from '../logic/reminders'
 import { platform } from '../platform/ports'
-import type { Medicine } from '../types'
+import type { Medicine, Person } from '../types'
 
 export interface RemindersInput {
   medicines: Medicine[]
   enabled: boolean
+  /** Люди в дневнике: по ним уведомление решает, называть ли владельца. */
+  people: Person[]
   sound: string
   /** Повторять, пока приём не отмечен. */
   repeat: boolean
@@ -30,7 +33,18 @@ export interface RemindersInput {
   onTaken: (day: number, slot: string) => void
 }
 
-export function useReminders({ medicines, enabled, sound, repeat, ready, onOpen, onTaken }: RemindersInput) {
+export function useReminders({ medicines, enabled, people, sound, repeat, ready, onOpen, onTaken }: RemindersInput) {
+  /**
+   * Чьи это таблетки — словами уведомления.
+   *
+   * Пока человек один, возвращает `null`, и уведомление выглядит как прежде:
+   * подписывать таблетки именем единственного человека незачем.
+   */
+  const ownerName = (medicine: Medicine): string | null => {
+    if (people.length <= 1) return null
+    const id = ownerOf(medicine, people)
+    return people.find((p) => p.id === id)?.name?.trim() || null
+  }
   // Слепок последнего применённого состояния: React вызывает эффект и когда
   // ничего по сути не изменилось (новая ссылка на тот же список), а каждая
   // пересборка — это поход в системный планировщик.
@@ -74,7 +88,7 @@ export function useReminders({ medicines, enabled, sound, repeat, ready, onOpen,
     const reminders = platform().reminders
     if (!reminders.isSupported()) return
 
-    const wanted = enabled ? buildReminders(medicines, Date.now(), { repeat }) : []
+    const wanted = enabled ? buildReminders(medicines, Date.now(), { repeat, ownerName }) : []
     // Из слепка исключены сами моменты показа: они сдвигаются с каждым
     // пересчётом, и сравнение по ним всегда давало бы «изменилось».
     const снимок = JSON.stringify([
@@ -112,5 +126,5 @@ export function useReminders({ medicines, enabled, sound, repeat, ready, onOpen,
     return () => {
       живо = false
     }
-  }, [medicines, enabled, sound, repeat, ready, tick])
+  }, [medicines, enabled, people, sound, repeat, ready, tick])
 }
