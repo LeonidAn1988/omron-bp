@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { encryptBackup } from '../logic/crypto'
 import type { Measurement, Medicine, Settings } from '../types'
-import { backupTarget, requestDurability } from '../db/store'
+import { backupTarget, getAllTombstones, requestDurability } from '../db/store'
 import { canShareFile, download, shareFile, toJson } from '../logic/io'
 import {
   backupFilename,
@@ -159,10 +159,13 @@ export function useBackup(
    * руками и теряются так же безвозвратно. Служебные поля про сами копии из
    * снимка исключены — они описывают устройство, а не данные.
    */
-  const snapshot = (): string => {
+  const snapshot = async (): Promise<string> => {
     const { measurements: items, medicines: pills, settings: current } = latest.current
     const { backupLastAt: _at, backupLastCount: _count, ...rest } = current
-    return toJson({ measurements: items, medicines: pills, settings: rest })
+    // Надгробия читаются из хранилища, а не из состояния экрана: в интерфейсе
+    // их нет и быть не должно — удалённого человек видеть не хочет.
+    const tombstones = await getAllTombstones().catch(() => [])
+    return toJson({ measurements: items, medicines: pills, tombstones, settings: rest })
   }
 
   /**
@@ -176,7 +179,7 @@ export function useBackup(
    * `null` означает «не пишем»: шифрование включено, а пароля нет.
    */
   const envelope = useCallback(async (): Promise<string | null> => {
-    const plain = snapshot()
+    const plain = await snapshot()
     if (!latest.current.settings.backupEncrypt) return plain
     const пароль = backupPassword()
     if (!пароль) return null

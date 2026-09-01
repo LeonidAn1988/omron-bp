@@ -5,6 +5,8 @@ import {
   addNewMeasurements,
   clearMeasurements,
   deleteMeasurement,
+  getAllTombstones,
+  saveTombstones,
   getAllMeasurements,
   getAllMedicines,
   loadSettings,
@@ -36,6 +38,7 @@ import {
   pendingToday,
   startOfDay,
   undoTaken,
+  foldHistory,
 } from './logic/medicines'
 import type { ImportResult } from './logic/io'
 import { applyDisplay, applyTheme } from './ui/theme'
@@ -149,6 +152,20 @@ export default function App() {
         if (loaded.startTab && !openedByReminder.current) setTab(loaded.startTab as TabKey)
       }
       setReady(true)
+
+      // Свёртка истории приёма при запуске, а не только при отметке.
+      //
+      // Отметки живут шестьдесят дней. Препарат, который перестали отмечать,
+      // иначе не свернулся бы никогда: свёртка живёт в обработчике отметки, а
+      // отметок больше нет. Ровно у него история и нужна — врач спрашивает про
+      // курс, который закончился.
+      void (async () => {
+        const свёрнутые = pills.map((m) => foldHistory(m, Date.now()))
+        const изменились = свёрнутые.filter((m, i) => m !== pills[i])
+        if (изменились.length === 0) return
+        for (const item of изменились) await putMedicine(item).catch(() => undefined)
+        setMedicines(await getAllMedicines())
+      })()
     }).catch(() => setStorageFailed(true))
     return () => clearTimeout(undoTimer.current)
   }, [])
@@ -251,10 +268,23 @@ export default function App() {
    */
   const handleRestore = useCallback(
     async (incoming: ImportResult) => {
+      // Надгробия применяем первыми, до всякой записи. Иначе удалённое на
+      // другом устройстве сначала добавится, а потом исчезнет — человек увидит
+      // «добавлено 12 записей» и не найдёт их. И наоборот: своё удаление не
+      // должно вернуться из чужой копии, поэтому запись их уже не пропустит.
+      if (incoming.tombstones.length > 0) {
+        await saveTombstones(incoming.tombstones)
+        for (const grave of incoming.tombstones) {
+          if (grave.kind === 'measurement') await deleteMeasurement(grave.id)
+          else await deleteMedicine(grave.id)
+        }
+      }
+
       const added = await addNewMeasurements(incoming.measurements)
 
       const known = new Set((await getAllMedicines()).map((m) => m.id))
-      const freshMedicines = incoming.medicines.filter((m) => !known.has(m.id))
+      const buried = new Set((await getAllTombstones()).map((t) => t.id))
+      const freshMedicines = incoming.medicines.filter((m) => !known.has(m.id) && !buried.has(m.id))
       for (const item of freshMedicines) await putMedicine(item)
 
       let settingsRestored = false

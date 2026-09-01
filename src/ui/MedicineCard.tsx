@@ -10,7 +10,7 @@ import {
   setLeft,
   supplyDays,
 } from '../logic/medicines'
-import { instructionUrl } from '../logic/drugs'
+import { instructionUrl, pharmacyUrl } from '../logic/drugs'
 import { plural } from '../logic/plural'
 import { NumberField } from './NumberField'
 import { Banner } from './bits'
@@ -195,6 +195,18 @@ export function MedicineCard({
           >
             Инструкция
           </a>
+          {/* Поиск по действующему веществу, а не по торговому имени: врач
+              называет вещество, на упаковке торговое имя, и дешёвый аналог
+              находится именно так. Запрос уходит с устройства человека, от нас
+              наружу не идёт ничего. */}
+          <a
+            className="btn"
+            href={pharmacyUrl(medicine.name, medicine.dose, medicine.inn)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Найти в аптеке
+          </a>
           {confirming ? (
             <>
               {/* «Отмена» занимает место, где только что была кнопка
@@ -219,10 +231,11 @@ export function MedicineCard({
         </div>
 
         <Banner tone="info">
-          <b>Инструкция открывается в браузере.</b>
+          <b>Обе кнопки открывают браузер.</b>
           <div style={{ marginTop: 4 }}>
-            Официальный реестр не отдаёт инструкцию ссылкой, поэтому кнопка ищет её по названию препарата. Наружу
-            уходит только название — оно и так публично, ничего о вас в запросе нет.
+            Реестр не отдаёт инструкцию ссылкой, а цены в аптеках приложение не собирает — поиск делаете вы сами, со
+            своего устройства. Наружу уходит только название препарата и дозировка: они и так публичны, ничего о вас
+            в запросе нет и никакого списка ваших лекарств никуда не отправляется.
           </div>
         </Banner>
       </div>

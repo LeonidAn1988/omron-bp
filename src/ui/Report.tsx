@@ -6,9 +6,9 @@ import { DAY_PART_LABELS, classify, classifyGlucose, glucoseCeiling, type DayPar
 import { Readings } from './Readings'
 import { GlucoseList } from './Glucose'
 import { Banner, CategoryBadge } from './bits'
-import { adherence, KEEP_INTAKES_DAYS, perDayOf, startOfDay } from '../logic/medicines'
+import { adherence, historyTotal, KEEP_INTAKES_DAYS, perDayOf, startOfDay } from '../logic/medicines'
 import { KIND_LABEL } from '../logic/drugs'
-import { plural } from '../logic/plural'
+import { monthYear, plural } from '../logic/plural'
 
 const DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
 const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' })
@@ -103,9 +103,24 @@ function Adherence({ medicines, from, now }: { medicines: Medicine[]; from: numb
                       Стоит первой и без оговорок. Остальные две про дневник, а
                       не про лечение, и названы своими именами. */}
                   {row.medicine.startedAt !== undefined && (
-                    <div>принимает с {MONTH_YEAR.format(row.medicine.startedAt)}</div>
+                    <div>принимает с {monthYear(row.medicine.startedAt)}</div>
                   )}
                   <div className="muted">отметки с {DAY_MONTH.format(row.from)}</div>
+                  {/* Ответ на вопрос «а раньше как принимали». Отметки живут
+                      шестьдесят дней, дальше остаётся свёрнутый месячный итог —
+                      и он единственное, чем можно ответить про курс длиной в
+                      год. Отдельной строкой, а не в столбце с недавним: смешать
+                      их значило бы выдать разные периоды за один. */}
+                  {(() => {
+                    const было = historyTotal(row.medicine)
+                    if (было.planned === 0) return null
+                    return (
+                      <div className="muted">
+                        до этого {было.taken} из {было.planned} за {было.months}{' '}
+                        {plural(было.months, 'месяц', 'месяца', 'месяцев')}
+                      </div>
+                    )
+                  })()}
                   {row.medicine.since !== undefined && startOfDay(row.medicine.since) < row.from && (
                     <div className="muted">в дневнике с {DAY_MONTH.format(row.medicine.since)}</div>
                   )}
@@ -144,7 +159,6 @@ function Adherence({ medicines, from, now }: { medicines: Medicine[]; from: numb
 }
 
 /** Десятичный разделитель по-русски — запятая. */
-const MONTH_YEAR = new Intl.DateTimeFormat('ru-RU', { month: 'long', year: 'numeric' })
 
 const десятичная = (value: number) => value.toFixed(1).replace('.', ',')
 

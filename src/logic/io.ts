@@ -1,4 +1,4 @@
-import type { GlucoseContext, Measurement, Medicine, Settings } from '../types'
+import type { GlucoseContext, Measurement, Medicine, Settings, Tombstone } from '../types'
 import { deviceMeasurementId } from '../db/store'
 import { platform } from '../platform/ports'
 
@@ -56,6 +56,14 @@ export function toCsv(items: Measurement[]): string {
 export interface Snapshot {
   measurements: Measurement[]
   medicines: Medicine[]
+  /**
+   * Следы удалённых записей.
+   *
+   * Без них копия возвращает удалённое: человек убрал ошибочное измерение на
+   * телефоне, восстановился из копии — и оно снова здесь. Весят надгробия
+   * десятки байт, а без них копия спорит с решениями человека.
+   */
+  tombstones: Tombstone[]
   /** Настройки без служебных полей — что и когда копировалось, у каждого устройства своё. */
   settings: Omit<Settings, 'backupLastAt' | 'backupLastCount'> | null
 }
@@ -64,7 +72,7 @@ export function toJson(snapshot: Snapshot | Measurement[]): string {
   // Массив на входе — старый вызов «только измерения». Оставлен, чтобы выгрузка
   // измерений из раздела «Данные» осталась выгрузкой измерений.
   const full: Snapshot = Array.isArray(snapshot)
-    ? { measurements: snapshot, medicines: [], settings: null }
+    ? { measurements: snapshot, medicines: [], tombstones: [], settings: null }
     : snapshot
   return JSON.stringify(
     {
@@ -72,6 +80,7 @@ export function toJson(snapshot: Snapshot | Measurement[]): string {
       exportedAt: new Date().toISOString(),
       measurements: full.measurements,
       medicines: full.medicines,
+      tombstones: full.tombstones,
       settings: full.settings ?? undefined,
     },
     null,
@@ -208,13 +217,15 @@ export interface ImportResult {
   skipped: number
   /** Аптечка из копии. Пусто для CSV и для старых файлов. */
   medicines: Medicine[]
+  /** Следы удалений из копии. Пусто для CSV и для файлов до версии 0.4.2. */
+  tombstones: Tombstone[]
   /** Настройки из копии, если файл их содержит. */
   settings: Snapshot['settings']
 }
 
 export function parseCsv(text: string): ImportResult {
   const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0)
-  if (lines.length < 2) return { measurements: [], skipped: 0, medicines: [], settings: null }
+  if (lines.length < 2) return { measurements: [], skipped: 0, medicines: [], tombstones: [], settings: null }
 
   const delimiter = detectDelimiter(lines[0])
   const headers = splitCsvLine(lines[0], delimiter)
@@ -290,7 +301,7 @@ export function parseCsv(text: string): ImportResult {
     })
   }
 
-  return { measurements, skipped, medicines: [], settings: null }
+  return { measurements, skipped, medicines: [], tombstones: [], settings: null }
 }
 
 /**
@@ -353,6 +364,25 @@ function parseSettings(raw: unknown): Snapshot['settings'] {
 }
 
 /** Наш бэкап (v1, v2, v3) и формат ubpm.json из omblepy. */
+/**
+ * Надгробия из файла.
+ *
+ * Разбор строгий: чужое или испорченное надгробие удаляет запись, а это потеря
+ * данных. Пропускаем всё, в чём не уверены, — лишняя запись переживается легче
+ * пропавшей.
+ */
+function parseTombstones(raw: unknown): Tombstone[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter(
+    (t): t is Tombstone =>
+      !!t &&
+      typeof t === 'object' &&
+      typeof (t as Tombstone).id === 'string' &&
+      ((t as Tombstone).kind === 'measurement' || (t as Tombstone).kind === 'medicine') &&
+      Number.isFinite((t as Tombstone).at),
+  )
+}
+
 export function parseJson(text: string): ImportResult {
   const data = JSON.parse(text)
 
@@ -368,6 +398,7 @@ export function parseJson(text: string): ImportResult {
       measurements: measurements as Measurement[],
       skipped: own.length - measurements.length,
       medicines: parseMedicines(data?.medicines),
+      tombstones: parseTombstones(data?.tombstones),
       settings: parseSettings(data?.settings),
     }
   }
@@ -400,7 +431,7 @@ export function parseJson(text: string): ImportResult {
         })
       }
     }
-    return { measurements, skipped, medicines: [], settings: null }
+    return { measurements, skipped, medicines: [], tombstones: [], settings: null }
   }
 
   throw new Error('Неизвестный формат JSON. Ожидается резервная копия этого приложения или ubpm.json от omblepy.')

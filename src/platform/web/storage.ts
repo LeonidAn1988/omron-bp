@@ -2,19 +2,21 @@
  * Реализация StoragePort поверх IndexedDB.
  *
  * Здесь же живёт миграция схемы: версия 1 знала только давление и не хранила вид
- * измерения, версия 2 добавила сахар, версия 3 — аптечку. Потеря данных при
- * обновлении — одна из самых частых жалоб на приложения этого класса, поэтому
- * миграция покрыта отдельным тестом (tests/migration.test.mjs).
+ * измерения, версия 2 добавила сахар, версия 3 — аптечку, версия 4 — следы
+ * удалённых записей. Потеря данных при обновлении — одна из самых частых жалоб
+ * на приложения этого класса, поэтому миграция покрыта отдельным тестом
+ * (tests/migration.test.mjs).
  */
 
-import type { Measurement, Medicine, Settings } from '../../types'
+import type { Measurement, Medicine, Settings, Tombstone } from '../../types'
 import type { StoragePort } from '../ports'
 
 const DB_NAME = 'omron-bp'
-const DB_VERSION = 3
+const DB_VERSION = 4
 const MEASUREMENTS = 'readings'
 const META = 'meta'
 const MEDICINES = 'medicines'
+const TOMBSTONES = 'tombstones'
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -43,6 +45,9 @@ function openDb(): Promise<IDBDatabase> {
       // Версия 3: аптечка. Отдельное хранилище — препарат не измерение, у него
       // нет момента времени и он не попадает ни в графики, ни в отчёт.
       if (!db.objectStoreNames.contains(MEDICINES)) db.createObjectStore(MEDICINES, { keyPath: 'id' })
+      // Версия 4: следы удалений. Отдельное хранилище, а не поле в записи —
+      // см. пояснение у `allTombstones` в описании порта.
+      if (!db.objectStoreNames.contains(TOMBSTONES)) db.createObjectStore(TOMBSTONES, { keyPath: 'id' })
 
       // До версии 2 вид измерения не хранился — все записи были про давление.
       if (event.oldVersion > 0 && event.oldVersion < 2) {
@@ -74,28 +79,74 @@ function tx<T>(store: string, mode: IDBTransactionMode, run: (s: IDBObjectStore)
   )
 }
 
+/**
+ * Удалить запись и оставить след — одной транзакцией.
+ *
+ * Порознь это два действия, и между ними приложение может закрыться. Удаление
+ * без следа означает, что запись вернётся при следующей выгрузке или из копии,
+ * то есть человек удалил, а оно осталось. Такое лучше не делать вовсе, чем
+ * делать наполовину, поэтому либо оба, либо ни одного.
+ */
+async function deleteWithTombstone(store: string, id: string, kind: Tombstone['kind'], at: number) {
+  const db = await openDb()
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction([store, TOMBSTONES], 'readwrite')
+    transaction.objectStore(store).delete(id)
+    transaction.objectStore(TOMBSTONES).put({ id, kind, at } satisfies Tombstone)
+    transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error)
+  })
+}
+
 export const webStorage: StoragePort = {
   async allMeasurements() {
     const rows = await tx<Measurement[]>(MEASUREMENTS, 'readonly', (s) => s.getAll())
     return rows.sort((a, b) => a.ts - b.ts)
   },
 
+  /**
+   * Запись измерений. Удалённое обратно не пускаем.
+   *
+   * Проверка стоит здесь, а не в вызывающем коде, и это не перестраховка.
+   * Записей прибора у нас детерминированные идентификаторы, и выгрузка отдаёт
+   * всю память целиком каждый раз — значит, удалённое руками измерение
+   * возвращалось бы при каждой следующей выгрузке. Через этот метод проходят
+   * все пути записи: и прибор, и восстановление из копии, и ручной ввод.
+   * Отфильтровав здесь, забыть фильтр где-то ещё уже нельзя.
+   */
   async putMeasurements(items) {
     if (items.length === 0) return
     const db = await openDb()
     await new Promise<void>((resolve, reject) => {
-      const transaction = db.transaction(MEASUREMENTS, 'readwrite')
+      const transaction = db.transaction([MEASUREMENTS, TOMBSTONES], 'readwrite')
       const store = transaction.objectStore(MEASUREMENTS)
-      for (const item of items) store.put(item)
+      const graves = transaction.objectStore(TOMBSTONES)
+      for (const item of items) {
+        // Точечный запрос по ключу, а не чтение всех надгробий: выгрузка с
+        // прибора приносит полсотни записей разом, и полный обход был бы
+        // полсотни лишних обходов.
+        const ask = graves.get(item.id)
+        ask.onsuccess = () => {
+          if (!ask.result) store.put(item)
+        }
+      }
       transaction.oncomplete = () => resolve()
       transaction.onerror = () => reject(transaction.error)
     })
   },
 
   async deleteMeasurement(id) {
-    await tx(MEASUREMENTS, 'readwrite', (s) => s.delete(id))
+    await deleteWithTombstone(MEASUREMENTS, id, 'measurement', Date.now())
   },
 
+  /**
+   * «Очистить всё» надгробий не оставляет — и это осознанно.
+   *
+   * Это не удаление записей, а сброс устройства: перед передачей телефона,
+   * после проверки, при начале с чистого листа. Наплодить тысячу надгробий и
+   * тем самым запретить восстановление из собственной же копии — ровно
+   * противоположно тому, чего человек хотел.
+   */
   async clearMeasurements() {
     await tx(MEASUREMENTS, 'readwrite', (s) => s.clear())
   },
@@ -112,12 +163,40 @@ export const webStorage: StoragePort = {
     return tx<Medicine[]>(MEDICINES, 'readonly', (s) => s.getAll())
   },
 
+  /** Препарат. Удалённый обратно не пускаем — по той же причине, что измерения. */
   async putMedicine(item) {
-    await tx(MEDICINES, 'readwrite', (s) => s.put(item))
+    const db = await openDb()
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction([MEDICINES, TOMBSTONES], 'readwrite')
+      const ask = transaction.objectStore(TOMBSTONES).get(item.id)
+      ask.onsuccess = () => {
+        if (!ask.result) transaction.objectStore(MEDICINES).put(item)
+      }
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
   },
 
   async deleteMedicine(id) {
-    await tx(MEDICINES, 'readwrite', (s) => s.delete(id))
+    await deleteWithTombstone(MEDICINES, id, 'medicine', Date.now())
+  },
+
+  async allTombstones() {
+    return tx<Tombstone[]>(TOMBSTONES, 'readonly', (s) => s.getAll())
+  },
+
+  async putTombstones(items) {
+    if (items.length === 0) return
+    const db = await openDb()
+    await new Promise<void>((resolve, reject) => {
+      const transaction = db.transaction(TOMBSTONES, 'readwrite')
+      const store = transaction.objectStore(TOMBSTONES)
+      // Своё решение старше чужого не делаем: у одной записи надгробие одно, и
+      // дата первого удаления — та, что человек и помнит.
+      for (const item of items) store.put(item)
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error)
+    })
   },
 
   /**

@@ -10,7 +10,7 @@
  * пересказ Web Bluetooth или IndexedDB. Иначе порт перестаёт быть портом.
  */
 
-import type { Measurement, Medicine, Settings } from '../types'
+import type { Measurement, Medicine, Settings, Tombstone } from '../types'
 
 // ── Bluetooth ──────────────────────────────────────────────────────────────
 
@@ -120,6 +120,17 @@ export interface StoragePort {
   allMedicines(): Promise<Medicine[]>
   putMedicine(item: Medicine): Promise<void>
   deleteMedicine(id: string): Promise<void>
+
+  /**
+   * Следы удалённых записей.
+   *
+   * Хранятся отдельно от самих записей, а не полем `deleted` внутри них. Поле
+   * пришлось бы отфильтровывать в каждом месте, где список читают, и первое же
+   * забытое место показало бы человеку то, что он удалил. Отдельное хранилище
+   * такой ошибки не допускает: удалённого в списках нет физически.
+   */
+  allTombstones(): Promise<Tombstone[]>
+  putTombstones(items: Tombstone[]): Promise<void>
 
   /**
    * Попросить платформу не вытеснять наши данные.

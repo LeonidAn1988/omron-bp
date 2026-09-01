@@ -6,7 +6,7 @@
  * `src/platform/`, поэтому этот файл переезжает на нативные платформы без правок.
  */
 
-import type { BpReading, GlucoseReading, Measurement, Medicine, Settings } from '../types'
+import type { BpReading, GlucoseReading, Measurement, Medicine, Settings, Tombstone } from '../types'
 import { platform } from '../platform/ports'
 import { DEFAULT_PAIRING_KEY } from '../ble/protocol'
 
@@ -106,6 +106,15 @@ export function getAllMedicines(): Promise<Medicine[]> {
 
 export function putMedicine(item: Medicine): Promise<void> {
   return platform().storage.putMedicine(item)
+}
+
+/** Следы удалённых записей — их несёт резервная копия, иначе удалённое возвращается. */
+export function getAllTombstones() {
+  return platform().storage.allTombstones()
+}
+
+export function saveTombstones(items: Tombstone[]) {
+  return platform().storage.putTombstones(items)
 }
 
 export function deleteMedicine(id: string): Promise<void> {

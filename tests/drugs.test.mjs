@@ -14,6 +14,8 @@ import {
   formGroup,
   filterByForm,
   instructionUrl,
+  pharmacyUrl,
+  monthYear,
   mergeBooks,
   KIND_LABEL,
 } from './build/api.mjs'
@@ -218,6 +220,18 @@ export function run() {
     )
   }
 
+
+  // Поиск в аптеке идёт по действующему веществу, когда оно известно: врач
+  // называет вещество, на упаковке торговое имя, и аналог находится так.
+  const вАптеку = pharmacyUrl('Конкор® Кор', '2,5 мг', 'Бисопролол')
+  check('в аптеке ищем по веществу', вАптеку.includes(encodeURIComponent('Бисопролол')))
+  check('дозировка в запросе есть', вАптеку.includes(encodeURIComponent('2,5 мг')))
+  check('торговое имя не подставляется рядом с веществом', !вАптеку.includes(encodeURIComponent('Конкор')))
+  check('без вещества ищем по названию', pharmacyUrl('Оциллококцинум').includes(encodeURIComponent('Оциллококцинум')))
+
+  // «Принимает с июль 2025 г.» стояло в отчёте врачу — падеж здесь виден всем.
+  check('месяц в родительном падеже', monthYear(new Date(2025, 6, 1).getTime()) === 'июля 2025')
+  check('май не склоняется, но и не ломается', monthYear(new Date(2026, 4, 20).getTime()) === 'мая 2026')
 
   return failures
 }

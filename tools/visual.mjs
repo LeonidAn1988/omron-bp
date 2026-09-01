@@ -85,6 +85,12 @@ export async function seed(page, frozen) {
         form: 'Таблетки, покрытые пленочной оболочкой', maker: 'Мерк КГаА',
         packSize: 30, left: 12, perDay: null, expires: Date.UTC(2027, 4, 31),
         times: ['08:00', '20:00'], perTime: 1, meal: 'after', taken: marks, leftAt: now - 3 * DAY,
+        // Свёрнутая история и день начала приёма — литералом, а не расчётом от
+        // засеянных отметок: снимок должен быть побайтово одинаковым от прогона
+        // к прогону, а свёртка зависит от текущего дня.
+        startedAt: Date.UTC(2025, 6, 1),
+        foldedUntil: now - 59 * DAY,
+        history: { '2026-05': { planned: 44, taken: 39 }, '2026-06': { planned: 60, taken: 51 } },
       },
       {
         id: 'm2', name: 'Омега-3 Ультра', dose: '', kind: 1,
@@ -127,7 +133,10 @@ export async function seed(page, frozen) {
     }
 
     const db = await new Promise((resolve, reject) => {
-      const request = indexedDB.open('omron-bp', 3)
+      // Без номера версии: открывается та, что уже создало приложение. С
+      // жёстко указанной цифрой посев ломался при каждой миграции схемы —
+      // прогон падал с VersionError ещё до первого снимка.
+      const request = indexedDB.open('omron-bp')
       request.onsuccess = () => resolve(request.result)
       request.onerror = () => reject(request.error)
     })

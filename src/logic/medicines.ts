@@ -330,6 +330,72 @@ export function trackedSince(medicine: Medicine, now: number): number {
   return marks.length ? startOfDay(Math.min(...marks)) : Number.NEGATIVE_INFINITY
 }
 
+/** Ключ месяца в свёрнутой истории: `2026-07`. Локальный месяц, а не UTC. */
+export function monthKey(ts: number): string {
+  const d = new Date(ts)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/**
+ * Свернуть отметки, уходящие за горизонт хранения, в месячные итоги.
+ *
+ * Отметки живут шестьдесят дней и дальше выбрасываются. Просто выбросить их
+ * значит потерять ответ на главный вопрос врача — «как регулярно принимаете» —
+ * ровно там, где он и интересен: за год, а не за два месяца.
+ *
+ * Считается не по сохранившимся отметкам, а по окну между прошлой свёрткой и
+ * нынешним горизонтом. Иначе назначенные дозы взялись бы неоткуда: отметка
+ * говорит, что приняли, но не говорит, сколько было назначено, — а пропуск это
+ * как раз разница между ними.
+ *
+ * Расписание берётся нынешнее, и это осознанно: свёртка идёт по горячим следам,
+ * через два месяца после самих дней, поэтому расписание почти наверняка то же.
+ * Пересчитывать историю позже было бы хуже — там расписание уже чужое.
+ */
+export function foldHistory(medicine: Medicine, now: number): Medicine {
+  const times = normalizeTimes(medicine.times ?? [])
+  const cutoff = startOfDay(now) - (KEEP_INTAKES_DAYS - 1) * DAY
+  const marks = medicine.taken ?? []
+
+  // Откуда считать. Прошлая свёртка знает своё место; если её не было, берём
+  // день заведения, а без него — первую отметку. Не знаем ничего — сворачивать
+  // нечего.
+  const tracked = trackedSince(medicine, now)
+  const fallback = Number.isFinite(tracked) ? tracked : marks.length ? startOfDay(Math.min(...marks)) : cutoff
+  const from = medicine.foldedUntil !== undefined ? startOfDay(medicine.foldedUntil) : fallback
+
+  if (times.length === 0 || from >= cutoff) {
+    // Сворачивать нечего, но отметки за горизонтом всё равно не держим.
+    const свежие = marks.filter((t) => t >= cutoff)
+    return свежие.length === marks.length ? medicine : { ...medicine, taken: свежие }
+  }
+
+  const history: Record<string, { planned: number; taken: number }> = { ...(medicine.history ?? {}) }
+  for (let day = from; day < cutoff; day += DAY) {
+    const key = monthKey(day)
+    const cell = history[key] ?? { planned: 0, taken: 0 }
+    history[key] = { planned: cell.planned + times.length, taken: cell.taken }
+  }
+  for (const mark of marks) {
+    if (mark < from || mark >= cutoff) continue
+    const key = monthKey(mark)
+    const cell = history[key] ?? { planned: 0, taken: 0 }
+    history[key] = { planned: cell.planned, taken: cell.taken + 1 }
+  }
+
+  return { ...medicine, history, foldedUntil: cutoff, taken: marks.filter((t) => t >= cutoff) }
+}
+
+/** Итог по свёрнутой истории: сколько назначено и сколько принято за всё, что в ней есть. */
+export function historyTotal(medicine: Medicine): { planned: number; taken: number; months: number } {
+  const cells = Object.values(medicine.history ?? {})
+  return {
+    planned: cells.reduce((sum, c) => sum + c.planned, 0),
+    taken: cells.reduce((sum, c) => sum + c.taken, 0),
+    months: cells.length,
+  }
+}
+
 export function dosesOn(medicine: Medicine, day: number, now: number): DoseSlot[] {
   const times = normalizeTimes(medicine.times ?? [])
   if (times.length === 0) return []
@@ -412,9 +478,12 @@ export function dayStatus(items: Medicine[], day: number, now: number): DayStatu
  * Записать «сейчас» значило бы соврать в собственных же данных.
  */
 export function markTakenAt(medicine: Medicine, plannedTs: number, now: number): Medicine {
-  const horizon = now - KEEP_INTAKES_DAYS * DAY
-  const taken = [...(medicine.taken ?? []).filter((t) => t >= horizon), plannedTs].sort((a, b) => a - b)
-  if (medicine.autoDeduct) return { ...medicine, taken }
+  // Свёртка до добавления новой отметки: старое уходит в месячные итоги, а не
+  // в никуда. Свежая отметка за горизонт не попадёт и свёрткой не тронется.
+  const folded = foldHistory(medicine, now)
+  const taken = [...(folded.taken ?? []), plannedTs].sort((a, b) => a - b)
+  if (folded.autoDeduct) return { ...folded, taken }
+  medicine = folded
 
   // Отметка — это подтверждение: «на сейчас у меня столько». Поэтому за основу
   // берётся расчётный остаток, а не подтверждённый: иначе всё, что израсходовано
@@ -536,8 +605,9 @@ export function pendingToday(items: Medicine[], now: number): number {
  * изменение, а вызывающий код сам решил, сохранять его или нет.
  */
 export function markTaken(medicine: Medicine, now: number): Medicine {
-  const horizon = now - KEEP_INTAKES_DAYS * DAY
-  const taken = [...(medicine.taken ?? []).filter((t) => t >= horizon), now].sort((a, b) => a - b)
+  const folded = foldHistory(medicine, now)
+  medicine = folded
+  const taken = [...(folded.taken ?? []), now].sort((a, b) => a - b)
   // При автосписании расписание уже списало эту дозу: отметка её только
   // фиксирует, иначе одна таблетка ушла бы из остатка дважды.
   if (medicine.autoDeduct) return { ...medicine, taken }

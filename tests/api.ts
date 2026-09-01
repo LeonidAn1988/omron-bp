@@ -31,9 +31,11 @@ export {
   getAllMedicines,
   putMedicine,
   deleteMedicine,
+  getAllTombstones,
+  saveTombstones,
 } from '../src/db/store'
 
-export { plural } from '../src/logic/plural'
+export { plural, monthYear } from '../src/logic/plural'
 
 export {
   normalize,
@@ -45,6 +47,7 @@ export {
   formGroup,
   filterByForm,
   instructionUrl,
+  pharmacyUrl,
   mergeBooks,
   FORM_GROUPS,
   KIND_LABEL,
@@ -73,6 +76,9 @@ export {
   SUPPLY_SOON_DAYS,
   addPack,
   adherence,
+  foldHistory,
+  historyTotal,
+  monthKey,
   countAlerts,
   dayStatus,
   daysToExpiry,
