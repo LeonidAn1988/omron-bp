@@ -265,7 +265,7 @@ export function Sync({
 
         <div className="row">
           <button className="btn btn--primary" onClick={handleDownload} disabled={busy !== null} data-loading={downloading}>
-            {downloading ? 'Читаю память…' : 'Подключить и выгрузить'}
+            {downloading ? 'Идёт выгрузка…' : 'Подключить и выгрузить'}
           </button>
           <button className="btn" onClick={handlePair} disabled={busy !== null}>
             {busy === 'pair' ? 'Сопрягаю…' : 'Сопряжение'}
@@ -287,7 +287,7 @@ export function Sync({
                 ? 'Соединяюсь с прибором и проверяю ключ…'
                 : progress >= 1
                   ? 'Прочитано. Записываю в дневник…'
-                  : `Читаю память прибора — ${Math.round(progress * 100)}%. Не выключайте Bluetooth на тонометре.`}
+                  : `Выгрузка из памяти прибора — ${Math.round(progress * 100)}%. Не выключайте Bluetooth на тонометре.`}
             </div>
           </div>
         )}

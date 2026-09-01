@@ -7,8 +7,8 @@ android {
         applicationId "io.github.leonidan1988.omronbp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 13
-        versionName "0.5.1"
+        versionCode 14
+        versionName "0.6.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -20,6 +20,24 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            /*
+             * Ключ пока отладочный, и это осознанно, а не недоделка.
+             *
+             * Своя подпись нужна для магазина, но сменить её значит порвать
+             * обновление поверх: Android не ставит поверх приложение с другим
+             * ключом, и на телефоне с настоящим дневником обновление
+             * потребовало бы удаления вместе с данными. Пока идёт семейный
+             * тест, важнее, чтобы новые версии вставали поверх старых.
+             *
+             * Что эта сборка даёт против отладочной: `debuggable` выключен,
+             * то есть подключиться к дневнику с компьютера по кабелю больше
+             * нельзя. Ради этого она и собирается — на чужом телефоне отладка
+             * включённой быть не должна.
+             *
+             * Перед магазином ключ придётся завести настоящий и один раз
+             * переустановить приложение с переносом дневника через копию.
+             */
+            signingConfig signingConfigs.debug
         }
     }
 }

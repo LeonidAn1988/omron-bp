@@ -6,7 +6,7 @@
  * появились; если при этом его аптечка окажется ничьей или дневник давления
  * опустеет, это будет выглядеть как потеря данных, а не как новая возможность.
  */
-import { firstPerson, activePersonOf, ownerOf, medicinesOf, deviceUserOf, freeDeviceUsers, newPersonId, ПЕРВЫЙ } from './build/api.mjs'
+import { firstPerson, activePersonOf, ownerOf, medicinesOf, deviceUserOf, freeDeviceUsers, newPersonId, intakeTimesOf, ПЕРВЫЙ } from './build/api.mjs'
 
 export function run() {
   let failures = 0
@@ -70,6 +70,15 @@ export function run() {
   check('своя память остаётся своей при правке', freeDeviceUsers(люди, 'p1').join() === '1,2')
   check('обе заняты — свободных нет',
     freeDeviceUsers([{ id: 'a', name: 'A', deviceUser: 1 }, { id: 'b', name: 'B', deviceUser: 2 }]).length === 0)
+
+  // ── часы приёма ──────────────────────────────────────────────────────────
+  // У отца утро в шесть, у сына в девять — общие часы означают, что одному из
+  // них придётся вводить время руками для каждого лекарства.
+  const общие = { morning: '08:00', day: '13:00', evening: '19:00', night: '22:00' }
+  const свои = { morning: '06:00', day: '12:00', evening: '18:00', night: '21:00' }
+  check('без своих часов берутся общие', intakeTimesOf({ id: 'p1', name: 'Я' }, общие).morning === '08:00')
+  check('свои часы главнее общих', intakeTimesOf({ id: 'p2', name: 'Отец', intakeTimes: свои }, общие).morning === '06:00')
+  check('без человека тоже общие', intakeTimesOf(null, общие).night === '22:00')
 
   check('идентификаторы разные', newPersonId(1) !== newPersonId(2))
 

@@ -44,6 +44,7 @@ export {
   deviceUserOf,
   freeDeviceUsers,
   newPersonId,
+  intakeTimesOf,
   ПЕРВЫЙ,
 } from '../src/logic/people'
 

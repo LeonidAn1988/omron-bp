@@ -26,7 +26,7 @@ import { MedicineNudge } from './ui/Medicines'
 import { DeviceIcon, ReportIcon, SettingsIcon } from './ui/icons'
 import { Onboarding } from './ui/Onboarding'
 import { PersonSwitch } from './ui/People'
-import { activePersonOf, deviceUserOf, medicinesOf, ownerOf } from './logic/people'
+import { activePersonOf, deviceUserOf, intakeTimesOf, medicinesOf, ownerOf } from './logic/people'
 import { Intake } from './ui/Intake'
 import { Cabinet } from './ui/Cabinet'
 import { Entry } from './ui/Entry'
@@ -919,7 +919,7 @@ export default function App() {
           {undoBanner}
           <Cabinet
             medicines={myMedicines}
-            intakeTimes={settings.intakeTimes}
+            intakeTimes={intakeTimesOf(person, settings.intakeTimes)}
             people={settings.people}
             activePerson={person?.id ?? ''}
             onSave={handleSaveMedicine}

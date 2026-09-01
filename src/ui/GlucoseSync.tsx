@@ -70,7 +70,7 @@ export function GlucoseSync({
 
       <div className="row">
         <button className="btn btn--primary" onClick={download} disabled={busy} data-loading={busy}>
-          {busy ? 'Читаю память…' : 'Подключить глюкометр'}
+          {busy ? 'Идёт выгрузка…' : 'Подключить глюкометр'}
         </button>
       </div>
 

@@ -9,7 +9,7 @@
  * значит «ничей препарат». Экранов и хранилища этот модуль не касается.
  */
 
-import type { Medicine, Person, Settings } from '../types'
+import type { IntakeTimes, Medicine, Person, Settings } from '../types'
 
 /** Имя, которое приложение ставит первому человеку, если своего нет. */
 export const ПЕРВЫЙ = 'Я'
@@ -95,4 +95,16 @@ export function deviceUserOf(person: Person | null): number | null {
 export function freeDeviceUsers(people: Person[], exceptId?: string): (1 | 2)[] {
   const занято = new Set(people.filter((p) => p.id !== exceptId).map((p) => p.deviceUser))
   return ([1, 2] as const).filter((u) => !занято.has(u))
+}
+
+/**
+ * Часы стандартных приёмов выбранного человека.
+ *
+ * У каждого они свои: у одного утро в шесть, у другого в девять. Пока своих
+ * нет, берутся общие из настроек — так ведёт себя тот, кого завели до появления
+ * этой возможности, и так же ведёт себя единственный человек, которому
+ * разделение ни к чему.
+ */
+export function intakeTimesOf(person: Person | null, fallback: IntakeTimes): IntakeTimes {
+  return person?.intakeTimes ?? fallback
 }

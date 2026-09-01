@@ -6,6 +6,7 @@ import { download, parseImportFile, toCsv, toJson, type ImportResult } from '../
 import { decryptBackup, isEncrypted } from '../logic/crypto'
 import { platform } from '../platform/ports'
 import { Banner, Field } from './bits'
+import { activePersonOf, intakeTimesOf } from '../logic/people'
 import { People } from './People'
 import { About } from './About'
 import { parseChangelog } from '../logic/changelog'
@@ -84,6 +85,10 @@ export function Settings({
   const [пароль, setПароль] = useState('')
 
   const patch = (fields: Partial<SettingsData>) => onChange({ ...settings, ...fields })
+
+  /** Чьи часы приёма правим. Пока человек один — общие, как и было. */
+  const выбранный = activePersonOf(settings)
+  const часы = intakeTimesOf(выбранный, settings.intakeTimes)
 
   async function восстановить(name: string, text: string) {
     try {
@@ -300,20 +305,27 @@ export function Settings({
       <div className="card">
         <div className="card__head">
           <h2>Часы приёма</h2>
+          {settings.people.length > 1 && <span className="muted">{выбранный?.name || 'человека'}</span>}
         </div>
         <p className="muted" style={{ marginTop: 0 }}>
           Это кнопки в форме препарата: «Утром», «Днём», «Вечером», «На ночь». Раньше часы были зашиты намертво, и
           тому, у кого утро в шесть, приходилось вводить время руками для каждого лекарства.
+          {settings.people.length > 1 && ' У каждого человека они свои — здесь показаны часы выбранного.'}
         </p>
         <div className="stack" style={{ gap: 'var(--space-3)' }}>
           {INTAKE_SLOTS.map(({ key, title }) => (
             <Field key={key} label={title}>
               <input
                 type="time"
-                value={settings.intakeTimes[key]}
-                onChange={(e) =>
-                  patch({ intakeTimes: { ...settings.intakeTimes, [key]: e.target.value || settings.intakeTimes[key] } })
-                }
+                value={часы[key]}
+                onChange={(e) => {
+                  const next = { ...часы, [key]: e.target.value || часы[key] }
+                  // Пока человек один, часы остаются общей настройкой: заводить
+                  // ему личные — значит развести два места, где лежит одно и то
+                  // же, и потом гадать, какое из них главнее.
+                  if (settings.people.length <= 1 || !выбранный) patch({ intakeTimes: next })
+                  else patch({ people: settings.people.map((p) => (p.id === выбранный.id ? { ...p, intakeTimes: next } : p)) })
+                }}
               />
             </Field>
           ))}
