@@ -17,7 +17,7 @@
 import type { SectionKey, Settings, ThemeChoice } from '../types'
 import { describeBackupAge } from './backup'
 import type { Person } from '../types'
-import { intakeTimesOf } from './people'
+import { glucoseTargetsOf, intakeTimesOf, targetsOf } from './people'
 import { plural } from './plural'
 import { REPEATS } from './reminders'
 
@@ -154,6 +154,54 @@ export function setIntakeTime(
   return { people: settings.people.map((p) => (p.id === человек.id ? { ...p, intakeTimes: next } : p)) }
 }
 
+/**
+ * Поменять целевое давление.
+ *
+ * Пишется дважды: человеку и в общие настройки. Общие нужны для совместимости
+ * в обе стороны — сборка без личных целей прочитает копию, снятую этой, и
+ * получит осмысленные числа, а не значения по умолчанию. Двойную запись можно
+ * будет снять, когда на всех телефонах семьи будет 0.8.0 и новее.
+ */
+export function setTargets(
+  settings: Pick<Settings, 'people' | 'targetSys' | 'targetDia'>,
+  personId: string | null,
+  next: { sys: number; dia: number },
+): Partial<Settings> {
+  const общие = { targetSys: next.sys, targetDia: next.dia }
+  if (settings.people.length <= 1 || !personId) return общие
+  // Остальным записываем то, что у них и было. Без этого правка цели жены
+  // молча меняла бы цель мужу: своей у него нет, а общая только что уехала на
+  // её цифры ради совместимости со старыми сборками.
+  return {
+    ...общие,
+    people: settings.people.map((p) =>
+      p.id === personId ? { ...p, targets: next } : { ...p, targets: targetsOf(p, settings) },
+    ),
+  }
+}
+
+/** Поменять пороги сахара. Пишется так же дважды, см. `setTargets`. */
+export function setGlucoseTargets(
+  settings: Pick<Settings, 'people' | 'glucoseFastingMax' | 'glucosePostMealMax' | 'glucoseLow'>,
+  personId: string | null,
+  next: { fastingMax: number; postMealMax: number; low: number },
+): Partial<Settings> {
+  const общие = {
+    glucoseFastingMax: next.fastingMax,
+    glucosePostMealMax: next.postMealMax,
+    glucoseLow: next.low,
+  }
+  if (settings.people.length <= 1 || !personId) return общие
+  // Как и с давлением: чужие пороги закрепляем прежними, иначе общее значение
+  // утащит их за собой.
+  return {
+    ...общие,
+    people: settings.people.map((p) =>
+      p.id === personId ? { ...p, glucose: next } : { ...p, glucose: glucoseTargetsOf(p, settings) },
+    ),
+  }
+}
+
 // ── подписи строк корня ────────────────────────────────────────────────────
 //
 // Строка корня обязана отвечать на вопрос «что там сейчас» без открывания:
@@ -172,9 +220,11 @@ export function describePeople(people: Person[]): string {
 
 export function describeTargets(
   settings: Pick<Settings, 'targetSys' | 'targetDia' | 'trackGlucose'>,
+  person?: Person | null,
 ): string {
+  const цель = targetsOf(person ?? null, settings)
   const сахар = settings.trackGlucose ? 'сахар ведётся' : 'сахар не ведётся'
-  return `давление ${settings.targetSys}/${settings.targetDia} · ${сахар}`
+  return `давление ${цель.sys}/${цель.dia} · ${сахар}`
 }
 
 export function describeReminders(settings: Pick<Settings, 'remindersOn' | 'remindersRepeat'>): string {

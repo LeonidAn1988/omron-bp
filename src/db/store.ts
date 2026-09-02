@@ -62,18 +62,22 @@ export function getAllMeasurements(): Promise<Measurement[]> {
   return platform().storage.allMeasurements()
 }
 
-export function putMeasurements(items: Measurement[]): Promise<void> {
-  return platform().storage.putMeasurements(items)
+export function putMeasurements(items: Measurement[], stamp = true): Promise<void> {
+  return platform().storage.putMeasurements(items, stamp)
 }
 
 /**
  * Добавляет только то, чего ещё нет. Дубли режутся по id, поэтому повторная
  * выгрузка с прибора безопасна.
+ *
+ * `stamp` ложно при восстановлении из копии: у записей оттуда своя отметка
+ * времени, и переписать её сегодняшним числом значит сделать старую копию
+ * свежее местных правок.
  */
-export async function addNewMeasurements(items: Measurement[]): Promise<Measurement[]> {
+export async function addNewMeasurements(items: Measurement[], stamp = true): Promise<Measurement[]> {
   const existing = new Set((await getAllMeasurements()).map((m) => m.id))
   const fresh = items.filter((m) => !existing.has(m.id))
-  await putMeasurements(fresh)
+  await putMeasurements(fresh, stamp)
   return fresh
 }
 
@@ -119,8 +123,13 @@ export function getAllMedicines(): Promise<Medicine[]> {
   return platform().storage.allMedicines()
 }
 
-export function putMedicine(item: Medicine): Promise<void> {
-  return platform().storage.putMedicine(item)
+export function putMedicine(item: Medicine, stamp = true): Promise<void> {
+  return platform().storage.putMedicine(item, stamp)
+}
+
+/** Идентификатор этой установки приложения. Заводится сам при первом обращении. */
+export function getInstallId(): Promise<string> {
+  return platform().storage.installId()
 }
 
 /** Следы удалённых записей — их несёт резервная копия, иначе удалённое возвращается. */

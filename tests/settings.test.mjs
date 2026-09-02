@@ -19,6 +19,10 @@ import {
   describeBackupRow,
   describePerson,
   describeSections,
+  setTargets,
+  setGlucoseTargets,
+  targetsOf,
+  glucoseTargetsOf,
 } from './build/api.mjs'
 
 const БАЗА = {
@@ -95,6 +99,35 @@ export function run() {
   const чп_нет = setIntakeTime(чп_семья, 'p-нет', 'morning', '07:00')
   check('человек не найден — правим общие, а не чужие', чп_нет.intakeTimes.morning === '07:00')
 
+  // ── личные цели ──────────────────────────────────────────────────────────
+  const лц_семья = {
+    ...БАЗА,
+    glucoseFastingMax: 7,
+    glucosePostMealMax: 10,
+    glucoseLow: 3.9,
+    people: [
+      { id: 'p1', name: 'Я', deviceUser: 1 },
+      { id: 'p-w', name: 'Жена', targets: { sys: 130, dia: 80 } },
+    ],
+  }
+  check('своя цель берётся у того, у кого она есть', targetsOf(лц_семья.people[1], лц_семья).sys === 130)
+  check('без своей цели берётся общая', targetsOf(лц_семья.people[0], лц_семья).sys === 135)
+  check('без человека тоже общая', targetsOf(null, лц_семья).dia === 85)
+  check('пороги сахара падают на общие', glucoseTargetsOf(лц_семья.people[0], лц_семья).fastingMax === 7)
+
+  const лц_правка = setTargets(лц_семья, 'p-w', { sys: 125, dia: 75 })
+  check('правка пишется человеку', лц_правка.people[1].targets.sys === 125)
+  check('и в общие — ради старых сборок, читающих ту же копию', лц_правка.targetSys === 125 && лц_правка.targetDia === 75)
+  check('чужому закрепили прежнюю цель, а не утащили за общей',
+    лц_правка.people[0].targets.sys === 135 && лц_правка.people[0].targets.dia === 85)
+  check('и после правки он читает своё, а не новое общее',
+    targetsOf(лц_правка.people[0], { targetSys: лц_правка.targetSys, targetDia: лц_правка.targetDia }).sys === 135)
+  const лц_один = setTargets({ ...БАЗА, people: [{ id: 'p1', name: 'Я' }] }, 'p1', { sys: 120, dia: 70 })
+  check('при одном человеке личных целей не заводим', лц_один.targetSys === 120 && !лц_один.people)
+  const лц_сахар = setGlucoseTargets(лц_семья, 'p-w', { fastingMax: 6, postMealMax: 8, low: 4 })
+  check('пороги сахара тоже двойной записью', лц_сахар.people[1].glucose.fastingMax === 6 && лц_сахар.glucoseFastingMax === 6)
+  check('и чужие пороги закреплены прежними', лц_сахар.people[0].glucose.fastingMax === 7)
+
   // ── подписи строк корня ──────────────────────────────────────────────────
   check('экран', describeDisplay(БАЗА) === 'тёмная · обычная плотность', describeDisplay(БАЗА))
   check('плотность называется, когда она не обычная',
@@ -102,6 +135,8 @@ export function run() {
   check('люди перечислены', describePeople(чп_семья.people) === 'Я, Отец')
   check('безымянный человек назван по месту', describePeople([{ id: 'p1', name: '  ' }]) === 'Человек 1')
   check('нормы', describeTargets(БАЗА) === 'давление 135/85 · сахар ведётся')
+  check('нормы показывают цель выбранного человека',
+    describeTargets(лц_семья, лц_семья.people[1]) === 'давление 130/80 · сахар ведётся')
   check('нормы без сахара', describeTargets({ ...БАЗА, trackGlucose: false }).endsWith('сахар не ведётся'))
   check('напоминания с повтором', describeReminders(БАЗА) === 'включены, повтор 3 раза', describeReminders(БАЗА))
   check('напоминания без повтора', describeReminders({ ...БАЗА, remindersRepeat: false }) === 'включены, без повтора')

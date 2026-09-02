@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { BpReading, GlucoseReading } from '../types'
+import type { BpReading, GlucoseReading, Person } from '../types'
 import { readingId } from '../db/store'
 import { DEFAULT_PAIRING_KEY } from '../ble/protocol'
 import {
@@ -23,8 +23,12 @@ import { download } from '../logic/io'
 const FULL_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const DAY = 86_400_000
 
-function toReading(record: DeviceRecord): BpReading {
+function toReading(record: DeviceRecord, people: Person[], device?: string): BpReading {
   const ts = record.date.getTime()
+  // Человек берётся не активный, а тот, за кем закреплена эта кнопка прибора:
+  // выгружают обычно обе памяти разом, и записи второй кнопки принадлежат не
+  // тому, кто сейчас смотрит на экран.
+  const чей = people.find((p) => p.deviceUser === record.user)
   return {
     kind: 'bp',
     id: readingId(record.user, ts),
@@ -35,6 +39,8 @@ function toReading(record: DeviceRecord): BpReading {
     ihb: record.ihb,
     mov: record.mov,
     user: record.user,
+    ...(чей ? { person: чей.id } : {}),
+    ...(device ? { device } : {}),
     source: 'device',
   }
 }
@@ -94,6 +100,8 @@ function explainBleError(message: string): { причина: string; дейст�
 
 export function Sync({
   pairingKey,
+  people,
+  person,
   onPairingKey,
   onImport,
   onImportGlucose,
@@ -101,6 +109,10 @@ export function Sync({
   showGlucose,
 }: {
   pairingKey: string
+  /** Кому принадлежат кнопки прибора: записи расходятся по людям при выгрузке. */
+  people: Person[]
+  /** Кто выбран сейчас — ему записывается сахар: у глюкометра кнопок нет. */
+  person: Person | null
   /** Правка ключа доступа к прибору: живёт здесь, а не в настройках. */
   onPairingKey: (next: string) => void
   onImport: (readings: BpReading[]) => Promise<number>
@@ -202,7 +214,7 @@ export function Sync({
         setConnecting(false)
         setProgress(p.fraction)
       })
-      const readings = records.map(toReading)
+      const readings = records.map((record) => toReading(record, people, target.id))
       const added = await onImport(readings)
       const newestTs = readings.length ? Math.max(...readings.map((r) => r.ts)) : null
       setOutcome({
@@ -411,7 +423,15 @@ export function Sync({
         </Banner>
       )}
 
-      {showGlucose && <GlucoseSync onImport={onImportGlucose} log={log} />}
+      {showGlucose && (
+        <GlucoseSync
+          onImport={onImportGlucose}
+          log={log}
+          person={person?.id ?? null}
+          deviceUser={person?.deviceUser ?? null}
+          device={device?.id}
+        />
+      )}
 
       {/* Всё, что нужно раз в жизни и только когда что-то не работает, — под
           одной свёрткой. В настройках этому не место: там его искал бы каждый,

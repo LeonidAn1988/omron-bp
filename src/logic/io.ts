@@ -368,6 +368,10 @@ function parseMedicines(raw: unknown): Medicine[] {
       startedAt: optionalNumber(m.startedAt) ?? undefined,
       foldedUntil: optionalNumber(m.foldedUntil) ?? undefined,
       history: history(m.history),
+      // Отметка времени правки переносится как есть: штамповать её «сейчас»
+      // при восстановлении нельзя — старая копия выглядела бы свежее местной
+      // правки и побеждала бы её при семейном слиянии.
+      updatedAt: optionalNumber(m.updatedAt) ?? undefined,
     }))
 }
 
@@ -553,6 +557,9 @@ export function takesPersonalFrom(local: Pick<Settings, 'people'>, incoming: Non
 }
 
 /** Поля коробки, которые прежние версии теряли при восстановлении из копии. */
+// `updatedAt` сюда не входит намеренно: дописав чужую отметку времени, местная
+// коробка стала бы выглядеть свежее, чем она есть, и при семейном слиянии
+// побеждала бы правку, которой не было.
 const ДОПИСЫВАЕМЫЕ = ['owner', 'since', 'startedAt', 'foldedUntil', 'history'] as const
 
 /**

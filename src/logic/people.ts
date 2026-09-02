@@ -120,3 +120,30 @@ export function freeDeviceUsers(people: Person[], exceptId?: string): (1 | 2)[] 
 export function intakeTimesOf(person: Person | null, fallback: IntakeTimes): IntakeTimes {
   return person?.intakeTimes ?? fallback
 }
+
+/**
+ * Целевое давление человека. Своё, если назначено; иначе общее из настроек.
+ *
+ * Тот же приём, что с часами приёма: личное поле необязательно, и дневник,
+ * заведённый до его появления, продолжает работать по общим цифрам.
+ */
+export function targetsOf(
+  person: Person | null,
+  fallback: Pick<Settings, 'targetSys' | 'targetDia'>,
+): { sys: number; dia: number } {
+  return person?.targets ?? { sys: fallback.targetSys, dia: fallback.targetDia }
+}
+
+/** Пороги сахара человека. Своё, если назначено; иначе общее из настроек. */
+export function glucoseTargetsOf(
+  person: Person | null,
+  fallback: Pick<Settings, 'glucoseFastingMax' | 'glucosePostMealMax' | 'glucoseLow'>,
+): { fastingMax: number; postMealMax: number; low: number } {
+  return (
+    person?.glucose ?? {
+      fastingMax: fallback.glucoseFastingMax,
+      postMealMax: fallback.glucosePostMealMax,
+      low: fallback.glucoseLow,
+    }
+  )
+}

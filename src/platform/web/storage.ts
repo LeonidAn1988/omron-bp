@@ -89,11 +89,34 @@ function tx<T>(store: string, mode: IDBTransactionMode, run: (s: IDBObjectStore)
  */
 async function deleteWithTombstone(store: string, id: string, kind: Tombstone['kind'], at: number) {
   const db = await openDb()
+  // Автор удаления нужен слиянию: чужое решение нельзя ни молча применить, ни
+  // молча отбросить, а «неизвестно чьё» считается своим.
+  const by = await installIdOf(db)
   await new Promise<void>((resolve, reject) => {
     const transaction = db.transaction([store, TOMBSTONES], 'readwrite')
     transaction.objectStore(store).delete(id)
-    transaction.objectStore(TOMBSTONES).put({ id, kind, at } satisfies Tombstone)
+    transaction.objectStore(TOMBSTONES).put({ id, kind, at, by } satisfies Tombstone)
     transaction.oncomplete = () => resolve()
+    transaction.onerror = () => reject(transaction.error)
+  })
+}
+
+/** Идентификатор установки: заводится при первом обращении и живёт вечно. */
+function installIdOf(db: IDBDatabase): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(META, 'readwrite')
+    const store = transaction.objectStore(META)
+    const ask = store.get('install')
+    ask.onsuccess = () => {
+      const было = ask.result as string | undefined
+      if (было) {
+        resolve(было)
+        return
+      }
+      const id = `i${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+      store.put(id, 'install')
+      resolve(id)
+    }
     transaction.onerror = () => reject(transaction.error)
   })
 }
@@ -114,8 +137,10 @@ export const webStorage: StoragePort = {
    * все пути записи: и прибор, и восстановление из копии, и ручной ввод.
    * Отфильтровав здесь, забыть фильтр где-то ещё уже нельзя.
    */
-  async putMeasurements(items) {
+  async putMeasurements(items, stamp = true) {
     if (items.length === 0) return
+    const now = Date.now()
+    if (stamp) items = items.map((item) => ({ ...item, updatedAt: now }))
     const db = await openDb()
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction([MEASUREMENTS, TOMBSTONES], 'readwrite')
@@ -159,12 +184,24 @@ export const webStorage: StoragePort = {
     await tx(META, 'readwrite', (s) => s.put(settings, 'settings'))
   },
 
+  /**
+   * Идентификатор установки: свой ключ в `meta`, не внутри настроек.
+   *
+   * Настройки уезжают в копию дневника целиком, и попади он туда — телефон,
+   * настроенный восстановлением чужой копии, представлялся бы той же
+   * установкой, что и телефон-источник.
+   */
+  async installId() {
+    return installIdOf(await openDb())
+  },
+
   async allMedicines() {
     return tx<Medicine[]>(MEDICINES, 'readonly', (s) => s.getAll())
   },
 
   /** Препарат. Удалённый обратно не пускаем — по той же причине, что измерения. */
-  async putMedicine(item) {
+  async putMedicine(item, stamp = true) {
+    if (stamp) item = { ...item, updatedAt: Date.now() }
     const db = await openDb()
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction([MEDICINES, TOMBSTONES], 'readwrite')

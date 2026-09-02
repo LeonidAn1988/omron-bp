@@ -110,15 +110,37 @@ export interface BluetoothPort {
 // ── хранилище ──────────────────────────────────────────────────────────────
 
 export interface StoragePort {
+  /**
+   * Идентификатор этой установки приложения.
+   *
+   * Заводится один раз при первом обращении и живёт, пока живёт дневник.
+   * Нужен семейному слиянию: пара «установка + человек» уникальна, даже если
+   * на двух телефонах людей зовут одинаково.
+   *
+   * Лежит отдельно от настроек намеренно. Настройки целиком уезжают в копию
+   * дневника, а копию наверняка будут использовать, чтобы настроить телефон
+   * отца, — и обе установки в тот же день стали бы одной.
+   */
+  installId(): Promise<string>
+
   allMeasurements(): Promise<Measurement[]>
-  putMeasurements(items: Measurement[]): Promise<void>
+  /**
+   * Записать измерения.
+   *
+   * `stamp` по умолчанию истинно: хранилище само ставит `updatedAt`. Ложно оно
+   * только на одном пути — восстановлении из копии, где отметка приходит из
+   * файла: пометив старую копию сегодняшним числом, приложение сделало бы её
+   * свежее местных правок.
+   */
+  putMeasurements(items: Measurement[], stamp?: boolean): Promise<void>
   deleteMeasurement(id: string): Promise<void>
   clearMeasurements(): Promise<void>
   loadSettings(): Promise<Partial<Settings> | undefined>
   saveSettings(settings: Settings): Promise<void>
 
   allMedicines(): Promise<Medicine[]>
-  putMedicine(item: Medicine): Promise<void>
+  /** `stamp` — как у измерений: ложно только при восстановлении из копии. */
+  putMedicine(item: Medicine, stamp?: boolean): Promise<void>
   deleteMedicine(id: string): Promise<void>
 
   /**

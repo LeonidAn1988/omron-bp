@@ -14,9 +14,21 @@ import { Banner, Reveal } from './bits'
 export function GlucoseSync({
   onImport,
   log,
+  person,
+  deviceUser,
+  device,
 }: {
   onImport: (readings: GlucoseReading[]) => Promise<number>
   log: (level: LogLevel, message: string) => void
+  /**
+   * Кому записывать. У глюкометра нет двух кнопок, как у тонометра, поэтому
+   * замеры принадлежат тому, чей дневник открыт. Раньше здесь стояла жёсткая
+   * единица, и человек со второй кнопкой прибора или вовсе без прибора своих
+   * замеров не видел никогда.
+   */
+  person: string | null
+  deviceUser: number | null
+  device?: string
 }) {
   const [busy, setBusy] = useState(false)
   const [count, setCount] = useState(0)
@@ -29,13 +41,15 @@ export function GlucoseSync({
     const ts = record.date.getTime()
     return {
       kind: 'glucose',
-      id: deviceMeasurementId('glucose', 1, ts),
+      id: deviceMeasurementId('glucose', deviceUser ?? 1, ts),
       ts,
       mmol: record.mmol,
       // Прибор сообщает момент замера не всегда; без него ставим «до еды» —
       // норма там строже, и человек скорее поправит, чем не заметит.
       context: record.context ?? 'before-meal',
-      user: 1,
+      user: deviceUser ?? 1,
+      ...(person ? { person } : {}),
+      ...(device ? { device } : {}),
       source: 'device',
     }
   }

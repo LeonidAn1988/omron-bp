@@ -21,6 +21,7 @@ import type { Measurement, Medicine, Settings as SettingsData } from '../types'
 import { Reminders } from './Reminders'
 import type { ImportResult } from '../logic/io'
 import { platform } from '../platform/ports'
+import { activePersonOf, glucoseTargetsOf, targetsOf } from '../logic/people'
 import { BackBar, NavRow, Reveal, Field } from './bits'
 import { About } from './About'
 import { parseChangelog } from '../logic/changelog'
@@ -41,6 +42,8 @@ import {
   describeSections,
   describeTargets,
   lockedSection,
+  setGlucoseTargets,
+  setTargets,
   setTrackGlucose,
   toggleSection,
   visibleSections,
@@ -143,8 +146,13 @@ function DisplayScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
   )
 }
 
-/** Нормы: целевое давление и дневник сахара с порогами. */
+/** Нормы: целевое давление и дневник сахара с порогами — у каждого свои. */
 function TargetsScreen({ settings, onPatch, onBack }: Общее & { onBack: () => void }) {
+  const кто = activePersonOf(settings)
+  const цель = targetsOf(кто, settings)
+  const сахар = glucoseTargetsOf(кто, settings)
+  const семья = settings.people.length > 1
+
   return (
     <div className="stack">
       <BackBar label="К настройкам" onBack={onBack} />
@@ -152,27 +160,28 @@ function TargetsScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
       <div className="card">
         <div className="card__head">
           <h2>Целевое давление</h2>
-          {settings.people.length > 1 && <span className="muted">одно на всех людей</span>}
+          {семья && <span className="muted">{кто?.name.trim() || 'выбранный человек'}</span>}
         </div>
 
         <div className="grid grid--two">
           <Field label="Верхнее">
             <input
               inputMode="numeric"
-              value={settings.targetSys}
-              onChange={(e) => onPatch({ targetSys: Number(e.target.value) || 135 })}
+              value={цель.sys}
+              onChange={(e) => onPatch(setTargets(settings, кто?.id ?? null, { ...цель, sys: Number(e.target.value) || 135 }))}
             />
           </Field>
           <Field label="Нижнее">
             <input
               inputMode="numeric"
-              value={settings.targetDia}
-              onChange={(e) => onPatch({ targetDia: Number(e.target.value) || 85 })}
+              value={цель.dia}
+              onChange={(e) => onPatch(setTargets(settings, кто?.id ?? null, { ...цель, dia: Number(e.target.value) || 85 }))}
             />
           </Field>
         </div>
         <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
-          135/85 — порог для измерений дома, он ниже кабинетного 140/90. Врач мог назначить вам другой.
+          135/85 — порог для измерений дома, он ниже кабинетного 140/90. Врач мог назначить другой.
+          {семья && ' У каждого человека цель своя.'}
         </div>
       </div>
 
@@ -198,22 +207,43 @@ function TargetsScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
             <Field label="Норма натощак, ммоль/л">
               <input
                 inputMode="decimal"
-                value={settings.glucoseFastingMax}
-                onChange={(e) => onPatch({ glucoseFastingMax: Number(e.target.value.replace(',', '.')) || 7 })}
+                value={сахар.fastingMax}
+                onChange={(e) =>
+                  onPatch(
+                    setGlucoseTargets(settings, кто?.id ?? null, {
+                      ...сахар,
+                      fastingMax: Number(e.target.value.replace(',', '.')) || 7,
+                    }),
+                  )
+                }
               />
             </Field>
             <Field label="Через 2 часа после еды">
               <input
                 inputMode="decimal"
-                value={settings.glucosePostMealMax}
-                onChange={(e) => onPatch({ glucosePostMealMax: Number(e.target.value.replace(',', '.')) || 10 })}
+                value={сахар.postMealMax}
+                onChange={(e) =>
+                  onPatch(
+                    setGlucoseTargets(settings, кто?.id ?? null, {
+                      ...сахар,
+                      postMealMax: Number(e.target.value.replace(',', '.')) || 10,
+                    }),
+                  )
+                }
               />
             </Field>
             <Field label="Порог низкого сахара">
               <input
                 inputMode="decimal"
-                value={settings.glucoseLow}
-                onChange={(e) => onPatch({ glucoseLow: Number(e.target.value.replace(',', '.')) || 3.9 })}
+                value={сахар.low}
+                onChange={(e) =>
+                  onPatch(
+                    setGlucoseTargets(settings, кто?.id ?? null, {
+                      ...сахар,
+                      low: Number(e.target.value.replace(',', '.')) || 3.9,
+                    }),
+                  )
+                }
               />
             </Field>
           </div>
@@ -350,7 +380,7 @@ export function Settings({
         <ul className="pills">
           <NavRow title={SUBSCREEN_TITLE.display} value={describeDisplay(settings)} onOpen={() => onOpen('display')} />
           <NavRow title={SUBSCREEN_TITLE.people} value={describePeople(settings.people)} onOpen={() => onOpen('people')} />
-          <NavRow title={SUBSCREEN_TITLE.targets} value={describeTargets(settings)} onOpen={() => onOpen('targets')} />
+          <NavRow title={SUBSCREEN_TITLE.targets} value={describeTargets(settings, activePersonOf(settings))} onOpen={() => onOpen('targets')} />
           {/* В браузере настоящих напоминаний нет вовсе, и строки тоже. */}
           {напоминанияЕсть && (
             <NavRow

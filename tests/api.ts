@@ -45,7 +45,7 @@ export {
   freeDeviceUsers,
   newPersonId,
   intakeTimesOf,
-  ПЕРВЫЙ, MAX_PEOPLE } from '../src/logic/people'
+  ПЕРВЫЙ, MAX_PEOPLE, targetsOf, glucoseTargetsOf } from '../src/logic/people'
 
 export {
   normalize,
@@ -173,6 +173,8 @@ export {
   describeBackupRow,
   describePerson,
   describeSections,
+  setTargets,
+  setGlucoseTargets,
 } from '../src/logic/settings'
 
 export { installWebPlatform, useIndexedDbFactory } from '../src/platform/web'
@@ -192,4 +194,5 @@ export const FULL_MEDICINE: Required<Medicine> = {
   autoDeduct: true, taken: [1_700_000_000_000, 1_700_086_400_000],
   owner: 'p-dad', since: 1_690_000_000_000, startedAt: 1_680_000_000_000, foldedUntil: 1_699_000_000_000,
   history: { '2025-07': { planned: 62, taken: 58 }, '2025-08': { planned: 62, taken: 60 } },
+  updatedAt: 1_700_100_000_000,
 }

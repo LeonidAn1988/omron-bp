@@ -31,7 +31,7 @@ import { SUBSCREENS, type Subscreen } from './logic/settings'
 import { medicinesForReminder } from './logic/reminders'
 import { Onboarding } from './ui/Onboarding'
 import { PersonSwitch } from './ui/People'
-import { activePersonOf, deviceUserOf, intakeTimesOf, medicinesOf, ownerOf } from './logic/people'
+import { activePersonOf, deviceUserOf, glucoseTargetsOf, intakeTimesOf, medicinesOf, ownerOf, targetsOf } from './logic/people'
 import { Intake } from './ui/Intake'
 import { Cabinet } from './ui/Cabinet'
 import { Entry } from './ui/Entry'
@@ -316,7 +316,10 @@ export default function App() {
 
   const handleAdd = useCallback(
     async (item: Measurement) => {
-      await putMeasurements([item])
+      // Записанное руками принадлежит тому, чей дневник открыт: кнопка прибора
+      // здесь ни при чём, её могли и не назначать вовсе.
+      const кто = activePersonOf(settingsRef.current)
+      await putMeasurements([кто ? { ...item, person: кто.id } : item])
       await refresh()
     },
     [refresh],
@@ -399,13 +402,15 @@ export default function App() {
         }
       }
 
-      const added = await addNewMeasurements(incoming.measurements)
+      // Отметку времени у восстановленных записей не трогаем: она пришла из
+      // файла и говорит, когда правку сделали на самом деле.
+      const added = await addNewMeasurements(incoming.measurements, false)
 
       const local = await getAllMedicines()
       const known = new Map(local.map((m) => [m.id, m]))
       const buried = new Set((await getAllTombstones()).map((t) => t.id))
       const freshMedicines = incoming.medicines.filter((m) => !known.has(m.id) && !buried.has(m.id))
-      for (const item of freshMedicines) await putMedicine(item)
+      for (const item of freshMedicines) await putMedicine(item, false)
       // Известные коробки не заменяем, но дописываем им то, что прежние версии
       // теряли при восстановлении: владельца, даты, историю. Остаток и
       // отметки остаются местными.
@@ -413,6 +418,8 @@ export default function App() {
         const mine = known.get(item.id)
         if (!mine) continue
         const filled = fillMissingFromCopy(mine, item)
+        // Дописали недостающее — это правка, сделанная здесь и сейчас, поэтому
+        // отметку времени ставим свою.
         if (filled !== mine) await putMedicine(filled)
       }
 
@@ -623,15 +630,6 @@ export default function App() {
     },
   })
 
-  const glucoseTargets: GlucoseTargets = useMemo(
-    () => ({
-      fastingMax: settings.glucoseFastingMax,
-      postMealMax: settings.glucosePostMealMax,
-      low: settings.glucoseLow,
-    }),
-    [settings.glucoseFastingMax, settings.glucosePostMealMax, settings.glucoseLow],
-  )
-
   /**
    * Кого показываем и какой памятью прибора он пользуется.
    *
@@ -643,15 +641,35 @@ export default function App() {
   const person = useMemo(() => activePersonOf(settings), [settings])
   const deviceUser = deviceUserOf(person)
 
+  /**
+   * Цели — человека, а не дневника.
+   *
+   * Отчёт для врача уходит из приложения на бумаге, и считать в нём проценты
+   * по чужой норме нельзя: у жены может быть 130/80 там, где у мужа 140/90.
+   * У кого личных цифр нет, берутся общие — как было до этой версии.
+   */
+  const targets = useMemo(() => targetsOf(person, settings), [person, settings])
+  const glucoseTargets: GlucoseTargets = useMemo(() => glucoseTargetsOf(person, settings), [person, settings])
+
   /** Аптечка выбранного человека. Пока человек один — вся аптечка целиком. */
   const myMedicines = useMemo(
     () => (person ? medicinesOf(medicines, settings.people, person.id) : medicines),
     [medicines, settings.people, person],
   )
 
+  /**
+   * Записи выбранного человека.
+   *
+   * У записей, сделанных с 0.8.0, есть человек — они принадлежат ему, даже
+   * если кнопку прибора потом переназначили. У прежних поля нет, и они
+   * по-прежнему следуют за кнопкой: так же, как до этой версии.
+   */
   const mine = useMemo(
-    () => (deviceUser === null ? [] : measurements.filter((m) => m.user === deviceUser)),
-    [measurements, deviceUser],
+    () =>
+      measurements.filter((m) =>
+        m.person ? m.person === person?.id : deviceUser !== null && m.user === deviceUser,
+      ),
+    [measurements, deviceUser, person],
   )
   const bpAll = useMemo(() => mine.filter(isBp), [mine])
   const glucoseAll = useMemo(() => mine.filter(isGlucose), [mine])
@@ -660,8 +678,8 @@ export default function App() {
   const glucoseScoped = useMemo(() => filterByPeriod(glucoseAll, period), [glucoseAll, period])
 
   const summary = useMemo(
-    () => summarize(bpScoped, settings.targetSys, settings.targetDia),
-    [bpScoped, settings.targetSys, settings.targetDia],
+    () => summarize(bpScoped, targets.sys, targets.dia),
+    [bpScoped, targets],
   )
   const glucoseSummary = useMemo(() => summarizeGlucose(glucoseScoped, glucoseTargets), [glucoseScoped, glucoseTargets])
 
@@ -922,7 +940,7 @@ export default function App() {
 
               {summary && (
                 <>
-                  <SummaryTiles summary={summary} targetSys={settings.targetSys} targetDia={settings.targetDia} />
+                  <SummaryTiles summary={summary} targetSys={targets.sys} targetDia={targets.dia} />
 
                   {/*
                     Просьбы стоят после данных, а не перед ними.
@@ -964,7 +982,7 @@ export default function App() {
                       <h2>Динамика давления</h2>
                       <span className="muted">точки — измерения, линия — среднее за 7 дней</span>
                     </div>
-                    <TrendChart readings={bpScoped} targetSys={settings.targetSys} targetDia={settings.targetDia} />
+                    <TrendChart readings={bpScoped} targetSys={targets.sys} targetDia={targets.dia} />
                   </div>
 
                   <div className="grid grid--two">
@@ -1130,6 +1148,8 @@ export default function App() {
       {tab === 'sync' && (
         <Sync
           pairingKey={settings.pairingKey}
+          people={settings.people}
+          person={person}
           onPairingKey={(next) => updateSettings({ ...settingsRef.current, pairingKey: next })}
           onImport={handleImport}
           onImportGlucose={handleImport}
@@ -1147,8 +1167,8 @@ export default function App() {
           glucoseTargets={glucoseTargets}
           patient={patientName}
           periodLabel={periodLabel}
-          targetSys={settings.targetSys}
-          targetDia={settings.targetDia}
+          targetSys={targets.sys}
+          targetDia={targets.dia}
           period={period}
           medicines={myMedicines}
           onPeriodChange={setPeriod}
