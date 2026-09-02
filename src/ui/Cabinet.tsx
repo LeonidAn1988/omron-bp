@@ -1,6 +1,6 @@
 import { platform } from '../platform/ports'
 import { useEffect, useRef, useState } from 'react'
-import type { IntakeTimes, Medicine, Person } from '../types'
+import type { IntakeSlot, Medicine, Person } from '../types'
 import {
   displayAlert,
   effectiveLeft,
@@ -52,7 +52,7 @@ const FILTERS: { key: Filter; title: string; days?: number }[] = [
 export function Cabinet({
   medicines,
   allMedicines,
-  intakeTimes,
+  intakeSlots,
   people,
   activePerson,
   onSave,
@@ -68,8 +68,8 @@ export function Cabinet({
   medicines: Medicine[]
   /** Вся аптечка семьи — для сводного вида. */
   allMedicines: Medicine[]
-  /** Часы стандартных приёмов из настроек — кнопки в форме препарата. */
-  intakeTimes: IntakeTimes
+  /** Кнопки стандартных приёмов из настроек — они же в форме препарата. */
+  intakeSlots: IntakeSlot[]
   people: Person[]
   activePerson: string
   onSave: (item: Medicine) => Promise<void>
@@ -149,7 +149,7 @@ export function Cabinet({
           people={people}
           activePerson={activePerson}
           medicine={item}
-          intakeTimes={intakeTimes}
+          intakeSlots={intakeSlots}
           onSave={async (next) => {
             await onSave(next)
             onBack()

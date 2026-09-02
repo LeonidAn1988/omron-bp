@@ -136,11 +136,10 @@ export function run() {
   check('крупный текст виден в строке корня',
     describeDisplay({ ...БАЗА, textScale: 'xlarge' }) === 'тёмная · текст очень крупный')
   check('люди перечислены', describePeople(чп_семья.people) === 'Я, Отец')
-  check('у одного человека видны часы приёма',
-    describePeople([{ id: 'p1', name: 'Я' }], БАЗА.intakeTimes) === 'Я · часы приёма 08:00–22:00',
+  check('строка называет, что внутри — не только имена',
+    describePeople([{ id: 'p1', name: 'Я' }], БАЗА.intakeTimes) === 'Я · настройки и часы приёма',
     describePeople([{ id: 'p1', name: 'Я' }], БАЗА.intakeTimes))
-  check('у семьи часы в строке не показываются',
-    describePeople(чп_семья.people, БАЗА.intakeTimes) === 'Я, Отец')
+  check('и у семьи тоже', describePeople(чп_семья.people, БАЗА.intakeTimes) === 'Я, Отец · настройки и часы приёма')
   check('безымянный человек назван по месту', describePeople([{ id: 'p1', name: '  ' }]) === 'Человек 1')
   check('нормы', describeTargets(БАЗА) === 'давление 135/85 · сахар ведётся')
   check('нормы показывают цель выбранного человека',

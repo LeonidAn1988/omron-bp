@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { IntakeTimes, Medicine, Person } from '../types'
+import type { IntakeSlot, Medicine, Person } from '../types'
 import { expiryToMonth, formatTime, monthToExpiry, normalizeTimes, parseTime } from '../logic/medicines'
 import { formGroup as formGroupOf, FORM_GROUPS, type Drug, type DrugVariant } from '../logic/drugs'
 import { NumberField } from './NumberField'
@@ -30,13 +30,8 @@ const MEALS: { key: Medicine['meal']; title: string }[] = [
  */
 type Presets = { time: string; title: string }[]
 
-function presetsOf(times: IntakeTimes): Presets {
-  return [
-    { time: times.morning, title: 'Утром' },
-    { time: times.day, title: 'Днём' },
-    { time: times.evening, title: 'Вечером' },
-    { time: times.night, title: 'На ночь' },
-  ]
+function presetsOf(slots: IntakeSlot[]): Presets {
+  return slots.map((slot) => ({ time: slot.time, title: slot.title }))
 }
 
 /**
@@ -110,7 +105,7 @@ function TimePicker({
  */
 export function MedicineForm({
   medicine,
-  intakeTimes,
+  intakeSlots,
   people,
   activePerson,
   onSave,
@@ -118,7 +113,7 @@ export function MedicineForm({
 }: {
   medicine?: Medicine
   /** Часы стандартных приёмов из настроек. */
-  intakeTimes: IntakeTimes
+  intakeSlots: IntakeSlot[]
   /** Люди в дневнике. Пока он один, выбора владельца в форме нет вовсе. */
   people: Person[]
   /** Кто выбран сейчас — ему и достаётся новая коробка. */
@@ -398,7 +393,7 @@ export function MedicineForm({
         <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
           Когда принимать
         </div>
-        <TimePicker times={times} presets={presetsOf(intakeTimes)} onChange={setTimes} />
+        <TimePicker times={times} presets={presetsOf(intakeSlots)} onChange={setTimes} />
         {times.length > 0 && (
           <div className="row" style={{ marginTop: 'var(--space-3)', alignItems: 'flex-end' }}>
             <div style={{ maxWidth: 150 }}>

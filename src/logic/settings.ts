@@ -71,7 +71,7 @@ export type Subscreen = (typeof SUBSCREENS)[number]
 
 export const SUBSCREEN_TITLE: Record<Subscreen, string> = {
   display: 'Экран',
-  people: 'Люди',
+  people: 'Пользователи',
   targets: 'Нормы',
   pharmacies: 'Аптеки',
   reminders: 'Напоминания',
@@ -220,12 +220,11 @@ export function describeDisplay(settings: Pick<Settings, 'theme' | 'density' | '
 
 export function describePeople(people: Person[], intakeTimes?: Settings['intakeTimes']): string {
   const имена = people.map((person, index) => person.name.trim() || `Человек ${index + 1}`).join(', ')
-  // Часы приёма живут внутри человека, и найти их там непросто: это третий
-  // уровень. Пока человек один, называем их прямо в строке — тогда видно, что
-  // за «Людьми» лежит не только имя.
-  if (people.length !== 1 || !intakeTimes) return имена
-  const часы = intakeTimesOf(people[0], intakeTimes)
-  return `${имена} · часы приёма ${часы.morning}–${часы.night}`
+  // Строка обязана назвать и кнопки приёма: они лежат внутри человека, третьим
+  // уровнем, и человек их там просто не находил — искал в «Приёме», в форме
+  // препарата, где угодно, кроме «Людей».
+  if (!intakeTimes) return имена
+  return `${имена} · настройки и часы приёма`
 }
 
 export function describeTargets(

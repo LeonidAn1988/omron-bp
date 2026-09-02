@@ -9,7 +9,7 @@
  * значит «ничей препарат». Экранов и хранилища этот модуль не касается.
  */
 
-import type { IntakeTimes, Medicine, Person, Settings } from '../types'
+import type { IntakeSlot, IntakeTimes, Medicine, Person, Settings } from '../types'
 
 /** Имя, которое приложение ставит первому человеку, если своего нет. */
 export const ПЕРВЫЙ = 'Я'
@@ -119,6 +119,66 @@ export function freeDeviceUsers(people: Person[], exceptId?: string): (1 | 2)[] 
  */
 export function intakeTimesOf(person: Person | null, fallback: IntakeTimes): IntakeTimes {
   return person?.intakeTimes ?? fallback
+}
+
+/** Заголовки четырёх исходных кнопок — в том виде, в каком они были зашиты. */
+const ИСХОДНЫЕ: { id: keyof IntakeTimes; title: string }[] = [
+  { id: 'morning', title: 'Утром' },
+  { id: 'day', title: 'Днём' },
+  { id: 'evening', title: 'Вечером' },
+  { id: 'night', title: 'На ночь' },
+]
+
+/**
+ * Кнопки стандартных приёмов у человека.
+ *
+ * Своих нет — берутся общие; общих нет — четыре исходных из `intakeTimes`.
+ * Так дневник, заведённый до появления настраиваемых кнопок, продолжает
+ * работать ровно как прежде.
+ */
+export function intakeSlotsOf(
+  person: Person | null,
+  settings: Pick<Settings, 'intakeTimes' | 'intakeSlots'>,
+): IntakeSlot[] {
+  const свои = person?.intakeSlots ?? settings.intakeSlots
+  if (свои && свои.length > 0) return свои
+  const часы = intakeTimesOf(person, settings.intakeTimes)
+  return ИСХОДНЫЕ.map(({ id, title }) => ({ id, title, time: часы[id] }))
+}
+
+/** Новый ключ кнопки приёма. Время в основе: двух за миллисекунду не заводят. */
+export function newSlotId(now: number): string {
+  return `s${now.toString(36)}`
+}
+
+/**
+ * Записать кнопки приёма — человеку или в общие настройки.
+ *
+ * Заодно обновляются четыре старых поля `intakeTimes`: их читают копии,
+ * снятые прежними версиями, и сборки, которые о настраиваемых кнопках не
+ * знают. Совпадение по ключу, а не по месту: человек мог убрать «Днём», и
+ * подставлять на его место «Вечером» значило бы сдвинуть чужое время.
+ */
+export function setIntakeSlots(
+  settings: Pick<Settings, 'people' | 'intakeTimes' | 'intakeSlots'>,
+  personId: string | null,
+  slots: IntakeSlot[],
+): Partial<Settings> {
+  const прежние = settings.intakeTimes
+  const время = (id: keyof IntakeTimes) => slots.find((slot) => slot.id === id)?.time ?? прежние[id]
+  const совместимость: IntakeTimes = {
+    morning: время('morning'),
+    day: время('day'),
+    evening: время('evening'),
+    night: время('night'),
+  }
+  if (settings.people.length <= 1 || !personId) {
+    return { intakeSlots: slots, intakeTimes: совместимость }
+  }
+  return {
+    people: settings.people.map((p) => (p.id === personId ? { ...p, intakeSlots: slots } : p)),
+    intakeTimes: совместимость,
+  }
 }
 
 /**

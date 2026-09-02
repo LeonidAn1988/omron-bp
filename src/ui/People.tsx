@@ -12,9 +12,9 @@
  */
 
 import { useState } from 'react'
-import type { Medicine, Person, Settings as SettingsData } from '../types'
-import { freeDeviceUsers, intakeTimesOf, MAX_PEOPLE, newPersonId, ownerOf } from '../logic/people'
-import { INTAKE_SLOTS, describePerson, setIntakeTime } from '../logic/settings'
+import type { IntakeSlot, Medicine, Person, Settings as SettingsData } from '../types'
+import { freeDeviceUsers, intakeSlotsOf, MAX_PEOPLE, newPersonId, newSlotId, ownerOf, setIntakeSlots } from '../logic/people'
+import { describePerson } from '../logic/settings'
 import { plural } from '../logic/plural'
 import { BackBar, Banner, Field, NavRow } from './bits'
 
@@ -80,11 +80,23 @@ export function PersonScreen({
   const [удаляем, setУдаляем] = useState(false)
   const { people } = settings
   const его = medicines.filter((m) => ownerOf(m, people) === person.id)
-  const часы = intakeTimesOf(person, settings.intakeTimes)
   const последний = people.length === 1
 
   const заменить = (fields: Partial<Person>) =>
     onChange({ people: people.map((p) => (p.id === person.id ? { ...p, ...fields } : p)) })
+
+  const приёмы = intakeSlotsOf(person, settings)
+  const заменитьПриём = (index: number, fields: Partial<IntakeSlot>) =>
+    onChange(setIntakeSlots(settings, person.id, приёмы.map((slot, i) => (i === index ? { ...slot, ...fields } : slot))))
+  const добавитьПриём = () => {
+    const now = Date.now()
+    // Время новой кнопки — через три часа после последней: подставлять полночь
+    // значит заставить человека крутить барабан от нуля.
+    const последняя = приёмы[приёмы.length - 1]?.time ?? '08:00'
+    const [ч, м] = последняя.split(':').map(Number)
+    const дальше = `${String((ч + 3) % 24).padStart(2, '0')}:${String(м || 0).padStart(2, '0')}`
+    onChange(setIntakeSlots(settings, person.id, [...приёмы, { id: newSlotId(now), title: `В ${дальше}`, time: дальше }]))
+  }
 
   return (
     <div className="stack">
@@ -113,21 +125,50 @@ export function PersonScreen({
 
           <div>
             <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
-              Часы приёма
+              Кнопки приёма
             </div>
-            <div className="stack" style={{ gap: 'var(--space-3)' }}>
-              {INTAKE_SLOTS.map(({ key, title }) => (
-                <Field key={key} label={title}>
-                  <input
-                    type="time"
-                    value={часы[key]}
-                    onChange={(e) => onChange(setIntakeTime(settings, person.id, key, e.target.value))}
-                  />
-                </Field>
+            <div className="muted" style={{ marginBottom: 'var(--space-3)' }}>
+              Это готовые кнопки в форме препарата: нажал — и время подставилось. Их может быть сколько нужно.
+            </div>
+
+            <div className="stack" style={{ gap: 'var(--space-4)' }}>
+              {приёмы.map((slot, index) => (
+                <div className="slotrow" key={slot.id}>
+                  <Field label="Название">
+                    <input
+                      value={slot.title}
+                      placeholder="Утром"
+                      onChange={(e) => заменитьПриём(index, { title: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Время">
+                    <input
+                      type="time"
+                      value={slot.time}
+                      onChange={(e) => заменитьПриём(index, { time: e.target.value || slot.time })}
+                    />
+                  </Field>
+                  <button
+                    className="btn btn--sm"
+                    // Последнюю не убираем: без кнопок форма препарата теряет
+                    // быстрый ввод времени вовсе, а вернуть их будет негде.
+                    disabled={приёмы.length <= 1}
+                    onClick={() => onChange(setIntakeSlots(settings, person.id, приёмы.filter((_, i) => i !== index)))}
+                  >
+                    Убрать
+                  </button>
+                </div>
               ))}
             </div>
+
+            <div className="row" style={{ marginTop: 'var(--space-4)' }}>
+              <button className="btn" onClick={добавитьПриём}>
+                Добавить кнопку
+              </button>
+            </div>
+
             <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
-              Это кнопки «Утром», «Днём», «Вечером», «На ночь» в форме препарата. Заведённые препараты не меняются.
+              Заведённые препараты не меняются: у них своё время, и переписывать его за человека нельзя.
             </div>
           </div>
         </div>
@@ -215,8 +256,8 @@ export function People({
 
       <div className="card">
         <div className="card__head">
-          <h2>Люди</h2>
-          <span className="muted">чьи дела ведём в этом дневнике</span>
+          <h2>Пользователи</h2>
+          <span className="muted">настройки и часы приёма</span>
         </div>
 
         <ul className="pills">

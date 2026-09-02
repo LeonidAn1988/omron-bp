@@ -31,7 +31,7 @@ import { SUBSCREENS, type Subscreen } from './logic/settings'
 import { medicinesForReminder } from './logic/reminders'
 import { Onboarding } from './ui/Onboarding'
 import { PersonSwitch } from './ui/People'
-import { activePersonOf, deviceUserOf, glucoseTargetsOf, intakeTimesOf, medicinesOf, ownerOf, targetsOf } from './logic/people'
+import { activePersonOf, deviceUserOf, glucoseTargetsOf, medicinesOf, ownerOf, targetsOf, intakeSlotsOf } from './logic/people'
 import { Intake } from './ui/Intake'
 import { Cabinet } from './ui/Cabinet'
 import { Entry } from './ui/Entry'
@@ -1184,7 +1184,7 @@ export default function App() {
           <Cabinet
             medicines={myMedicines}
             allMedicines={medicines}
-            intakeTimes={intakeTimesOf(person, settings.intakeTimes)}
+            intakeSlots={intakeSlotsOf(person, settings)}
             people={settings.people}
             activePerson={person?.id ?? ''}
             onSave={handleSaveMedicine}
