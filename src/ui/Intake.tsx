@@ -156,6 +156,7 @@ export function Intake({
   onMark,
   toRoot = 0,
   openDay = null,
+  имя = null,
 }: {
   medicines: Medicine[]
   /**
@@ -177,6 +178,8 @@ export function Intake({
    * сегодняшний день значит показать не то, что он только что отметил.
    */
   openDay?: number | null
+  /** Чей приём показан. Пусто, пока человек в дневнике один: уточнять нечего. */
+  имя?: string | null
 }) {
   const [now, setNow] = useState(() => Date.now())
   const [selected, setSelected] = useState(() => openDay ?? Date.now())
@@ -240,7 +243,10 @@ export function Intake({
       />
 
       <div className="intake__head">
-        <h2>{dayName(selected, now)}</h2>
+        <h2>
+          {dayName(selected, now)}
+          {имя && <span className="muted"> · {имя}</span>}
+        </h2>
         {/* Живая область: отметка приёма — самое частое действие в
             приложении, и до этого она проходила совсем молча. Экранный
             диктор теперь произносит, сколько осталось, сразу после
@@ -413,7 +419,7 @@ function PartCard({
             </span>
 
             {row.medicine.autoDeduct ? (
-              <span className="dose__auto">списывается само</span>
+              <span className="dose__auto">отмечать не нужно</span>
             ) : row.takenAt === null ? (
               можно ? (
                 <button

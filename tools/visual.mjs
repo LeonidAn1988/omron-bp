@@ -46,13 +46,100 @@ export const SCREENS = [
   { name: 'Карточка БАДа', tab: 'Аптечка', open: 'Омега-3' },
   { name: 'Форма препарата', tab: 'Аптечка', click: 'Добавить препарат' },
   { name: 'Отчёт врачу', tool: 'Отчёт' },
+  // Настройки стали двухуровневыми: корень и шесть подэкранов. Снимать надо
+  // каждый — регрессия вёрстки на подэкране в корне не видна.
   { name: 'Настройки', tool: 'Настройки' },
+  { name: 'Настройки — экран', tool: 'Настройки', open: 'Экран' },
+  { name: 'Настройки — что показывать внизу', tool: 'Настройки', open: 'Экран', expand: 'Что показывать внизу' },
+  { name: 'Настройки — люди', tool: 'Настройки', open: 'Люди' },
+  { name: 'Настройки — человек', tool: 'Настройки', open: ['Люди', 'Я'] },
+  { name: 'Настройки — нормы', tool: 'Настройки', open: 'Нормы' },
+  { name: 'Настройки — копия дневника', tool: 'Настройки', open: 'Копия дневника' },
   // Пароль копии — новое состояние экрана, и оно не видно, пока галка снята.
-  { name: 'Настройки — пароль копии', tool: 'Настройки', check: 'Закрыть копию паролем' },
+  { name: 'Настройки — пароль копии', tool: 'Настройки', open: 'Копия дневника', check: 'Закрыть копию паролем' },
+  { name: 'Настройки — для таблиц', tool: 'Настройки', open: 'Копия дневника', expand: 'Для таблиц' },
+  { name: 'Настройки — о приложении', tool: 'Настройки', open: 'О приложении' },
   // История версий свёрнута по умолчанию — иначе в снимок попадает одна строка.
-  { name: 'Настройки — история версий', tool: 'Настройки', expand: 'Прежние версии' },
+  { name: 'Настройки — история версий', tool: 'Настройки', open: 'О приложении', expand: 'Прежние версии' },
   { name: 'Прибор', tool: 'Прибор' },
+  { name: 'Прибор — если не подключается', tool: 'Прибор', expand: 'Если не подключается' },
 ]
+
+/**
+ * Экраны, на которых видно семью: имя в заголовке, полоса людей, сводная
+ * аптечка, список людей и экран человека.
+ */
+const СЕМЕЙНЫЕ = [
+  { name: 'Обзор', tab: 'Обзор' },
+  { name: 'Приём', tab: 'Приём' },
+  { name: 'Аптечка', tab: 'Аптечка' },
+  { name: 'Аптечка — вся семья', tab: 'Аптечка', family: true },
+  { name: 'Настройки', tool: 'Настройки' },
+  { name: 'Настройки — люди', tool: 'Настройки', open: 'Люди' },
+  { name: 'Настройки — человек', tool: 'Настройки', open: ['Люди', 'Отец'] },
+  { name: 'Настройки — нормы', tool: 'Настройки', open: 'Нормы' },
+]
+
+/** Экраны, где крупный текст ломает вёрстку чаще всего. */
+const КРУПНЫЕ = [
+  { name: 'Обзор', tab: 'Обзор' },
+  { name: 'Приём', tab: 'Приём' },
+  { name: 'Аптечка', tab: 'Аптечка' },
+  { name: 'Форма препарата', tab: 'Аптечка', click: 'Добавить препарат' },
+  { name: 'Настройки', tool: 'Настройки' },
+  { name: 'Настройки — экран', tool: 'Настройки', open: 'Экран' },
+  { name: 'Настройки — копия дневника', tool: 'Настройки', open: 'Копия дневника' },
+  { name: 'Отчёт врачу', tool: 'Отчёт' },
+]
+
+/**
+ * Прогоны: две темы плюс режим отца и семейный.
+ *
+ * Отец читает «Очень крупным» текстом, и вёрстка ломается именно там — а до
+ * 0.8.0 этот режим не снимался вовсе, и регрессию в нём поймать было нечем.
+ */
+const ПРОФИЛИ = [
+  { suffix: 'светлая', theme: 'light' },
+  { suffix: 'тёмная', theme: 'dark' },
+  { suffix: 'очень крупный', theme: 'light', patch: { textScale: 'xlarge' }, screens: КРУПНЫЕ },
+  {
+    suffix: 'семья',
+    theme: 'light',
+    patch: {
+      people: [
+        { id: 'p1', name: 'Я', deviceUser: 1 },
+        { id: 'p-dad', name: 'Отец', deviceUser: 2, intakeTimes: { morning: '09:00', day: '13:00', evening: '18:00', night: '21:30' } },
+      ],
+      activePerson: 'p1',
+    },
+    screens: СЕМЕЙНЫЕ,
+  },
+]
+
+/** Дописать настройки поверх посева и перезагрузить: состояние читается при старте. */
+async function применить(page, patch) {
+  await page.evaluate(async (fields) => {
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('omron-bp')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    const было = await new Promise((resolve, reject) => {
+      const request = db.transaction('meta').objectStore('meta').get('settings')
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
+    })
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('meta', 'readwrite')
+      tx.objectStore('meta').put({ ...(было || {}), ...fields }, 'settings')
+      tx.oncomplete = resolve
+      tx.onerror = () => reject(tx.error)
+    })
+    db.close()
+  }, patch)
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await settle(page)
+}
 
 /**
  * Наполнение аптечки и дневников.
@@ -187,8 +274,13 @@ export async function go(page, screen) {
   }
   await page.waitForTimeout(250)
 
-  if (screen.open) {
-    await page.locator('.pill__open', { hasText: screen.open }).first().click()
+  // Список: два клика подряд — так открывается экран человека внутри «Людей».
+  for (const шаг of screen.open ? (Array.isArray(screen.open) ? screen.open : [screen.open]) : []) {
+    await page.locator('.pill__open', { hasText: шаг }).first().click()
+    await page.waitForTimeout(250)
+  }
+  if (screen.family) {
+    await page.locator('[aria-label="Чья аптечка"] button', { hasText: 'Вся семья' }).click()
     await page.waitForTimeout(250)
   }
   if (screen.click) {
@@ -218,7 +310,8 @@ async function main() {
   const browser = await chromium.launch()
   let count = 0
 
-  for (const theme of ['light', 'dark']) {
+  for (const профиль of ПРОФИЛИ) {
+    const theme = профиль.theme
     const context = await browser.newContext({
       viewport: { width: 390, height: 900 },
       locale: 'ru-RU',
@@ -242,19 +335,22 @@ async function main() {
 
     // Тема ставится настройкой приложения, а не системной: снимок должен
     // показывать ровно то, что выбрал человек.
+    // Сначала настройки профиля, потом тема: `применить` перезагружает
+    // страницу, и атрибут темы, поставленный до неё, потерялся бы.
+    if (профиль.patch) await применить(page, профиль.patch)
     await page.evaluate((value) => document.documentElement.setAttribute('data-theme', value), theme)
     await page.waitForTimeout(200)
 
-    for (const screen of SCREENS) {
+    for (const screen of профиль.screens ?? SCREENS) {
       try {
         await go(page, screen)
-        await percySnapshot(page, `${screen.name} — ${theme === 'light' ? 'светлая' : 'тёмная'}`)
+        await percySnapshot(page, `${screen.name} — ${профиль.suffix}`)
         count += 1
-        console.log(`  снят: ${screen.name} (${theme})`)
+        console.log(`  снят: ${screen.name} (${профиль.suffix})`)
       } catch (error) {
         // Один непойманный экран не должен ронять весь прогон: остальные
         // снимки полезны и сами по себе.
-        console.error(`  ПРОПУЩЕН ${screen.name} (${theme}): ${error.message.split('\n')[0]}`)
+        console.error(`  ПРОПУЩЕН ${screen.name} (${профиль.suffix}): ${error.message.split('\n')[0]}`)
       }
     }
 
@@ -262,7 +358,8 @@ async function main() {
   }
 
   await browser.close()
-  console.log(`\nснимков отправлено: ${count} из ${SCREENS.length * 2}`)
+  const всего = ПРОФИЛИ.reduce((sum, п) => sum + (п.screens ?? SCREENS).length, 0)
+  console.log(`\nснимков отправлено: ${count} из ${всего}`)
   if (count === 0) process.exitCode = 1
 }
 

@@ -61,7 +61,7 @@ export function Readings({
         <tbody>
           {rows.map((reading) => {
             const marks = [
-              reading.ihb && 'аритмия',
+              reading.ihb && 'нерегулярный пульс',
               reading.mov && 'движение',
               reading.arm && ARM_LABELS[reading.arm],
             ].filter(Boolean)

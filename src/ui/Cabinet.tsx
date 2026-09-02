@@ -47,7 +47,6 @@ export function Cabinet({
   activePerson,
   onSave,
   onDelete,
-  onPickPerson,
   card = null,
   form = null,
   onOpenCard,
@@ -64,8 +63,6 @@ export function Cabinet({
   activePerson: string
   onSave: (item: Medicine) => Promise<void>
   onDelete: (id: string) => Promise<void>
-  /** Переключить человека: открывая чужую коробку, надо перейти к её владельцу. */
-  onPickPerson: (id: string) => void
   /**
    * Открытая коробка и форма приходят снаружи, из стека экранов приложения.
    *
@@ -94,6 +91,7 @@ export function Cabinet({
   const [scope, setScope] = useState<'mine' | 'family'>('mine')
   const семья = people.length > 1
   const видимые = семья && scope === 'family' ? allMedicines : medicines
+  const людиПоId = (id: string | null) => people.find((p) => p.id === id)?.name?.trim() || null
   const имяВладельца = (item: Medicine) => {
     if (!семья || scope !== 'family') return null
     const id = ownerOf(item, people)
@@ -147,6 +145,7 @@ export function Cabinet({
     return (
       <MedicineCard
         medicine={opened}
+        owner={имяВладельца(opened) ?? (семья ? людиПоId(ownerOf(opened, people)) : null)}
         onBack={onBack}
         onSave={onSave}
         onEdit={() => onEditCard(opened.id)}
@@ -174,7 +173,12 @@ export function Cabinet({
 
       <div className="card">
         <div className="card__head">
-          <h2>Аптечка</h2>
+          <h2>
+            Аптечка
+            {семья && scope === 'mine' && (
+              <span className="muted"> · {people.find((p) => p.id === activePerson)?.name.trim() || 'Я'}</span>
+            )}
+          </h2>
           {видимые.length > 0 && <span className="muted">препаратов: {видимые.length}</span>}
         </div>
 
@@ -183,8 +187,10 @@ export function Cabinet({
         {семья && (
           <div className="segmented segmented--fill no-print" role="group" aria-label="Чья аптечка"
                style={{ marginBottom: 'var(--space-3)' }}>
+            {/* Имя вместо «Моя»: когда людей больше одного, «моя» читается от
+                лица приложения, а не человека — а выбран может быть отец. */}
             <button aria-pressed={scope === 'mine'} onClick={() => setScope('mine')}>
-              Моя
+              {people.find((p) => p.id === activePerson)?.name.trim() || 'Моя'}
             </button>
             <button aria-pressed={scope === 'family'} onClick={() => setScope('family')}>
               Вся семья
@@ -220,18 +226,12 @@ export function Cabinet({
                 medicine={item}
                 now={now}
                 owner={имяВладельца(item)}
-                onOpen={() => {
-                  // Чужую коробку открываем от имени её владельца: правки и
-                  // отметки должны идти тому, чья она. Иначе отметить приём не
-                  // тому человеку — дело одного нажатия, а найти ошибку потом
-                  // трудно.
-                  const чей = ownerOf(item, people)
-                  if (чей && чей !== activePerson) {
-                    onPickPerson(чей)
-                    setScope('mine')
-                  }
-                  открыть(item.id)
-                }}
+                // Чужую коробку открываем как есть, не переключая человека.
+                // Раньше переключали «чтобы правки шли владельцу», но владелец
+                // берётся из самой коробки, отметить приём с карточки нельзя, а
+                // менялся при этом весь экран под человеком, который просто
+                // смотрел, что в доме заканчивается.
+                onOpen={() => открыть(item.id)}
               />
             ))}
           </ul>
@@ -319,7 +319,7 @@ function CabinetRow({
             owner ?? '',
             shortFormOf(medicine.form),
             left === null ? '' : `${estimated ? '≈ ' : ''}${left} шт.`,
-            estimated ? (medicine.autoDeduct ? 'списывается само' : 'по расчёту') : '',
+            estimated ? (medicine.autoDeduct ? 'отмечать не нужно' : 'по расчёту') : '',
           ]
             .filter(Boolean)
             .join(' · ')}

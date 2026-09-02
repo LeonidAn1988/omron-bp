@@ -502,22 +502,6 @@ export default function App() {
     [refreshMedicines],
   )
 
-  /** Сколько препаратов требуют внимания — для плашки на обзоре. */
-  const medicineAlerts = useMemo(() => countAlerts(medicines, Date.now()), [medicines])
-
-  /**
-   * Пометка на переключателе указывает туда, где дело.
-   *
-   * Раньше одна пометка на «Приёме» зажигалась и от неотмеченного приёма, и от
-   * кончающегося препарата. Человек шёл на «Приём» из-за амлодипина, а про
-   * амлодипин там ничего нет — про него на «Аптечке». Теперь каждая вкладка
-   * отвечает за своё.
-   */
-  const intakeMark = useMemo(
-    () => pendingToday(medicines.filter((m) => !m.autoDeduct), Date.now()) > 0,
-    [medicines],
-  )
-  const cabinetMark = medicineAlerts > 0
 
   /**
    * Развёрнутые предупреждения прячутся на неделю.
@@ -658,6 +642,29 @@ export default function App() {
   )
 
   /**
+   * Тревоги аптечки — по своим коробкам, а не по всей семье.
+   *
+   * Точка на вкладке и баннер горят у того, кто открыт; считать их по общей
+   * аптечке значило звать человека разобраться с чужим лекарством, до которого
+   * ему нет дела, а своё при этом молчало бы.
+   */
+  const medicineAlerts = useMemo(() => countAlerts(myMedicines, Date.now()), [myMedicines])
+
+  /**
+   * Пометки на вкладках указывают туда, где дело, и только по своим записям.
+   *
+   * Раньше одна пометка на «Приёме» зажигалась и от неотмеченного приёма, и от
+   * кончающегося препарата. Человек шёл на «Приём» из-за амлодипина, а про
+   * амлодипин там ничего нет — про него на «Аптечке». А считались обе по всей
+   * семье: точка горела у жены из-за отцовской таблетки.
+   */
+  const intakeMark = useMemo(
+    () => pendingToday(myMedicines.filter((m) => !m.autoDeduct), Date.now()) > 0,
+    [myMedicines],
+  )
+  const cabinetMark = medicineAlerts > 0
+
+  /**
    * Записи выбранного человека.
    *
    * У записей, сделанных с 0.8.0, есть человек — они принадлежат ему, даже
@@ -746,6 +753,8 @@ export default function App() {
   }, [идентификаторыКоробок])
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? ''
   // Имя пациента в отчёте — имя человека, а не подпись кнопки на приборе.
+  // «Я» именем в документе не считается: в отчёте, который несут врачу, это
+  // выглядит так, будто дневник вели не глядя. Отчёт попросит вписать имя.
   const patientName = person?.name?.trim() || 'Пользователь'
 
   // Знакомство — до всего остального, но только на пустом дневнике: тому, кто
@@ -972,6 +981,7 @@ export default function App() {
                   {!nudgeHidden.cabinet && (
                     <MedicineNudge
                       count={medicineAlerts}
+                      items={myMedicines}
                       onOpen={() => setTab('cabinet')}
                       onDismiss={() => snoozeNudge('cabinet')}
                     />
@@ -1120,7 +1130,13 @@ export default function App() {
       {saveBanner}
 
       {tab === 'intake' && (
-        <Intake medicines={myMedicines} onMark={handleMarkTaken} toRoot={rootSignal} openDay={reminderDay} />
+        <Intake
+          medicines={myMedicines}
+          onMark={handleMarkTaken}
+          toRoot={rootSignal}
+          openDay={reminderDay}
+          имя={settings.people.length > 1 ? (person?.name.trim() ?? null) : null}
+        />
       )}
 
       {tab === 'cabinet' && (
@@ -1134,7 +1150,6 @@ export default function App() {
             activePerson={person?.id ?? ''}
             onSave={handleSaveMedicine}
             onDelete={handleDeleteMedicine}
-            onPickPerson={(id) => updateSettings({ ...settingsRef.current, activePerson: id })}
             card={открытаяКоробка}
             form={открытаяФорма}
             onOpenCard={(id) => открыть({ kind: 'card', id })}

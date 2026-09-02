@@ -45,12 +45,15 @@ export function MedicineCard({
   onSave,
   onDelete,
   onEdit,
+  owner,
 }: {
   medicine: Medicine
   onBack: () => void
   onSave: (item: Medicine) => Promise<void>
   onDelete: () => void
   onEdit: () => void
+  /** Чья коробка. Пусто — своя или человек в дневнике один. */
+  owner?: string | null
 }) {
   const [editingLeft, setEditingLeft] = useState(false)
   const [leftValue, setLeftValue] = useState(String(medicine.left ?? ''))
@@ -84,7 +87,12 @@ export function MedicineCard({
             {medicine.name}
             <KindTag kind={medicine.kind} />
           </h2>
-          {medicine.dose && <span className="muted">{medicine.dose}</span>}
+          <span className="muted">
+            {/* Владелец назван прямо: карточку открывают и из общей аптечки,
+                где рядом лежат чужие коробки, а экран при этом на другого
+                человека не переключается. */}
+            {[owner, medicine.dose].filter(Boolean).join(' · ')}
+          </span>
         </div>
 
         {shownAlert && (
@@ -150,7 +158,7 @@ export function MedicineCard({
           <Row
             label="Остаток"
             value={left === null ? '' : `${estimated ? '≈ ' : ''}${left} шт.`}
-            note={medicine.autoDeduct ? 'списывается само' : estimated ? 'по расчёту' : undefined}
+            note={medicine.autoDeduct ? 'отмечать не нужно' : estimated ? 'по расчёту' : undefined}
           />
           <Row label="Приём" value={schedule} note={medicine.meal === 'before' ? 'до еды' : medicine.meal === 'after' ? 'после еды' : undefined} />
           <Row label="Годен до" value={medicine.expires === null ? '' : monthYear(medicine.expires)} />

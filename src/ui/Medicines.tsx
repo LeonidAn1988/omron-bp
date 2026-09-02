@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Medicine } from '../types'
 import {
+  medicineAlert,
   packsNeeded,
   restockList,
   restockText,
@@ -103,22 +104,35 @@ export const ALERT_TONE: Record<MedicineAlert['kind'], 'critical' | 'warning'> =
 
 export function MedicineNudge({
   count,
+  items,
   onOpen,
   onDismiss,
 }: {
   count: number
+  /** Коробки выбранного человека — из них берутся названия для баннера. */
+  items: Medicine[]
   onOpen: () => void
   /** «Понятно»: убрать баннер на неделю. Точка на вкладке «Аптечка» останется. */
   onDismiss: () => void
 }) {
   if (count === 0) return null
 
+  const now = Date.now()
+  const тревожные = items.filter((m) => medicineAlert(m, now) !== null)
+  const названия = тревожные.slice(0, 2).map((m) => m.name.trim()).filter(Boolean)
+  const список =
+    названия.length === 0
+      ? 'Что-то заканчивается или у чего-то истекает срок годности.'
+      : `${названия.join(', ')}${тревожные.length > названия.length ? ` и ещё ${тревожные.length - названия.length}` : ''}.`
+
   return (
     <Banner tone="warning">
       <b>
         Аптечка: {count} {plural(count, 'препарат требует', 'препарата требуют', 'препаратов требуют')} внимания
       </b>
-      <div style={{ marginTop: 4 }}>Что-то заканчивается или у чего-то истекает срок годности.</div>
+      {/* Названия, а не «что-то»: приложение знает, о чём речь, и молчать об
+          этом — заставлять открывать аптечку ради того, что можно сказать. */}
+      <div style={{ marginTop: 4 }}>{список}</div>
       <div className="row" style={{ marginTop: 'var(--space-3)' }}>
         <button className="btn" onClick={onOpen}>
           Открыть аптечку

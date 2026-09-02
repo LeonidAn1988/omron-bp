@@ -186,7 +186,7 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
             медленном телефоне заводило второе измерение с теми же цифрами, а
             дубль в дневнике давления врач читает как две разные попытки. */}
         <button className="btn btn--primary" type="submit" disabled={busy}>
-          {busy ? 'Записываю…' : 'Добавить'}
+          {busy ? 'Сохранение…' : 'Добавить'}
         </button>
       </div>
 

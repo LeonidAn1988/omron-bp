@@ -90,7 +90,7 @@ export function DataSafety({
           <div className="tile__label">Резервная копия</div>
           <div style={{ marginTop: 4 }}>
             {lastAt === null ? (
-              <b className="critical-text">копий ещё не было</b>
+              <b>копий ещё не было</b>
             ) : (
               <>
                 Последняя — <b>{describeBackupAge(lastAt, Date.now())}</b>
@@ -305,7 +305,10 @@ export function BackupNudge({
   }[status.warning]
 
   return (
-    <Banner tone="warning">
+    // «Копий ещё не было» — не тревога, а обычное состояние сразу после
+    // установки. Жёлтый треугольник тут обесценивает сам знак: если им
+    // помечено всё подряд, его перестают замечать и там, где он к месту.
+    <Banner tone={status.warning === 'never' ? 'info' : 'warning'}>
       <b>{NUDGE_TITLE[status.warning]}</b>
       <div style={{ marginTop: 4 }}>{explain}</div>
       {status.locked && (

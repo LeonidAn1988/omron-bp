@@ -94,7 +94,7 @@ export function GlucoseSync({
             <div className="progress__bar" />
           </div>
           <div className="muted" style={{ marginTop: 'var(--space-2)' }} role="status" aria-live="polite">
-            {count > 0 ? `Получено замеров: ${count}` : 'Соединяюсь с прибором…'}
+            {count > 0 ? `Получено замеров: ${count}` : 'Связь с прибором…'}
           </div>
         </div>
       )}

@@ -19,6 +19,7 @@ import { BleLog, logToText, useBleLog } from './BleLog'
 import { Banner, Field, Reveal } from './bits'
 import { GlucoseSync } from './GlucoseSync'
 import { download } from '../logic/io'
+import { plural } from '../logic/plural'
 
 const FULL_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
 const DAY = 86_400_000
@@ -284,7 +285,7 @@ export function Sync({
             {downloading ? 'Идёт выгрузка…' : 'Подключить и выгрузить'}
           </button>
           <button className="btn" onClick={handlePair} disabled={busy !== null}>
-            {busy === 'pair' ? 'Сопрягаю…' : 'Сопряжение'}
+            {busy === 'pair' ? 'Сопряжение…' : 'Сопряжение'}
           </button>
           {device && (
             <button className="btn btn--sm" onClick={() => setDevice(null)} disabled={busy !== null}>
@@ -300,9 +301,9 @@ export function Sync({
             </div>
             <div className="muted" style={{ marginTop: 'var(--space-2)' }} role="status" aria-live="polite">
               {connecting
-                ? 'Соединяюсь с прибором и проверяю ключ…'
+                ? 'Связь с прибором, проверка ключа…'
                 : progress >= 1
-                  ? 'Прочитано. Записываю в дневник…'
+                  ? 'Прочитано, идёт запись в дневник…'
                   : `Выгрузка из памяти прибора — ${Math.round(progress * 100)}%. Не выключайте Bluetooth на тонометре.`}
             </div>
           </div>
@@ -326,7 +327,7 @@ export function Sync({
                   <li>Нажмите кнопку ниже и снова выберите прибор в списке.</li>
                 </ol>
                 <button className="btn btn--primary" onClick={handlePair} disabled={busy !== null} style={{ marginTop: 'var(--space-3)' }}>
-                  {busy === 'pair' ? 'Сопрягаю…' : 'Сопрячь сейчас'}
+                  {busy === 'pair' ? 'Сопряжение…' : 'Сопрячь сейчас'}
                 </button>
               </Banner>
             </div>
@@ -416,7 +417,7 @@ export function Sync({
           <b>Часы тонометра сбиты</b>
           <div style={{ marginTop: 4 }}>
             Последнее измерение датировано {FULL_DATE.format(outcome.newestTs!)} — это на {Math.abs(skewDays)}{' '}
-            {Math.abs(skewDays) === 1 ? 'день' : 'дней'} {skewDays > 0 ? 'раньше' : 'позже'} сегодняшней даты. Даты
+            {plural(Math.abs(skewDays), 'день', 'дня', 'дней')} {skewDays > 0 ? 'раньше' : 'позже'} сегодняшней даты. Даты
             берутся из самого прибора, поэтому история приехала со сдвигом. Поправьте дату и время кнопками на
             тонометре — приложение их намеренно не трогает.
           </div>
