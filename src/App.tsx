@@ -53,7 +53,7 @@ import { useReminders } from './ui/useReminders'
 import { BackupNudge } from './ui/Backup'
 import { Settings } from './ui/Settings'
 import { Report } from './ui/Report'
-import { Banner, Reveal } from './ui/bits'
+import { Banner, Reveal, Working } from './ui/bits'
 
 /**
  * Разделы нижней навигации.
@@ -547,6 +547,19 @@ export default function App() {
       await refreshMedicines()
     },
   })
+
+  /**
+   * Чем приложение занято прямо сейчас — одной строкой под шапкой.
+   *
+   * Порядок важен: сначала то, ради чего человек ждёт (чтение чужих копий при
+   * открытии), потом фоновое (запись своей копии). Двух строк сразу быть не
+   * должно — мелькание хуже молчания.
+   */
+  const занятость = family.busy
+    ? 'Читаю записи семьи…'
+    : backup.busy
+      ? 'Сохраняю копию дневника…'
+      : null
   /** Копия просрочена — точка на «Настройках» горит и после «Понятно». */
   const settingsMark = backup.warning !== null
 
@@ -824,8 +837,15 @@ export default function App() {
 
   if (!ready) {
     return (
-      <div className="app" style={{ padding: 40, color: 'var(--text-muted)' }}>
-        Загрузка…
+      <div className="app">
+        <header className="topbar">
+          <div className="topbar__title">
+            <h1>Дневник здоровья</h1>
+          </div>
+        </header>
+        {/* Полоса, а не одно слово: на телефоне отца дневник открывается не
+            мгновенно, и статичное «Загрузка…» неотличимо от зависшего экрана. */}
+        <Working label="Открываю дневник…" />
       </div>
     )
   }
@@ -905,6 +925,8 @@ export default function App() {
       {/* Между шапкой и вкладками: смена человека меняет всё, что ниже, и
           выглядеть частью одного экрана она не должна. Появляется, только
           когда людей больше одного. */}
+      <Working label={занятость} />
+
       {/* В настройках полосы нет: всё личное живёт внутри «Людей», и
           переключатель здесь только сбивал бы с толку — он не меняет ничего из
           того, что видно на экране. */}
@@ -1167,6 +1189,7 @@ export default function App() {
             activePerson={person?.id ?? ''}
             onSave={handleSaveMedicine}
             onDelete={handleDeleteMedicine}
+            pharmacies={settings.pharmacies ?? []}
             card={открытаяКоробка}
             form={открытаяФорма}
             onOpenCard={(id) => открыть({ kind: 'card', id })}

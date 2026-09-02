@@ -113,6 +113,18 @@ export function BackBar({ onBack }: { onBack: () => void }) {
   )
 }
 
+/**
+ * Что приложение делает прямо сейчас.
+ *
+ * Полоска под шапкой и одна строка словами. Раньше всё, что идёт само —
+ * чтение копий семьи при открытии, запись копии после правки, — происходило
+ * молча: экран замирал на секунду, и понять, думает приложение или сломалось,
+ * было нечем. Для пожилого человека это разница между «подожду» и «нажму ещё
+ * раз пять и позвоню сыну».
+ *
+ * Полоса неопределённая: сколько осталось, приложение не знает, а рисовать
+ * проценты, которых нет, — врать. Строка говорит, что именно идёт.
+ */
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="field">
@@ -135,6 +147,21 @@ export function Reveal({ open, children }: { open: boolean; children: ReactNode 
   return (
     <div className="reveal" data-open={open} inert={!open}>
       <div>{children}</div>
+    </div>
+  )
+}
+
+export function Working({ label }: { label: string | null }) {
+  return (
+    <div className="no-print" aria-live="polite" aria-atomic="true">
+      <Reveal open={label !== null}>
+        <div className="working">
+          <div className="progress progress--indeterminate" aria-hidden="true">
+            <div className="progress__bar" />
+          </div>
+          <span className="working__label">{label ?? ''}</span>
+        </div>
+      </Reveal>
     </div>
   )
 }

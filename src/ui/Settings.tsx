@@ -28,6 +28,7 @@ import { parseChangelog } from '../logic/changelog'
 import changelogSource from '../../CHANGELOG.md?raw'
 import { BackupScreen } from './BackupScreen'
 import { FamilyScreen } from './Family'
+import { PHARMACIES, describePharmacies } from '../logic/pharmacies'
 import { People, PersonScreen } from './People'
 import type { BackupStatus } from './useBackup'
 import type { FamilySyncStatus } from './useFamilySync'
@@ -149,6 +150,50 @@ function DisplayScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
             </div>
           </div>
         </details>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Аптеки: где искать лекарства из списка покупок.
+ *
+ * Приложение никуда не ходит само — оно только собирает ссылку на поиск. Про
+ * наличие и цену здесь ничего не обещается: у сетей нет открытых интерфейсов,
+ * и знать остаток аптеки мы не можем.
+ */
+function PharmaciesScreen({ settings, onPatch, onBack }: Общее & { onBack: () => void }) {
+  const выбраны = settings.pharmacies ?? []
+  const переключить = (id: string, on: boolean) =>
+    onPatch({ pharmacies: on ? [...выбраны, id] : выбраны.filter((item) => item !== id) })
+
+  return (
+    <div className="stack">
+      <BackBar onBack={onBack} />
+
+      <div className="card">
+        <div className="card__head">
+          <h2>Аптеки</h2>
+          <span className="muted">где искать то, что заканчивается</span>
+        </div>
+
+        <div className="stack" style={{ gap: 'var(--space-3)' }}>
+          {PHARMACIES.map((item) => (
+            <label className="optrow__label" key={item.id}>
+              <input
+                type="checkbox"
+                checked={выбраны.includes(item.id)}
+                onChange={(event) => переключить(item.id, event.target.checked)}
+              />
+              <span className="optrow__title">{item.name}</span>
+            </label>
+          ))}
+        </div>
+
+        <p className="muted" style={{ margin: 'var(--space-4) 0 0' }}>
+          У препарата и в списке покупок появятся кнопки выбранных аптек — каждая открывает поиск сразу по названию и
+          дозировке. Наличие и цену приложение не знает: это видно уже на сайте аптеки.
+        </p>
       </div>
     </div>
   )
@@ -305,6 +350,7 @@ export function Settings({
 
   if (screen === 'display') return <DisplayScreen settings={settings} onPatch={patch} onBack={onBack} />
   if (screen === 'targets') return <TargetsScreen settings={settings} onPatch={patch} onBack={onBack} />
+  if (screen === 'pharmacies') return <PharmaciesScreen settings={settings} onPatch={patch} onBack={onBack} />
 
   if (screen === 'people') {
     const открытый = settings.people.find((p) => p.id === person)
@@ -415,6 +461,11 @@ export function Settings({
             title={SUBSCREEN_TITLE.backup}
             value={describeBackupRow(backup.lastAt, Date.now())}
             onOpen={() => onOpen('backup')}
+          />
+          <NavRow
+            title={SUBSCREEN_TITLE.pharmacies}
+            value={describePharmacies(settings.pharmacies ?? [])}
+            onOpen={() => onOpen('pharmacies')}
           />
           <NavRow
             title={SUBSCREEN_TITLE.family}

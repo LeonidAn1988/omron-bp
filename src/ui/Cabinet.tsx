@@ -47,6 +47,7 @@ export function Cabinet({
   activePerson,
   onSave,
   onDelete,
+  pharmacies = [],
   card = null,
   form = null,
   onOpenCard,
@@ -63,6 +64,8 @@ export function Cabinet({
   activePerson: string
   onSave: (item: Medicine) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  /** Выбранные аптеки: кнопки поиска у препарата и в списке покупок. */
+  pharmacies?: readonly string[]
   /**
    * Открытая коробка и форма приходят снаружи, из стека экранов приложения.
    *
@@ -146,6 +149,7 @@ export function Cabinet({
       <MedicineCard
         medicine={opened}
         owner={имяВладельца(opened) ?? (семья ? людиПоId(ownerOf(opened, people)) : null)}
+        pharmacies={pharmacies}
         onBack={onBack}
         onSave={onSave}
         onEdit={() => onEditCard(opened.id)}
@@ -169,7 +173,7 @@ export function Cabinet({
 
   return (
     <div className="stack">
-      <Restock medicines={видимые} ownerName={имяВладельца} />
+      <Restock medicines={видимые} ownerName={имяВладельца} pharmacies={pharmacies} />
 
       <div className="card">
         <div className="card__head">

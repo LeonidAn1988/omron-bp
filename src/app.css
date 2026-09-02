@@ -1887,6 +1887,22 @@ tbody tr:hover {
   font-size: var(--fs-1);
   color: var(--text-muted);
 }
+/* Ссылки на аптеки под строкой покупки: в одну строку с переносом, чтобы три
+   сети не растягивали список на три экрана. */
+.buy__where {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-2);
+}
+.buy__where a {
+  min-height: var(--tap);
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--fs-1);
+}
+
 .buy__need {
   flex: 0 0 auto;
   font-weight: 700;
@@ -2249,6 +2265,21 @@ a.btn {
   color: var(--critical-text);
 }
 .log__line--debug .log__msg {
+  color: var(--text-muted);
+}
+
+/* Полоса занятости под шапкой. Показ и скрытие — через готовый `Reveal`:
+   он уже умеет не «прыгать» содержимым и прячет свёрнутое от озвучки. */
+.working .progress {
+  /* Четыре пикселя, а не три: полоска в волос на телефоне с крупным текстом
+     просто не замечается, а она здесь единственный признак, что идёт работа. */
+  height: 4px;
+  border-radius: 0;
+}
+.working__label {
+  display: block;
+  padding: var(--space-2) var(--space-4) 0;
+  font-size: var(--fs-1);
   color: var(--text-muted);
 }
 

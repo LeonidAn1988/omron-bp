@@ -180,6 +180,9 @@ export {
 
 /** Слияние дневников двух телефонов: чистые правила, без хранилища. */
 export { mergeDiary, mergeMedicine, mergeChangedAnything, diarySignature } from '../src/logic/merge'
+
+/** Аптеки: ссылки на поиск, без сети и без обещаний про наличие. */
+export { PHARMACIES, pharmacyQuery, pharmacyLinks, describePharmacies, searchEngineUrl } from '../src/logic/pharmacies'
 export type { Diary, Incoming, MergeResult, MergeLog } from '../src/logic/merge'
 
 export { installWebPlatform, useIndexedDbFactory } from '../src/platform/web'

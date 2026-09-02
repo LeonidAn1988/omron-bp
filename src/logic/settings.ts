@@ -66,13 +66,14 @@ export const INTAKE_SLOTS: { key: keyof Settings['intakeTimes']; title: string }
 ]
 
 /** Подэкраны настроек. Порядок тот же, что в корне: частое выше редкого. */
-export const SUBSCREENS = ['display', 'people', 'targets', 'reminders', 'backup', 'family', 'about'] as const
+export const SUBSCREENS = ['display', 'people', 'targets', 'pharmacies', 'reminders', 'backup', 'family', 'about'] as const
 export type Subscreen = (typeof SUBSCREENS)[number]
 
 export const SUBSCREEN_TITLE: Record<Subscreen, string> = {
   display: 'Экран',
   people: 'Люди',
   targets: 'Нормы',
+  pharmacies: 'Аптеки',
   reminders: 'Напоминания',
   backup: 'Копия дневника',
   family: 'Семья',

@@ -10,7 +10,8 @@ import {
   setLeft,
   supplyDays,
 } from '../logic/medicines'
-import { instructionUrl, pharmacyUrl } from '../logic/drugs'
+import { instructionUrl } from '../logic/drugs'
+import { pharmacyLinks, searchEngineUrl } from '../logic/pharmacies'
 import { plural } from '../logic/plural'
 import { NumberField } from './NumberField'
 import { Banner, BackBar } from './bits'
@@ -46,6 +47,7 @@ export function MedicineCard({
   onDelete,
   onEdit,
   owner,
+  pharmacies = [],
 }: {
   medicine: Medicine
   onBack: () => void
@@ -54,6 +56,8 @@ export function MedicineCard({
   onEdit: () => void
   /** Чья коробка. Пусто — своя или человек в дневнике один. */
   owner?: string | null
+  /** Выбранные аптеки: по кнопке на каждую. */
+  pharmacies?: readonly string[]
 }) {
   const [editingLeft, setEditingLeft] = useState(false)
   const [leftValue, setLeftValue] = useState(String(medicine.left ?? ''))
@@ -71,6 +75,8 @@ export function MedicineCard({
     : perDay !== null
       ? `${perDay} ${plural(perDay, 'раз', 'раза', 'раз')} в день`
       : ''
+
+  const аптеки = pharmacyLinks(medicine, pharmacies)
 
   return (
     <div className="stack">
@@ -199,18 +205,21 @@ export function MedicineCard({
           >
             Инструкция
           </a>
-          {/* Поиск по действующему веществу, а не по торговому имени: врач
-              называет вещество, на упаковке торговое имя, и дешёвый аналог
-              находится именно так. Запрос уходит с устройства человека, от нас
-              наружу не идёт ничего. */}
-          <a
-            className="btn"
-            href={pharmacyUrl(medicine.name, medicine.dose, medicine.inn)}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Найти в аптеке
-          </a>
+          {/* Выбранные аптеки — по кнопке на каждую, поиск сразу по названию и
+              дозировке. Если ни одна не выбрана, остаётся общий поиск: он ищет
+              по действующему веществу и находит дешёвые аналоги. Запрос в обоих
+              случаях уходит с устройства человека, от нас наружу не идёт ничего. */}
+          {аптеки.length > 0 ? (
+            аптеки.map((аптека) => (
+              <a key={аптека.id} className="btn" href={аптека.href} target="_blank" rel="noopener noreferrer">
+                {аптека.name}
+              </a>
+            ))
+          ) : (
+            <a className="btn" href={searchEngineUrl(medicine)} target="_blank" rel="noopener noreferrer">
+              Найти в аптеке
+            </a>
+          )}
           {confirming ? (
             <>
               {/* «Отмена» занимает место, где только что была кнопка

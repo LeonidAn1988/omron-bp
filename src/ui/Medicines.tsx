@@ -12,6 +12,7 @@ import {
 } from '../logic/medicines'
 import { KIND_LABEL } from '../logic/drugs'
 import { plural } from '../logic/plural'
+import { pharmacyLinks } from '../logic/pharmacies'
 import { canShareFile, download, shareFile } from '../logic/io'
 import { Banner } from './bits'
 
@@ -163,10 +164,13 @@ const REASON_LABEL: Record<'out' | 'low' | 'expired' | 'expiring', string> = {
 export function Restock({
   medicines,
   ownerName,
+  pharmacies = [],
 }: {
   medicines: Medicine[]
   /** Чья коробка — в сводном списке семьи. Пусто, когда человек один. */
   ownerName?: (medicine: Medicine) => string | null
+  /** Выбранные аптеки: под каждой строкой появятся ссылки на поиск. */
+  pharmacies?: readonly string[]
 }) {
   const [copied, setCopied] = useState(false)
   const list = restockList(medicines, Date.now())
@@ -212,6 +216,17 @@ export function Restock({
                 <span className="buy__inn">по веществу: {medicine.inn}</span>
               )}
             </span>
+            {/* Ссылки прямо в строке списка: человек стоит перед выбором «где
+                взять» ровно здесь, а не на карточке препарата. */}
+            {pharmacyLinks(medicine, pharmacies).length > 0 && (
+              <span className="buy__where no-print">
+                {pharmacyLinks(medicine, pharmacies).map((аптека) => (
+                  <a key={аптека.id} href={аптека.href} target="_blank" rel="noopener noreferrer">
+                    {аптека.name}
+                  </a>
+                ))}
+              </span>
+            )}
             {need !== null && (
               <span className="buy__need">
                 {packsNeeded(medicine, need) !== null ? (
