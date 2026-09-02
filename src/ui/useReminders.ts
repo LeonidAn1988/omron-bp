@@ -30,21 +30,16 @@ export interface RemindersInput {
   /** Человек нажал на уведомление — ждёт экран, где ставится отметка. */
   onOpen: (day: number) => void
   /** Человек нажал «Принял» прямо в уведомлении. */
-  onTaken: (day: number, slot: string) => void
+  onTaken: (day: number, slot: string, person?: string) => void
 }
 
 export function useReminders({ medicines, enabled, people, sound, repeat, ready, onOpen, onTaken }: RemindersInput) {
   /**
-   * Чьи это таблетки — словами уведомления.
-   *
-   * Пока человек один, возвращает `null`, и уведомление выглядит как прежде:
-   * подписывать таблетки именем единственного человека незачем.
+   * Чьи это таблетки. Пока человек один — `null`, и уведомления выглядят как
+   * прежде; при нескольких людях каждому ставится своё, с именем в заголовке.
    */
-  const ownerName = (medicine: Medicine): string | null => {
-    if (people.length <= 1) return null
-    const id = ownerOf(medicine, people)
-    return people.find((p) => p.id === id)?.name?.trim() || null
-  }
+  const personOf = (medicine: Medicine): string | null => (people.length <= 1 ? null : ownerOf(medicine, people))
+  const personName = (id: string): string | null => people.find((p) => p.id === id)?.name?.trim() || null
   // Слепок последнего применённого состояния: React вызывает эффект и когда
   // ничего по сути не изменилось (новая ссылка на тот же список), а каждая
   // пересборка — это поход в системный планировщик.
@@ -73,7 +68,7 @@ export function useReminders({ medicines, enabled, people, sound, repeat, ready,
     const reminders = platform().reminders
     if (!reminders.isSupported()) return
     return reminders.onAction((action) => {
-      if (action.kind === 'taken') handlers.current.onTaken(action.day, action.slot)
+      if (action.kind === 'taken') handlers.current.onTaken(action.day, action.slot, action.person)
       else handlers.current.onOpen(action.day)
     })
   }, [])
@@ -88,7 +83,7 @@ export function useReminders({ medicines, enabled, people, sound, repeat, ready,
     const reminders = platform().reminders
     if (!reminders.isSupported()) return
 
-    const wanted = enabled ? buildReminders(medicines, Date.now(), { repeat, ownerName }) : []
+    const wanted = enabled ? buildReminders(medicines, Date.now(), { repeat, personOf, personName }) : []
     // Из слепка исключены сами моменты показа: они сдвигаются с каждым
     // пересчётом, и сравнение по ним всегда давало бы «изменилось».
     const снимок = JSON.stringify([

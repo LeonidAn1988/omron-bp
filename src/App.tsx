@@ -24,6 +24,8 @@ import { GlucoseEntry, GlucoseList, GlucoseTiles } from './ui/Glucose'
 import { Readings } from './ui/Readings'
 import { MedicineNudge } from './ui/Medicines'
 import { DeviceIcon, ReportIcon, SettingsIcon } from './ui/icons'
+import { mergeRestoredSettings } from './logic/io'
+import { medicinesForReminder } from './logic/reminders'
 import { Onboarding } from './ui/Onboarding'
 import { PersonSwitch } from './ui/People'
 import { activePersonOf, deviceUserOf, intakeTimesOf, medicinesOf, ownerOf } from './logic/people'
@@ -33,9 +35,7 @@ import { Entry } from './ui/Entry'
 import { Sync } from './ui/Sync'
 import {
   countAlerts,
-  dosesOn,
   markTakenAt,
-  normalizeTimes,
   parseTime,
   pendingToday,
   startOfDay,
@@ -308,10 +308,10 @@ export default function App() {
 
       let settingsRestored = false
       if (incoming.settings) {
-        // Тема не переносится: на телефоне и на компьютере она своя, и подменять
-        // её чужим выбором — сюрприз, которого никто не просил.
-        const { theme: _theme, ...rest } = incoming.settings
-        updateSettings({ ...settingsRef.current, ...rest })
+        // Что из настроек брать из файла, решает `mergeRestoredSettings`:
+        // устройство своё (тема, размер, копии, ключ прибора), семья — только
+        // если здесь её ещё нет. Раньше чужой файл затирал и людей, и цели.
+        updateSettings(mergeRestoredSettings(settingsRef.current, incoming.settings))
         settingsRestored = true
       }
 
@@ -330,13 +330,11 @@ export default function App() {
       // пропуски за два месяца назад.
       try {
         // Владелец ставится здесь и только здесь — в единственном месте, где
-        // препарат появляется в аптечке. Берётся выбранный человек: коробку
-        // заводят, глядя на его экран, и молча приписать её другому нельзя.
-        //
-        // Человек читается из ссылки на свежие настройки, а не из замыкания:
-        // между открытием формы и сохранением его могли переключить, и тогда
-        // коробка ушла бы тому, кого на экране уже нет.
-        const владелец = activePersonOf(settingsRef.current)?.id
+        // препарат появляется в аптечке.
+        // Форма знает владельца лучше: в ней есть переключатель «Чей препарат».
+        // Раньше выбранный сверху человек затирал этот выбор, и переключатель
+        // выглядел рабочим, не действуя, — коробка уходила не тому.
+        const владелец = item.owner ?? activePersonOf(settingsRef.current)?.id
         await putMedicine(
           item.id ? item : { ...item, id: newMedicineId(), since: Date.now(), owner: владелец },
         )
@@ -444,7 +442,7 @@ export default function App() {
    * текущее, — иначе повтор в 8:45 записался бы отдельным приёмом.
    */
   const handleReminderTaken = useCallback(
-    async (day: number, slot: string) => {
+    async (day: number, slot: string, person?: string) => {
       const minutes = parseTime(slot)
       if (minutes === null) return
       // День приводим к местной полуночи заново. Уведомление несёт момент,
@@ -464,10 +462,15 @@ export default function App() {
       // сценарий, ради которого кнопка и делалась, молча не работал.
       const cabinet = await getAllMedicines()
 
-      for (const medicine of cabinet) {
-        if (!normalizeTimes(medicine.times ?? []).includes(slot)) continue
-        const dose = dosesOn(medicine, day, now).find((item) => item.time === slot)
-        if (dose && dose.takenAt !== null) continue
+      // Уведомление теперь на человека: отмечаем только его таблетки. Раньше
+      // одно «Принял» ставило отметку каждому, у кого таблетка на это время, —
+      // сын отмечал отцовский Метформин, а повторы к отцу не приходили.
+      //
+      // Люди читаются из хранилища по той же причине, что и аптечка: на
+      // холодном старте действие приходит раньше, чем прочитаны настройки, и
+      // в состоянии ещё пустой список — фильтр по человеку не нашёл бы никого.
+      const { people } = await loadSettings()
+      for (const medicine of medicinesForReminder(cabinet, people, slot, day, now, person)) {
         await putMedicine(markTakenAt(medicine, planned, now))
       }
       await refreshMedicines()
@@ -491,10 +494,13 @@ export default function App() {
       setReminderDay(startOfDay(day))
       setTab('intake')
     },
-    onTaken: (day, slot) => {
+    // Третий аргумент — человек. Замыкание из двух параметров совместимо по типу,
+    // и TypeScript не заметил бы потерю: проверка сквозной проводки — в тестах
+    // `medicinesForReminder`, а не здесь.
+    onTaken: (day, slot, person) => {
       openedByReminder.current = true
       setReminderDay(startOfDay(day))
-      void handleReminderTaken(day, slot)
+      void handleReminderTaken(day, slot, person)
     },
   })
 

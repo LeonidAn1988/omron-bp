@@ -396,6 +396,28 @@ export function historyTotal(medicine: Medicine): { planned: number; taken: numb
   }
 }
 
+/** За сколько минут до первого приёма карточки части суток открываются кнопки. */
+export const EARLY_WINDOW_MIN = 60
+
+/**
+ * Открылось ли окно части суток — можно ли уже отмечать её приёмы.
+ *
+ * Раньше кнопки «Принял» и «Принял всё» у «Вечера» были живыми с самого утра,
+ * а после утренней отметки становились единственными синими кнопками на
+ * экране при подписи «осталось отметить: 2». Пожилой человек нажимал их в
+ * десять утра: вечерние таблетки помечались принятыми, вечернее напоминание
+ * гасло (отмеченное из набора исключается), а в отчёт врачу уходил приём,
+ * которого не было.
+ *
+ * Окно открывается за час до первого приёма карточки: раннее «с ужином»
+ * проходит без лишних шагов, а утро до вечера не дотягивается.
+ */
+export function partWindowOpen(day: number, firstTime: string, now: number): boolean {
+  const minutes = parseTime(firstTime)
+  if (minutes === null) return true
+  return now >= startOfDay(day) + (minutes - EARLY_WINDOW_MIN) * 60_000
+}
+
 export function dosesOn(medicine: Medicine, day: number, now: number): DoseSlot[] {
   const times = normalizeTimes(medicine.times ?? [])
   if (times.length === 0) return []

@@ -11,6 +11,7 @@ import {
   startOfDay,
   type DayPart,
   type DayStatus,
+  partWindowOpen,
 } from '../logic/medicines'
 
 /**
@@ -264,7 +265,7 @@ export function Intake({
       )}
 
       {byPart.map(({ part, rows }) => (
-        <PartCard key={part} part={part} rows={rows} future={future} onMark={onMark} />
+        <PartCard key={part} part={part} rows={rows} future={future} day={selected} now={now} onMark={onMark} />
       ))}
     </div>
   )
@@ -281,15 +282,39 @@ function PartCard({
   part,
   rows,
   future,
+  day,
+  now,
   onMark,
 }: {
   part: DayPart
   rows: Slot[]
   future: boolean
+  /** Выбранный день и текущее время — для окна части суток. */
+  day: number
+  now: number
   onMark: (id: string, plannedTs: number, undo?: boolean) => Promise<void>
 }) {
   const done = rows.every((row) => row.takenAt !== null || row.medicine.autoDeduct)
   const [занят, setЗанят] = useState(false)
+
+  /**
+   * Открыто ли окно этой части суток.
+   *
+   * До открытия у строк нет кнопок — только серое «с 19:00». Иначе утром
+   * единственными синими кнопками на экране оказывались вечерние, и человек
+   * отмечал вечерний приём в десять утра. Кто раскладывает таблетницу заранее,
+   * идёт через «Отметить заранее» с вопросом — осознанно, а не мимоходом.
+   * Разрешение живёт до смены дня: на другую дату оно не переносится.
+   */
+  const первоеВремя = [...rows].map((row) => row.time).sort()[0]
+  const открыто = !future && partWindowOpen(day, первоеВремя, now)
+  const [досрочно, setДосрочно] = useState(false)
+  const [спросить, setСпросить] = useState(false)
+  useEffect(() => {
+    setДосрочно(false)
+    setСпросить(false)
+  }, [day])
+  const можно = открыто || досрочно
 
   // Что в этой карточке ещё не отмечено. Препараты с автосписанием не считаем:
   // кнопки «Принял» у них нет вовсе, и отмечать за них нечего.
@@ -328,7 +353,7 @@ function PartCard({
         что и таких строк больше одной: на единственной она была бы вторым
         способом сделать то же самое.
       */}
-      {!future && неотмеченных.length > 1 && (
+      {можно && неотмеченных.length > 1 && (
         <div className="row" style={{ marginBottom: 'var(--space-3)' }}>
           <button className="btn btn--primary" disabled={занят} onClick={() => void принятьВсё()}>
             {/* Считаются приёмы, а не препараты: один и тот же препарат может
@@ -390,13 +415,17 @@ function PartCard({
             {row.medicine.autoDeduct ? (
               <span className="dose__auto">списывается само</span>
             ) : row.takenAt === null ? (
-              <button
-                className="btn btn--primary"
-                disabled={future}
-                onClick={() => void onMark(row.medicine.id, row.planned)}
-              >
-                Принял
-              </button>
+              можно ? (
+                <button
+                  className="btn btn--primary"
+                  disabled={future}
+                  onClick={() => void onMark(row.medicine.id, row.planned)}
+                >
+                  Принял
+                </button>
+              ) : (
+                <span className="dose__auto">с {row.time}</span>
+              )
             ) : null}
           </li>
         ))}
@@ -406,6 +435,37 @@ function PartCard({
         <p className="muted" style={{ margin: 'var(--space-3) 0 0' }}>
           День ещё не наступил — отмечать нечего, это список на будущее.
         </p>
+      )}
+
+      {!future && !можно && неотмеченных.length > 0 && (
+        спросить ? (
+          <div className="card card--inset" style={{ marginTop: 'var(--space-3)' }}>
+            <b>Приём «{DAY_PART_TITLE[part]}» ещё не наступил.</b>
+            <div className="muted" style={{ marginTop: 4 }}>
+              Отметить сейчас? Так делают, когда раскладывают таблетницу заранее.
+            </div>
+            <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+              <button className="btn" onClick={() => setСпросить(false)}>
+                Отмена
+              </button>
+              <button
+                className="btn btn--primary"
+                onClick={() => {
+                  setДосрочно(true)
+                  setСпросить(false)
+                }}
+              >
+                Да, отметить
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginTop: 'var(--space-3)' }}>
+            <button className="btn btn--sm" onClick={() => setСпросить(true)}>
+              Отметить заранее
+            </button>
+          </div>
+        )
       )}
     </div>
   )

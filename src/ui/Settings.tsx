@@ -149,6 +149,11 @@ export function Settings({
     if (!закрытый) return
     try {
       const открытый = await decryptBackup(закрытый.text, пароль)
+      // Пароль подошёл — человек только что доказал, что знает его. Включаем
+      // шифрование копий и запоминаем пароль: иначе на новом телефоне
+      // зашифрованная копия перезаписалась бы открытой при первой же записи.
+      patch({ backupEncrypt: true })
+      backup.setPassword(пароль)
       // Имя берём исходное, но разбор всегда как JSON: зашифрованной бывает
       // только полная копия, а расширение у файла может быть любым.
       await восстановить(закрытый.name.endsWith('.json') ? закрытый.name : `${закрытый.name}.json`, открытый)
@@ -217,7 +222,7 @@ export function Settings({
           <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
             С чего открывать приложение
           </div>
-          <div className="segmented segmented--fill" role="group" aria-label="Стартовый экран">
+          <div className="segmented segmented--fill segmented--stack" role="group" aria-label="Стартовый экран">
             {startOptions.map((item) => (
               <button
                 key={item.key}
@@ -253,7 +258,7 @@ export function Settings({
         <div className="tile__label" style={{ margin: 'var(--space-5) 0 var(--space-2)' }}>
           Размер текста
         </div>
-        <div className="segmented segmented--fill" role="group" aria-label="Размер текста">
+        <div className="segmented segmented--fill segmented--stack" role="group" aria-label="Размер текста">
           {TEXT_SCALES.map(({ key, title }) => (
             <button key={key} aria-pressed={settings.textScale === key} onClick={() => patch({ textScale: key })}>
               {title}
@@ -522,7 +527,7 @@ export function Settings({
           </button>
         )}
         <div className="muted" style={{ marginTop: 10 }}>
-          Данные хранятся только на этом устройстве и никуда не отправляются.{' '}
+          Приложение никуда не отправляет ваши данные само. Копия уходит только туда, куда вы её направили.{' '}
           {platform().kind === 'native'
             ? 'Удаление приложения или очистка его данных их сотрут — держите резервную копию.'
             : 'Очистка истории браузера или режим инкогнито их удалят — держите резервную копию.'}

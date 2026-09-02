@@ -121,7 +121,7 @@ export function Onboarding({
             <p className="muted" style={{ marginTop: 0 }}>
               Выберите так, чтобы читалось без усилий. Образец меняется сразу.
             </p>
-            <div className="segmented segmented--fill" role="group" aria-label="Размер текста">
+            <div className="segmented segmented--fill segmented--stack" role="group" aria-label="Размер текста">
               {РАЗМЕРЫ.map((item) => (
                 <button
                   key={item.key}

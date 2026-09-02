@@ -254,6 +254,32 @@ export function MedicineForm({
         </div>
       </div>
 
+      {/* Владелец — первым полем и только когда людей больше одного. Ошибиться
+          человеком легко, а найти ошибку потом трудно: коробка просто исчезает
+          из аптечки того, кто её ищет. */}
+      {people.length > 1 && (
+        <div style={{ marginBottom: 'var(--space-4)' }}>
+          <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
+            Чей препарат
+          </div>
+          <div className="segmented segmented--fill segmented--chips" role="group" aria-label="Чей препарат">
+            {/* `type="button"` обязателен: кнопка внутри формы без него —
+                отправка, и нажатие на имя человека сохраняло и закрывало
+                форму вместо того, чтобы выбрать владельца. */}
+            {people.map((person, index) => (
+              <button
+                key={person.id}
+                type="button"
+                aria-pressed={owner === person.id}
+                onClick={() => setOwner(person.id)}
+              >
+                {person.name || `Человек ${index + 1}`}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <DrugPicker
         group={group}
         value={name}
@@ -305,32 +331,6 @@ export function MedicineForm({
         }}
         onDose={setDose}
       />
-
-      {/* Владелец — первым полем и только когда людей больше одного. Ошибиться
-          человеком легко, а найти ошибку потом трудно: коробка просто исчезает
-          из аптечки того, кто её ищет. */}
-      {people.length > 1 && (
-        <div style={{ marginBottom: 'var(--space-4)' }}>
-          <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
-            Чей препарат
-          </div>
-          <div className="segmented segmented--fill" role="group" aria-label="Чей препарат">
-            {/* `type="button"` обязателен: кнопка внутри формы без него —
-                отправка, и нажатие на имя человека сохраняло и закрывало
-                форму вместо того, чтобы выбрать владельца. */}
-            {people.map((person, index) => (
-              <button
-                key={person.id}
-                type="button"
-                aria-pressed={owner === person.id}
-                onClick={() => setOwner(person.id)}
-              >
-                {person.name || `Человек ${index + 1}`}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       <Field label="Дозировка, как на упаковке">
         <input value={dose} onChange={(e) => setDose(e.target.value)} placeholder="50 мг" />

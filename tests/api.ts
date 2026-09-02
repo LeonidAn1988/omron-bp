@@ -88,6 +88,7 @@ export {
   addPack,
   adherence,
   foldHistory,
+  partWindowOpen,
   historyTotal,
   monthKey,
   countAlerts,
@@ -135,5 +136,23 @@ export {
   recordsBehind,
 } from '../src/logic/backup'
 export { parseChangelog, currentVersion } from '../src/logic/changelog'
+export { mergeRestoredSettings } from '../src/logic/io'
 
 export { installWebPlatform, useIndexedDbFactory } from '../src/platform/web'
+
+import type { Medicine } from '../src/types'
+export { medicinesForReminder } from '../src/logic/reminders'
+
+/**
+ * Препарат со всеми полями типа. `Required<Medicine>` — чтобы новое поле в типе
+ * ломало typecheck, пока его не добавят сюда и в разбор копии: круг «снимок →
+ * файл → разбор» в tests/io.test.mjs сверяет каждое поле этой фикстуры.
+ */
+export const FULL_MEDICINE: Required<Medicine> = {
+  id: 'm-full', name: 'Периндоприл', dose: '5 мг', inn: 'Периндоприл', form: 'Таблетки', maker: 'Сервье',
+  regNumber: 'ЛП-000001', kind: 1, packSize: 30, left: 12, perDay: 1, expires: Date.UTC(2027, 3, 30),
+  note: 'после завтрака', leftAt: 1_700_000_000_000, times: ['08:00', '20:00'], perTime: 1, meal: 'after',
+  autoDeduct: true, taken: [1_700_000_000_000, 1_700_086_400_000],
+  owner: 'p-dad', since: 1_690_000_000_000, startedAt: 1_680_000_000_000, foldedUntil: 1_699_000_000_000,
+  history: { '2025-07': { planned: 62, taken: 58 }, '2025-08': { planned: 62, taken: 60 } },
+}

@@ -89,8 +89,8 @@ const SNOOZE_MIN = 15
  * Граница обязана лежать выше самого большого идентификатора напоминания, иначе
  * они начнут выдавать себя за отложенные — и перестанут сниматься вовсе.
  *
- * `reminderId` считает так: `(день % 2048) * 1024 + приём * 8 + повтор`, то есть
- * не больше 2 047 * 1024 + 127 * 8 + 7 = 2 097 151. Прежняя граница в 900 000
+ * `reminderId` считает так: `((день % 2048) * 8 + человек) * 1024 + приём * 8 +
+ * повтор`, то есть не больше (2 047 · 8 + 7) · 1024 + 127 · 8 + 7 = 16 777 215. Прежняя граница в 900 000
  * этот потолок не покрывала: номер дня растёт на единицу в сутки, и примерно
  * через двадцать один месяц идентификаторы перевалили бы за неё. С этого дня
  * `cancelAll` и уборка лишнего молча пропускали бы каждое напоминание, а в
@@ -98,8 +98,8 @@ const SNOOZE_MIN = 15
  *
  * Найдено на живом телефоне при разборе застрявших уведомлений.
  */
-const REMINDER_ID_MAX = 2047 * 1024 + 127 * 8 + 7
-const SNOOZE_BASE = 4_000_000
+const REMINDER_ID_MAX = (2047 * 8 + 7) * 1024 + 127 * 8 + 7
+const SNOOZE_BASE = 20_000_000
 
 /**
  * Мелодия, выбранная в последний раз. Нужна отложенному напоминанию: оно
@@ -278,7 +278,7 @@ export const capacitorReminders: RemindersPort = {
         actionTypeId: ACTION_TYPE,
         // Приём и сутки едут вместе с уведомлением: по ним приложение поймёт,
         // какую именно отметку ставить, когда человек нажмёт «Принял».
-        extra: { slot: item.slot, day: item.day, step: item.step },
+        extra: { slot: item.slot, day: item.day, step: item.step, person: item.person },
         // Два флага, и оба выяснены на живом телефоне, а не по документации.
         //
         // `isExactNotification` включаем только когда разрешение уже есть.
@@ -350,7 +350,7 @@ export const capacitorReminders: RemindersPort = {
     let живо = true
     const подписка = LocalNotifications.addListener('localNotificationActionPerformed', (event) => {
       if (!живо) return
-      const extra = (event.notification.extra ?? {}) as { slot?: string; day?: number }
+      const extra = (event.notification.extra ?? {}) as { slot?: string; day?: number; person?: string }
       if (typeof extra.slot !== 'string' || typeof extra.day !== 'number') return
 
       if (event.actionId === 'snooze') {
@@ -385,7 +385,12 @@ export const capacitorReminders: RemindersPort = {
         return
       }
 
-      handler({ kind: event.actionId === 'taken' ? 'taken' : 'open', slot: extra.slot, day: extra.day })
+      handler({
+        kind: event.actionId === 'taken' ? 'taken' : 'open',
+        slot: extra.slot,
+        day: extra.day,
+        person: typeof extra.person === 'string' ? extra.person : undefined,
+      })
     })
 
     return () => {

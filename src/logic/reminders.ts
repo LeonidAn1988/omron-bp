@@ -26,7 +26,8 @@
 
 import { dosesOn, normalizeTimes, parseTime, perTimeOf } from './medicines'
 import type { Reminder } from '../platform/ports'
-import type { Medicine } from '../types'
+import { ownerOf } from './people'
+import type { Person, Medicine } from '../types'
 
 const МИНУТА = 60_000
 const СУТКИ = 86_400_000
@@ -105,8 +106,11 @@ export const formatSlot = (minutes: number) =>
  * Разрядность выбрана с запасом и укладывается в 32 бита: 2048 суток (пять с
  * половиной лет) × 128 приёмов × 8 повторов.
  */
-export function reminderId(day: number, slotIndex: number, step: number): number {
-  return (dayNumber(day) % 2048) * 1024 + (slotIndex % 128) * 8 + (step % 8)
+export function reminderId(day: number, slotIndex: number, step: number, personIndex = 0): number {
+  // Разряд человека — между днём и приёмом: у каждого человека на каждое время
+  // своё уведомление, и номера не должны сталкиваться. До восьми человек;
+  // потолок идентификатора — (2047 · 8 + 7) · 1024 + 127 · 8 + 7 = 16 777 215.
+  return ((dayNumber(day) % 2048) * 8 + (personIndex % 8)) * 1024 + (slotIndex % 128) * 8 + (step % 8)
 }
 
 /**
@@ -150,13 +154,19 @@ export interface ReminderOptions {
   /** Насколько дней вперёд расставлять. */
   horizonDays?: number
   /**
-   * Как назвать владельца препарата в уведомлении.
+   * Чей препарат — идентификатор человека.
    *
-   * Возвращает `null`, когда человек в дневнике один: подписывать таблетки
-   * именем единственного человека — шум. Функция, а не готовый словарь: список
-   * людей живёт в настройках, а этот модуль о настройках знать не должен.
+   * Когда людей больше одного, на каждое время ставится **своё уведомление
+   * каждому человеку**, с именем в заголовке и его идентификатором внутри.
+   * Раньше одно уведомление собирало таблетки всех, а «Принял» в нём отмечало
+   * приём каждому, у кого таблетка на это время: сын отмечал отцовский
+   * Метформин, повторы к отцу не приходили, в отчёт врачу уходила ложная
+   * регулярность. Функция, а не словарь: список людей живёт в настройках, а
+   * этот модуль о настройках знать не должен.
    */
-  ownerName?: (medicine: Medicine) => string | null
+  personOf?: (medicine: Medicine) => string | null
+  /** Имя человека по идентификатору — для заголовка уведомления. */
+  personName?: (personId: string) => string | null
 }
 
 /**
@@ -171,8 +181,6 @@ export function buildReminders(
   now: number,
   options: ReminderOptions = { repeat: true },
 ): Reminder[] {
-  const horizon = options.horizonDays ?? HORIZON_DAYS
-
   // Общий список времён приёма: по нему считается номер приёма, а он входит в
   // идентификатор. Список обязан зависеть только от расписания, иначе
   // идентификаторы поедут при любой правке аптечки.
@@ -184,6 +192,33 @@ export function buildReminders(
     ),
   ].sort()
   if (!времена.length) return []
+
+  // Люди, у которых есть таблетки. Один человек — одно уведомление на время,
+  // как и раньше; несколько — по уведомлению каждому.
+  const персоны: (string | null)[] = options.personOf
+    ? [...new Set(medicines.map((medicine) => options.personOf!(medicine)))]
+    : [null]
+  const поЛюдям = персоны.length > 1
+  const шагов = options.repeat ? REPEATS + 1 : 1
+
+  // Горизонт зависит от того, сколько уведомлений он порождает. Четырнадцать
+  // дней на четверых с четырьмя приёмами и повторами — 672 штуки при потолке в
+  // 450: система выбросила бы произвольную половину. Укорачиваем горизонт
+  // заранее, не короче трёх дней; набор пересобирается при каждом пробуждении
+  // приложения, так что до конца горизонта он не дотягивает никогда.
+  // Считаем по каждому человеку его времена, а не всех людей на все времена:
+  // у отца три приёма, у сына один — это четыре уведомления в день, а не шесть.
+  const наДень = Math.max(
+    1,
+    персоны.reduce((sum, персона) => {
+      const свои = поЛюдям ? medicines.filter((m) => options.personOf!(m) === персона) : medicines
+      const времён = new Set(свои.flatMap((m) => normalizeTimes(m.times ?? []).filter((t) => parseTime(t) !== null))).size
+      return sum + времён * шагов
+    }, 0),
+  )
+  // Нижняя граница в три дня относится к расчётному потолку, а не к заданному
+  // горизонту: явно попросили один день — ставим один.
+  const horizon = Math.min(options.horizonDays ?? HORIZON_DAYS, Math.max(3, Math.floor(MAX_REMINDERS / наДень)))
 
   const набор: Reminder[] = []
 
@@ -197,6 +232,7 @@ export function buildReminders(
     const дата = addDays(первый, сдвиг)
     const день = дата.getTime()
 
+    персоны.forEach((персона, personIndex) => {
     времена.forEach((time, slotIndex) => {
       const минуты = parseTime(time)!
       const момент = momentOf(дата, минуты)
@@ -204,6 +240,7 @@ export function buildReminders(
       // Что из назначенного на этот приём ещё не отмечено. Отмеченное в списке
       // не показываем: человек уже принял, напоминать об этом — путать.
       const ждут = medicines.filter((medicine) => {
+        if (поЛюдям && options.personOf!(medicine) !== персона) return false
         if (!normalizeTimes(medicine.times ?? []).includes(time)) return false
         const slot = dosesOn(medicine, день, now).find((item) => item.time === time)
         return !slot || slot.takenAt === null
@@ -211,15 +248,12 @@ export function buildReminders(
       if (!ждут.length) return
 
       const поПорядку = [...ждут].sort((a, b) => a.name.localeCompare(b.name, 'ru'))
-      const чей = (medicine: Medicine) => options.ownerName?.(medicine) ?? null
-      const подробно = поПорядку.map((medicine) => doseLine(medicine, чей(medicine))).join('\n')
-      const коротко = shortBody(
-        поПорядку.map((medicine) => {
-          const owner = чей(medicine)
-          return owner ? `${owner}: ${medicine.name}` : medicine.name
-        }),
-      )
-      const шагов = options.repeat ? REPEATS + 1 : 1
+      // Имя человека — в заголовке, а не в каждой строке: уведомление теперь
+      // одно на человека, и внутри него все таблетки его.
+      const подробно = поПорядку.map((medicine) => doseLine(medicine)).join('\n')
+      const коротко = shortBody(поПорядку.map((medicine) => medicine.name))
+      const имя = поЛюдям && персона ? (options.personName?.(персона) ?? null) : null
+      const кому = имя ? `${имя} · ` : ''
 
       for (let step = 0; step < шагов; step++) {
         const at = момент + step * REPEAT_INTERVAL_MIN * МИНУТА
@@ -227,11 +261,12 @@ export function buildReminders(
         // запуске приложения.
         if (at <= now) continue
         набор.push({
-          id: reminderId(день, slotIndex, step),
+          id: reminderId(день, slotIndex, step, personIndex),
+          person: персона ?? undefined,
           // Повтор говорит по-человечески, а не служебным «не отмечен»: слово
           // «отметить» — из устройства приложения, а человеку нужно про
           // таблетки.
-          title: step === 0 ? `${partOfDay(минуты)} — ${time}` : `Не забудьте: приём в ${time}`,
+          title: step === 0 ? `${кому}${partOfDay(минуты)} — ${time}` : `${кому}Не забудьте: приём в ${time}`,
           body: коротко,
           details: подробно,
           at,
@@ -240,6 +275,7 @@ export function buildReminders(
           step,
         })
       }
+    })
     })
   }
 
@@ -257,4 +293,34 @@ export function reminderTimes(medicines: Medicine[]): string[] {
       ),
     ),
   ].sort()
+}
+
+
+/**
+ * Какие препараты отметить по «Принял» из уведомления.
+ *
+ * Чистая функция, чтобы проводку было чем проверить: `person` из уведомления
+ * терялся на одном из звеньев, TypeScript молчал (параметр необязательный), и
+ * «Принял» отца отмечал таблетки сына. Отбирает препараты названного человека
+ * с этим временем, ещё не отмеченные на этот день; без `person` — всех, как у
+ * одиночного дневника. Если людей ещё не прочитали, а человек назван, судим по
+ * `owner` самого препарата — это тот же ответ, что дал бы `ownerOf`.
+ */
+export function medicinesForReminder(
+  cabinet: Medicine[],
+  people: Person[],
+  slot: string,
+  day: number,
+  now: number,
+  person?: string,
+): Medicine[] {
+  return cabinet.filter((medicine) => {
+    if (person) {
+      const чей = people.length ? ownerOf(medicine, people) : (medicine.owner ?? null)
+      if (чей !== person) return false
+    }
+    if (!normalizeTimes(medicine.times ?? []).includes(slot)) return false
+    const dose = dosesOn(medicine, day, now).find((item) => item.time === slot)
+    return !(dose && dose.takenAt !== null)
+  })
 }

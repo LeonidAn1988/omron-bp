@@ -1,5 +1,7 @@
 /** Круговой рейс экспорта-импорта и чтение чужих форматов. */
-import { toCsv, toJson, parseCsv, parseJson, parseImportFile } from './build/api.mjs'
+import {
+  FULL_MEDICINE,
+  mergeRestoredSettings, toCsv, toJson, parseCsv, parseJson, parseImportFile } from './build/api.mjs'
 
 export function run() {
   let failures = 0
@@ -207,6 +209,63 @@ export function run() {
 
   // Старые копии аптечки не содержат — это не ошибка.
   check('копия без аптечки читается', fromLegacy.medicines.length === 0 && fromLegacy.settings === null)
+
+  // ── круг «снимок → файл → разбор» по каждому полю препарата ──────────────
+  // Восстановление молча теряло owner, since, startedAt, history, foldedUntil —
+  // разбор читал только поля первой версии. Здесь препарат со всеми полями
+  // типа проходит круг, и сверяется каждое: следующее забытое поле упадёт
+  // здесь, а не у человека.
+  const полный = FULL_MEDICINE
+  const файл = toJson({ measurements: [], medicines: [полный], tombstones: [], settings: null })
+  const назад = parseJson(файл).medicines[0]
+  const поля = Object.keys(полный)
+  const потеряны = поля.filter((k) => JSON.stringify(назад?.[k]) !== JSON.stringify(полный[k]))
+  check('все поля препарата переживают круг', потеряны.length === 0, 'потеряны: ' + потеряны.join(', '))
+
+  // Кривая история не тянет NaN в отчёт: ячейка отбрасывается, остальные живут.
+  const кривая = parseJson(JSON.stringify({ format: 'omron-bp/v3', measurements: [], medicines: [
+    { id: 'x', name: 'X', history: { '2025-07': { planned: 10, taken: 'много' }, '2025-08': { planned: 5, taken: 4 }, 'лето': { planned: 1, taken: 1 } } },
+  ] })).medicines[0]
+  check('испорченная ячейка истории отброшена, целая оставлена', JSON.stringify(кривая.history) === JSON.stringify({ '2025-08': { planned: 5, taken: 4 } }), JSON.stringify(кривая.history))
+
+  // ── что из настроек брать из копии ───────────────────────────────────────
+  const своё = {
+    pairingKey: 'мой-ключ', theme: 'dark', textScale: 'xlarge', density: 'roomy', startTab: 'intake',
+    sections: { overview: true, bp: true, glucose: false, intake: true, cabinet: true },
+    remindersOn: true, reminderSound: 'soft', remindersRepeat: true, onboarded: true,
+    nudgesUntil: { backup: 1, cabinet: 2 }, backupEncrypt: false, backupLastAt: 5, backupLastCount: 7,
+    userNames: { 1: 'Пользователь 1' }, activeUser: 1,
+    people: [{ id: 'p1', name: 'Я', deviceUser: 1 }], activePerson: 'p1',
+    targetSys: 135, targetDia: 85, glucoseFastingMax: 7, glucosePostMealMax: 10, glucoseLow: 3.9, trackGlucose: false,
+    intakeTimes: { morning: '08:00', day: '13:00', evening: '19:00', night: '22:00' },
+  }
+  const изФайла = {
+    theme: 'light', textScale: 'small', density: 'compact', startTab: 'overview',
+    sections: { overview: false, bp: true, glucose: true, intake: true, cabinet: true },
+    remindersOn: false, reminderSound: 'loud', remindersRepeat: false, onboarded: false,
+    nudgesUntil: { backup: 0, cabinet: 0 }, backupEncrypt: true,
+    userNames: { 1: 'Отец' }, activeUser: 2,
+    people: [{ id: 'p-dad', name: 'Отец', deviceUser: 2 }, { id: 'p-mom', name: 'Мама' }], activePerson: 'p-mom',
+    targetSys: 130, targetDia: 80, glucoseFastingMax: 6.5, glucosePostMealMax: 9, glucoseLow: 4, trackGlucose: true,
+    intakeTimes: { morning: '06:30', day: '12:00', evening: '18:00', night: '21:00' },
+  }
+  const слито = mergeRestoredSettings(своё, изФайла)
+  check('устройство остаётся своим', слито.theme === 'dark' && слито.textScale === 'xlarge' && слито.remindersOn === true && слито.pairingKey === 'мой-ключ' && слито.backupLastAt === 5)
+  check('цели и часы — из файла', слито.targetSys === 130 && слито.intakeTimes.morning === '06:30' && слито.trackGlucose === true)
+  check('семья заводится из файла, когда здесь её нет', слито.people.length === 2 && слито.activePerson === 'p-mom')
+
+  const семейное = { ...своё, people: [{ id: 'p1', name: 'Леонид', deviceUser: 1 }, { id: 'p-w', name: 'Жена' }], activePerson: 'p-w' }
+  const слито2 = mergeRestoredSettings(семейное, изФайла)
+  check('свою семью чужой файл не затирает', слито2.people.length === 2 && слито2.people[0].name === 'Леонид' && слито2.activePerson === 'p-w')
+  check('и личное чужого файла не берётся', слито2.targetSys === 135 && слито2.intakeTimes.morning === '08:00')
+
+  // Свой файл при заведённой семье: все здешние люди есть в файле — берём его
+  // целиком, недостающих людей он дописывает.
+  const свой = { ...изФайла, people: [{ id: 'p1', name: 'Леонид', deviceUser: 1 }, { id: 'p-w', name: 'Жена' }, { id: 'p-k', name: 'Ребёнок' }], activePerson: 'нет-такого' }
+  const слито3 = mergeRestoredSettings({ ...семейное, activePerson: 'p1' }, свой)
+  check('свой файл дописывает людей', слито3.people.length === 3)
+  check('битый activePerson заменяется первым из файла', слито3.activePerson === 'p1')
+  check('личное из своего файла берётся', слито3.targetSys === 130)
 
   return failures
 }

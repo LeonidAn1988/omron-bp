@@ -677,11 +677,62 @@ input[type='radio'] {
      настройки размера текста: человек шёл сюда за читаемостью и получал
      «Обычнь» и «Крупнь». */
   min-width: min-content;
-  overflow-wrap: anywhere;
+  /* `break-word`, а не `anywhere`: `anywhere` учитывается при расчёте
+     min-content, ячейка сжималась до одной буквы, и слово рвалось посреди —
+     «Обычн/ый» и «Очень крупны/й» в самой настройке размера текста, у которой
+     человек искал читаемость. `break-word` держит слово целым и рвёт только
+     то, что не помещается никак. Переносов по слогам (`hyphens`) здесь нет
+     нарочно: на подписи в одно слово они дают «Обыч-/ный» — то же самое, что
+     чинили, только с дефисом. Группам, которые целыми словами не помещаются,
+     — столбик (`segmented--stack`) или чипы (`segmented--chips`). */
+  overflow-wrap: break-word;
   padding: var(--space-2);
   white-space: normal;
   line-height: 1.2;
 }
+
+/* Столбиком при крупном тексте — для групп, у которых четыре и больше
+   вариантов в одно-два слова: «Мельче · Обычный · Крупный · Очень крупный»,
+   «С чего открывать». На 360 px они не помещаются в строку ни с каким
+   переносом; столбик по 44 px оставляет каждое слово целым и даёт ту же цель
+   для пальца. Модификатор, а не подсчёт кнопок: «Период» из четырёх коротких
+   слов в строку помещается, и превращать его в 178 px столбика незачем. */
+:root:is([data-text='large'], [data-text='xlarge']) .segmented--stack {
+  flex-direction: column;
+}
+:root:is([data-text='large'], [data-text='xlarge']) .segmented--stack button {
+  min-height: var(--tap);
+  flex: 0 0 auto;
+}
+:root:is([data-text='large'], [data-text='xlarge']) .segmented--stack button + button {
+  border-left: 0;
+  border-top: 1px solid var(--border-strong);
+}
+:root:is([data-text='large'], [data-text='xlarge']) .segmented--stack button:first-child {
+  border-radius: 7px 7px 0 0;
+}
+:root:is([data-text='large'], [data-text='xlarge']) .segmented--stack button:last-child {
+  border-radius: 0 0 7px 7px;
+}
+
+/* Чипы — для групп с именами людей: «Я · Отец · Жена». Имён может быть и
+   четыре, и длинных, рвать «Александ/ра» нельзя, а столбик из четырёх строк по
+   44 px над каждым экраном слишком дорог. Каждая кнопка — своя рамка, ряд
+   переносится, лишнего места нет. */
+.segmented.segmented--chips {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  border: 0;
+  border-radius: 0;
+}
+.segmented.segmented--chips button,
+.segmented.segmented--chips button + button {
+  flex: 0 1 auto;
+  min-width: 10ch;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+}
+
 
 .segmented button:hover:not([aria-pressed='true']) {
   background: var(--hover);

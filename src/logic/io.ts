@@ -64,8 +64,14 @@ export interface Snapshot {
    * десятки байт, а без них копия спорит с решениями человека.
    */
   tombstones: Tombstone[]
-  /** Настройки без служебных полей — что и когда копировалось, у каждого устройства своё. */
-  settings: Omit<Settings, 'backupLastAt' | 'backupLastCount'> | null
+  /**
+   * Настройки без служебных полей.
+   *
+   * Что и когда копировалось — у каждого устройства своё. Ключ сопряжения с
+   * прибором — тоже: это связь этого телефона с этим тонометром, в чужой
+   * дневник ей делать нечего.
+   */
+  settings: Omit<Settings, 'backupLastAt' | 'backupLastCount' | 'pairingKey'> | null
 }
 
 export function toJson(snapshot: Snapshot | Measurement[]): string {
@@ -350,7 +356,35 @@ function parseMedicines(raw: unknown): Medicine[] {
       meal: m.meal === 'before' || m.meal === 'after' || m.meal === 'any' ? m.meal : undefined,
       autoDeduct: m.autoDeduct === true ? true : undefined,
       taken: marks(m.taken),
+      // Всё, что появилось у препарата после первой версии формата. Без этих
+      // полей восстановление молча отдавало все коробки первому человеку,
+      // теряло «принимаю с», возвращало пропуски за прошлое (без `since`
+      // расписание распространяется назад) и стирало свёрнутую историю.
+      // Проверка по каждому полю типа — в tests/io.test.mjs: следующее поле
+      // не должно потеряться так же молча.
+      regNumber: text(m.regNumber),
+      owner: text(m.owner),
+      since: optionalNumber(m.since) ?? undefined,
+      startedAt: optionalNumber(m.startedAt) ?? undefined,
+      foldedUntil: optionalNumber(m.foldedUntil) ?? undefined,
+      history: history(m.history),
     }))
+}
+
+/**
+ * Свёрнутая история приёма из файла: только ячейки вида `'2026-07' → { planned, taken }`
+ * с конечными числами. Испорченная ячейка отбрасывается, а не тянет NaN в отчёт.
+ */
+function history(raw: unknown): Medicine['history'] {
+  if (!raw || typeof raw !== 'object') return undefined
+  const out: NonNullable<Medicine['history']> = {}
+  for (const [key, cell] of Object.entries(raw as Record<string, unknown>)) {
+    if (!/^\d{4}-\d{2}$/.test(key) || !cell || typeof cell !== 'object') continue
+    const { planned, taken } = cell as { planned?: unknown; taken?: unknown }
+    if (typeof planned !== 'number' || typeof taken !== 'number' || !Number.isFinite(planned) || !Number.isFinite(taken)) continue
+    out[key] = { planned, taken }
+  }
+  return Object.keys(out).length ? out : undefined
 }
 
 /**
@@ -439,4 +473,60 @@ export function parseJson(text: string): ImportResult {
 
 export function parseImportFile(filename: string, text: string): ImportResult {
   return filename.toLowerCase().endsWith('.json') ? parseJson(text) : parseCsv(text)
+}
+
+
+/**
+ * Какие настройки брать из копии, а какие оставить свои.
+ *
+ * Копия не знает, куда её восстанавливают. Раньше файл переписывал всё, кроме
+ * темы: чужой файл на телефоне жены заменял её людей на людей отца, её цели —
+ * на его, а с ними и ключ сопряжения с прибором. Настройки трёх родов:
+ *
+ * - **устройства** — тема, размер, вкладки, копии, ключ прибора, напоминания:
+ *   всегда свои, из файла не берутся;
+ * - **семьи** — люди и кто выбран: берутся из файла, только если здесь семьи
+ *   ещё нет (один человек с именем по умолчанию). Иначе восстановление чужого
+ *   файла подменило бы людей, а препараты из него всё равно лягут первому;
+ * - **человека и дневника** — цели, пороги, часы приёма, дневник сахара:
+ *   берутся из файла, как и раньше.
+ */
+export function mergeRestoredSettings(local: Settings, incoming: NonNullable<Snapshot['settings']>): Settings {
+  const своиЛюди = local.people
+  const изФайла = incoming.people ?? []
+  // Файл свой, если все здешние люди в нём есть (по идентификаторам). Тогда из
+  // него можно брать и людей, и всё личное: это та же семья, просто с другого
+  // дня. Одиночный дневник с именем по умолчанию — тоже «свой»: ему семью
+  // только предстоит завести.
+  const семьяЕщёНеЗаведена =
+    своиЛюди.length <= 1 && (своиЛюди[0]?.name ?? 'Я') === 'Я' && (своиЛюди[0]?.id ?? 'p1') === 'p1'
+  const файлСвой = изФайла.length > 0 && своиЛюди.every((p) => изФайла.some((q) => q.id === p.id))
+  const братьЛичное = семьяЕщёНеЗаведена || файлСвой
+
+  const семья = братьЛичное && изФайла.length > 0
+    ? {
+        people: изФайла,
+        // Выбранного берём только из списка: битая копия не должна оставить
+        // приложение с указателем на человека, которого нет.
+        activePerson: изФайла.some((p) => p.id === incoming.activePerson) ? incoming.activePerson : изФайла[0].id,
+      }
+    : { people: своиЛюди, activePerson: local.activePerson }
+
+  // Личное — цели, пороги, часы приёма, дневник сахара — тем же условием:
+  // чужой файл не должен перекрашивать измерения жены по порогам отца.
+  const личное = братьЛичное
+    ? {
+        targetSys: incoming.targetSys ?? local.targetSys,
+        targetDia: incoming.targetDia ?? local.targetDia,
+        glucoseFastingMax: incoming.glucoseFastingMax ?? local.glucoseFastingMax,
+        glucosePostMealMax: incoming.glucosePostMealMax ?? local.glucosePostMealMax,
+        glucoseLow: incoming.glucoseLow ?? local.glucoseLow,
+        trackGlucose: incoming.trackGlucose ?? local.trackGlucose,
+        intakeTimes: incoming.intakeTimes ?? local.intakeTimes,
+        userNames: incoming.userNames ?? local.userNames,
+        activeUser: incoming.activeUser ?? local.activeUser,
+      }
+    : {}
+
+  return { ...local, ...личное, ...семья }
 }

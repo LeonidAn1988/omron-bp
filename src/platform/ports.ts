@@ -256,6 +256,8 @@ export interface Reminder {
   day: number
   /** 0 — напоминание в назначенное время, дальше повторы. */
   step: number
+  /** Чьи таблетки — идентификатор человека. Пусто, когда человек в дневнике один. */
+  person?: string
 }
 
 /**
@@ -273,6 +275,8 @@ export interface ReminderAction {
   slot: string
   /** Начало суток этого приёма. */
   day: number
+  /** Чьё уведомление — идентификатор человека. Пусто у одиночного дневника. */
+  person?: string
 }
 
 export type ReminderPermission = 'granted' | 'denied' | 'prompt'

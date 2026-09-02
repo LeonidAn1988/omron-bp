@@ -200,7 +200,7 @@ export function PersonSwitch({
 
   return (
     <div className="personbar no-print">
-      <div className="segmented segmented--fill" role="group" aria-label="Чей дневник">
+      <div className="segmented segmented--fill segmented--chips" role="group" aria-label="Чей дневник">
         {settings.people.map((person, index) => (
           <button
             key={person.id}

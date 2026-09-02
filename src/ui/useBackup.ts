@@ -161,7 +161,9 @@ export function useBackup(
    */
   const snapshot = async (): Promise<string> => {
     const { measurements: items, medicines: pills, settings: current } = latest.current
-    const { backupLastAt: _at, backupLastCount: _count, ...rest } = current
+    // Ключ сопряжения — связь этого телефона с этим тонометром; в чужом
+    // дневнике ему делать нечего, а в общей семейной папке — тем более.
+    const { backupLastAt: _at, backupLastCount: _count, pairingKey: _key, ...rest } = current
     // Надгробия читаются из хранилища, а не из состояния экрана: в интерфейсе
     // их нет и быть не должно — удалённого человек видеть не хочет.
     const tombstones = await getAllTombstones().catch(() => [])

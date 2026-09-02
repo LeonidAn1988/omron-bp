@@ -31,6 +31,7 @@ import {
   projectedLeft,
   restockList,
   restockText,
+  partWindowOpen,
   runsOutAt,
   setLeft,
   shortForm,
@@ -685,6 +686,16 @@ export function run() {
   check('имя отделено пробелом, остальное запятыми', дляАптеки.includes('Отец: Метформин, 850 мг'))
   const толькоМой = restockText(семейный)
   check('в личном списке имени нет', толькоМой.split('\n')[0].startsWith('Метформин'), толькоМой.split('\n')[0])
+
+  // Окно части суток: вечерние кнопки не должны быть живыми утром.
+  const окноДень = startOfDayTs(new Date(2026, 8, 1, 10, 30).getTime())
+  const час = (ч, м = 0) => окноДень + ч * 3600_000 + м * 60_000
+  check('вечер в 10:30 закрыт', partWindowOpen(окноДень, '19:00', час(10, 30)) === false)
+  check('вечер открывается за час — в 18:00', partWindowOpen(окноДень, '19:00', час(18, 0)) === true)
+  check('за час и минуту ещё закрыт', partWindowOpen(окноДень, '19:00', час(17, 59)) === false)
+  check('утро в 07:30 открыто', partWindowOpen(окноДень, '08:00', час(7, 30)) === true)
+  check('прошедший вечер открыт', partWindowOpen(окноДень, '19:00', час(23, 0)) === true)
+  check('кривое время не запирает', partWindowOpen(окноДень, 'нет', час(0, 0)) === true)
 
   return failures
 }
