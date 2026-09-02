@@ -13,8 +13,8 @@ import {
 import { instructionUrl, pharmacyUrl } from '../logic/drugs'
 import { plural } from '../logic/plural'
 import { NumberField } from './NumberField'
-import { Banner } from './bits'
-import { BackIcon, PencilIcon, TrashIcon } from './icons'
+import { Banner, BackBar } from './bits'
+import { PencilIcon, TrashIcon } from './icons'
 import { alertText, ALERT_TONE, KindTag, monthYear, substanceLabel, Supply } from './Medicines'
 
 /**
@@ -74,12 +74,7 @@ export function MedicineCard({
 
   return (
     <div className="stack">
-      <div className="row no-print">
-        <button className="btn" onClick={onBack}>
-          <BackIcon />
-          К списку
-        </button>
-      </div>
+      <BackBar onBack={onBack} />
 
       <div className="card">
         <div className="card__head">

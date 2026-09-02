@@ -115,7 +115,7 @@ export function BackupScreen({
 
   return (
     <div className="stack">
-      <BackBar label="К настройкам" onBack={onBack} />
+      <BackBar onBack={onBack} />
 
       <DataSafety
         status={backup}
@@ -130,18 +130,22 @@ export function BackupScreen({
         </div>
 
         <div className="row">
-          <button className="btn btn--primary" onClick={() => fileRef.current?.click()}>
-            Восстановить из копии
-          </button>
+          {/* Имя файла — подписью под кнопкой, а не в самой кнопке: «Вернуть из
+              «дневник-здоровья-2026-09-01.json»» разворачивалось на две строки
+              и читалось как ошибка вёрстки. */}
           {backup.target && (
-            <button className="btn" onClick={() => void изФайлаКопий()}>
-              Вернуть из «{backup.target}»
+            <button className="btn btn--primary" onClick={() => void изФайлаКопий()}>
+              Вернуть из копии
             </button>
           )}
+          <button className={backup.target ? 'btn' : 'btn btn--primary'} onClick={() => fileRef.current?.click()}>
+            Выбрать другой файл
+          </button>
           <input ref={fileRef} type="file" accept=".csv,.json,.tsv,text/csv,application/json" onChange={handleFile} hidden />
         </div>
 
         <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
+          {backup.target ? <>Из файла «{backup.target}». </> : null}
           Совпадающие записи не задваиваются, а удалённые не возвращаются.
         </div>
 

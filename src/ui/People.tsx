@@ -88,7 +88,7 @@ export function PersonScreen({
 
   return (
     <div className="stack">
-      <BackBar label="К людям" onBack={onBack} />
+      <BackBar onBack={onBack} />
 
       <div className="card">
         <div className="card__head">
@@ -211,7 +211,7 @@ export function People({
 
   return (
     <div className="stack">
-      <BackBar label="К настройкам" onBack={onBack} />
+      <BackBar onBack={onBack} />
 
       <div className="card">
         <div className="card__head">

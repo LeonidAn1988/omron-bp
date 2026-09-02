@@ -69,7 +69,7 @@ function DisplayScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
 
   return (
     <div className="stack">
-      <BackBar label="К настройкам" onBack={onBack} />
+      <BackBar onBack={onBack} />
 
       <div className="card">
         <div className="card__head">
@@ -79,7 +79,10 @@ function DisplayScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
         <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
           Тема
         </div>
-        <div className="segmented segmented--fill" role="group" aria-label="Тема оформления">
+        {/* Чипами, а не тремя равными долями: «Как в системе» в треть ширины не
+            помещается и ломается пополам уже при обычном тексте. Чип переносится
+            целиком и остаётся читаемым. */}
+        <div className="segmented segmented--chips" role="group" aria-label="Тема оформления">
           {THEMES.map(({ key, title }) => (
             <button key={key} aria-pressed={settings.theme === key} onClick={() => onPatch({ theme: key })}>
               {title}
@@ -132,7 +135,9 @@ function DisplayScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
             <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
               С чего открывать приложение
             </div>
-            <div className="segmented segmented--fill segmented--stack" role="group" aria-label="Стартовый экран">
+            {/* Тоже чипами: разделов до пяти, и «Приём лекарств» в равной доле
+                не умещается. */}
+            <div className="segmented segmented--chips" role="group" aria-label="Стартовый экран">
               {видимые.map((key) => (
                 <button key={key} aria-pressed={settings.startTab === key} onClick={() => onPatch({ startTab: key })}>
                   {SECTIONS.find((item) => item.key === key)?.title ?? 'Сахар'}
@@ -155,7 +160,7 @@ function TargetsScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
 
   return (
     <div className="stack">
-      <BackBar label="К настройкам" onBack={onBack} />
+      <BackBar onBack={onBack} />
 
       <div className="card">
         <div className="card__head">
@@ -314,7 +319,7 @@ export function Settings({
   if (screen === 'reminders') {
     return (
       <div className="stack">
-        <BackBar label="К настройкам" onBack={onBack} />
+        <BackBar onBack={onBack} />
         <Reminders
           medicines={medicines}
           enabled={settings.remindersOn}
@@ -343,7 +348,7 @@ export function Settings({
   if (screen === 'about') {
     return (
       <div className="stack">
-        <BackBar label="К настройкам" onBack={onBack} />
+        <BackBar onBack={onBack} />
         <About releases={releases} />
       </div>
     )

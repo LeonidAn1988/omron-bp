@@ -451,6 +451,20 @@ a {
   transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
     transform var(--dur-fast) var(--ease);
 }
+/* Кнопка возврата: одно слово, переносить нечего. `balance` у обычных кнопок
+   разложил бы «Назад» вместе со стрелкой на две строки. */
+.btn--back {
+  white-space: nowrap;
+  text-wrap: nowrap;
+}
+/* Размер стрелки задаём явно: у `.btn` правила для значков нет, и svg без
+   собственных размеров схлопывался в ноль — кнопка оставалась одним словом. */
+.btn--back svg {
+  flex: none;
+  width: 1.1em;
+  height: 1.1em;
+}
+
 .btn:hover:not(:disabled) {
   background: var(--hover);
 }
