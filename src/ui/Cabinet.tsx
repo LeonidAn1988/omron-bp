@@ -16,7 +16,7 @@ import { Banner } from './bits'
 import { ChevronIcon } from './icons'
 import { alertText, ALERT_TONE, KindTag, MedicineNudge, Restock, shortFormOf, Supply } from './Medicines'
 import { MedicineCard } from './MedicineCard'
-import { ownerOf } from '../logic/people'
+import { ownerOf, medicinesOf } from '../logic/people'
 import { MedicineForm } from './MedicineForm'
 
 /**
@@ -31,11 +31,21 @@ import { MedicineForm } from './MedicineForm'
  * нажатия в одной строке дают промахи.
  */
 
-type Filter = 'all' | 'low' | 'expired'
+type Filter = 'all' | 'week' | 'two-weeks' | 'month' | 'expired'
 
-const FILTERS: { key: Filter; title: string }[] = [
+/**
+ * Фильтры аптечки — по сроку, на который хватит запаса.
+ *
+ * «Кончается» отвечало на вопрос «что уже горит», но настоящий вопрос другой:
+ * «что взять, пока я в аптеке». Ответ у него временной — на неделю вперёд, на
+ * две, на месяц. Пороги растут, и каждый следующий включает предыдущий: тот,
+ * кто выбирает «на месяц», хочет видеть и то, что кончается завтра.
+ */
+const FILTERS: { key: Filter; title: string; days?: number }[] = [
   { key: 'all', title: 'Все' },
-  { key: 'low', title: 'Кончаются' },
+  { key: 'week', title: 'На неделю', days: 7 },
+  { key: 'two-weeks', title: 'На 2 недели', days: 14 },
+  { key: 'month', title: 'На месяц', days: 30 },
   { key: 'expired', title: 'Просрочены' },
 ]
 
@@ -91,9 +101,15 @@ export function Cabinet({
    * Он живёт только здесь: приём и отчёт врачу общими быть не могут — отметка
    * ставится человеку, и отчёт тоже про одного.
    */
-  const [scope, setScope] = useState<'mine' | 'family'>('mine')
+  const [scope, setScope] = useState<string>(activePerson)
   const семья = people.length > 1
-  const видимые = семья && scope === 'family' ? allMedicines : medicines
+  // Выбранный сверху человек мог смениться на другом экране: показывать чужую
+  // аптечку с чужим именем в заголовке нельзя.
+  useEffect(() => {
+    if (scope !== 'family' && !people.some((p) => p.id === scope)) setScope(activePerson)
+  }, [scope, people, activePerson])
+  const видимые =
+    !семья || scope === 'family' ? (scope === 'family' ? allMedicines : medicines) : medicinesOf(allMedicines, people, scope)
   const людиПоId = (id: string | null) => people.find((p) => p.id === id)?.name?.trim() || null
   const имяВладельца = (item: Medicine) => {
     if (!семья || scope !== 'family') return null
@@ -162,48 +178,61 @@ export function Cabinet({
   }
 
   const all = sortMedicines(видимые, now)
+  const порог = FILTERS.find((item) => item.key === filter)?.days
   const rows = all.filter((item) => {
     if (filter === 'all') return true
     const alert = medicineAlert(item, now)
-    if (filter === 'low') return alert?.kind === 'low' || alert?.kind === 'out'
-    return alert?.kind === 'expired' || alert?.kind === 'expiring'
+    if (filter === 'expired') return alert?.kind === 'expired' || alert?.kind === 'expiring'
+    if (порог === undefined) return true
+    // Кончившееся и просроченное показываем при любом пороге: за ними идут в
+    // аптеку в первую очередь, и прятать их за словом «на месяц» нельзя.
+    if (alert?.kind === 'out' || alert?.kind === 'expired') return true
+    const хватит = supplyDays(item, now)
+    return хватит !== null && хватит <= порог
   })
 
   const events = countCalendarEvents(видимые)
 
+  const имя = (id: string) => people.find((p) => p.id === id)?.name?.trim() || 'Без имени'
+
   return (
     <div className="stack">
+      {/* Чей список — над всем, а не внутри карточки аптечки. Раньше этот
+          переключатель стоял ниже «Купить», но менял и его: человек листал
+          список покупок и не понимал, откуда там чужие лекарства.
+
+          Каждый человек отдельным чипом, а не «мой / вся семья»: в семье из
+          четверых «мой» не отвечает на вопрос «что купить отцу». */}
+      {семья && (
+        <div className="segmented segmented--chips no-print" role="group" aria-label="Чей список">
+          {people.map((person) => (
+            <button
+              key={person.id}
+              aria-pressed={scope === person.id}
+              onClick={() => setScope(person.id)}
+            >
+              {имя(person.id)}
+            </button>
+          ))}
+          <button aria-pressed={scope === 'family'} onClick={() => setScope('family')}>
+            Вся семья
+          </button>
+        </div>
+      )}
+
       <Restock medicines={видимые} ownerName={имяВладельца} pharmacies={pharmacies} />
 
       <div className="card">
         <div className="card__head">
           <h2>
             Аптечка
-            {семья && scope === 'mine' && (
-              <span className="muted"> · {people.find((p) => p.id === activePerson)?.name.trim() || 'Я'}</span>
-            )}
+            {семья && scope !== 'family' && <span className="muted"> · {имя(scope)}</span>}
           </h2>
           {видимые.length > 0 && <span className="muted">препаратов: {видимые.length}</span>}
         </div>
 
-        {/* Сводная аптечка семьи. Появляется вместе со вторым человеком: одному
-            выбирать не из чего, и переключатель был бы лишним. */}
-        {семья && (
-          <div className="segmented segmented--fill no-print" role="group" aria-label="Чья аптечка"
-               style={{ marginBottom: 'var(--space-3)' }}>
-            {/* Имя вместо «Моя»: когда людей больше одного, «моя» читается от
-                лица приложения, а не человека — а выбран может быть отец. */}
-            <button aria-pressed={scope === 'mine'} onClick={() => setScope('mine')}>
-              {people.find((p) => p.id === activePerson)?.name.trim() || 'Моя'}
-            </button>
-            <button aria-pressed={scope === 'family'} onClick={() => setScope('family')}>
-              Вся семья
-            </button>
-          </div>
-        )}
-
         {видимые.length > 1 && (
-          <div className="segmented segmented--fill no-print" role="group" aria-label="Что показывать">
+          <div className="segmented segmented--chips no-print" role="group" aria-label="Что показывать">
             {FILTERS.map((item) => (
               <button key={item.key} aria-pressed={filter === item.key} onClick={() => setFilter(item.key)}>
                 {item.title}

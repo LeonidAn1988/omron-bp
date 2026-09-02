@@ -14,7 +14,7 @@ import { KIND_LABEL } from '../logic/drugs'
 import { plural } from '../logic/plural'
 import { pharmacyLinks } from '../logic/pharmacies'
 import { platform } from '../platform/ports'
-import { canShareFile, download, shareFile } from '../logic/io'
+import { canShareFile, copyTextOut, shareTextOut } from '../logic/io'
 import { Banner } from './bits'
 
 /**
@@ -177,18 +177,17 @@ export function Restock({
   const list = restockList(medicines, Date.now())
   if (list.length === 0) return null
 
-  const text = restockText(list, ownerName)
+  // Галочки и заголовок: список уходит сообщением в мессенджер, и там он
+  // должен читаться списком, а не абзацем.
+  const text = restockText(list, ownerName, { checklist: true })
+  const [failed, setFailed] = useState(false)
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2500)
-    } catch {
-      // Буфер обмена бывает запрещён политикой страницы. Молчать нельзя:
-      // человек нажал и ждёт, поэтому предлагаем файл.
-      await download('купить.txt', text, 'text/plain')
-    }
+    const ok = await copyTextOut(text)
+    setFailed(!ok)
+    if (!ok) return
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
   }
 
   return (
@@ -255,11 +254,14 @@ export function Restock({
         ))}
       </ul>
 
-      <div className="row" style={{ marginTop: 'var(--space-4)' }}>
+      <div className="row row--stack" style={{ marginTop: 'var(--space-4)' }}>
         {canShareFile() && (
           <button
             className="btn btn--primary"
-            onClick={() => void shareFile('купить.txt', text, 'text/plain')}
+            // Текстом, а не файлом «купить.txt»: получатель видит сообщение в
+            // ленте, а не вложение, которое надо открыть и которое непонятно
+            // как называется.
+            onClick={() => void shareTextOut(text, 'Купить в аптеке')}
           >
             Отправить список
           </button>
@@ -268,6 +270,14 @@ export function Restock({
           {copied ? 'Скопировано' : 'Скопировать'}
         </button>
       </div>
+
+      {failed && (
+        <div style={{ marginTop: 'var(--space-3)' }}>
+          <Banner tone="critical">
+            Скопировать не вышло — телефон не дал доступ к буферу обмена. Отправьте список кнопкой рядом.
+          </Banner>
+        </div>
+      )}
 
       <p className="muted" style={{ margin: 'var(--space-3) 0 0' }}>
         Количество рассчитано на {RESTOCK_DAYS} {plural(RESTOCK_DAYS, 'день', 'дня', 'дней')}

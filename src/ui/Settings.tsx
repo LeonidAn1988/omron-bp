@@ -80,7 +80,25 @@ function DisplayScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
           <h2>Экран</h2>
         </div>
 
+        {/* Размер текста первым: за ним сюда и приходят. В корне настроек он
+            стоял отдельной карточкой, но там он единственный орган управления
+            среди списка разделов — а место ему рядом с темой и плотностью. */}
         <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
+          Размер текста
+        </div>
+        <div className="segmented segmented--fill segmented--stack" role="group" aria-label="Размер текста">
+          {TEXT_SCALES.map(({ key, title }) => (
+            <button key={key} aria-pressed={settings.textScale === key} onClick={() => onPatch({ textScale: key })}>
+              {title}
+            </button>
+          ))}
+        </div>
+        <div className="sample">
+          <div style={{ fontSize: 'var(--fs-3)', fontWeight: 600 }}>Утренний приём — 08:00</div>
+          <div style={{ fontSize: 'var(--fs-2)', marginTop: 'var(--space-2)' }}>Периндоприл 5 мг, до еды</div>
+        </div>
+
+        <div className="tile__label" style={{ margin: 'var(--space-5) 0 var(--space-2)' }}>
           Тема
         </div>
         {/* Чипами, а не тремя равными долями: «Как в системе» в треть ширины не
@@ -420,34 +438,14 @@ export function Settings({
   // ── корень ───────────────────────────────────────────────────────────────
   return (
     <div className="stack">
-      {/* Размер текста — единственная настройка, за которой приходят каждый
-          раз, и единственная, которую нельзя прятать за строкой списка: её
-          выбирают именно тогда, когда мелкий текст плохо читается. */}
-      <div className="card">
-        <div className="card__head">
-          <h2>Размер текста</h2>
-        </div>
-        <div className="segmented segmented--fill segmented--stack" role="group" aria-label="Размер текста">
-          {TEXT_SCALES.map(({ key, title }) => (
-            <button key={key} aria-pressed={settings.textScale === key} onClick={() => patch({ textScale: key })}>
-              {title}
-            </button>
-          ))}
-        </div>
-        {/* Образец меняется вместе с настройкой: выбирать размер вслепую, а
-            потом искать, где посмотреть результат, — лишний шаг там, где он не
-            нужен. Подписи под образцом нет: он и так стоит под переключателем,
-            а при «Очень крупном» каждая лишняя строка — это четверть экрана. */}
-        <div className="sample">
-          <div style={{ fontSize: 'var(--fs-3)', fontWeight: 600 }}>Утренний приём — 08:00</div>
-          <div style={{ fontSize: 'var(--fs-2)', marginTop: 'var(--space-2)' }}>Периндоприл 5 мг, до еды</div>
-        </div>
-      </div>
-
       <div className="card">
         <ul className="pills">
           <NavRow title={SUBSCREEN_TITLE.display} value={describeDisplay(settings)} onOpen={() => onOpen('display')} />
-          <NavRow title={SUBSCREEN_TITLE.people} value={describePeople(settings.people)} onOpen={() => onOpen('people')} />
+          <NavRow
+            title={SUBSCREEN_TITLE.people}
+            value={describePeople(settings.people, settings.intakeTimes)}
+            onOpen={() => onOpen('people')}
+          />
           <NavRow title={SUBSCREEN_TITLE.targets} value={describeTargets(settings, activePersonOf(settings))} onOpen={() => onOpen('targets')} />
           {/* В браузере настоящих напоминаний нет вовсе, и строки тоже. */}
           {напоминанияЕсть && (

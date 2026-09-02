@@ -108,6 +108,16 @@ export function canShareFile(): boolean {
 }
 
 /** Отдать файл системному «поделиться». `false` — пользователь закрыл окно. */
+/** Поделиться текстом: список покупок уходит сообщением, а не вложением. */
+export function shareTextOut(text: string, title: string): Promise<boolean> {
+  return platform().files.shareText(text, title)
+}
+
+/** Скопировать текст. `false` — не вышло, и молчать об этом нельзя. */
+export function copyTextOut(text: string): Promise<boolean> {
+  return platform().files.copyText(text)
+}
+
 export function shareFile(filename: string, content: string, mime: string): Promise<boolean> {
   return platform().files.share(filename, content, mime)
 }

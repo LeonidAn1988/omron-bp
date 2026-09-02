@@ -130,10 +130,17 @@ export function run() {
   check('и чужие пороги закреплены прежними', лц_сахар.people[0].glucose.fastingMax === 7)
 
   // ── подписи строк корня ──────────────────────────────────────────────────
-  check('экран', describeDisplay(БАЗА) === 'тёмная · обычная плотность', describeDisplay(БАЗА))
-  check('плотность называется, когда она не обычная',
-    describeDisplay({ ...БАЗА, density: 'roomy' }) === 'тёмная · просторно')
+  check('экран называет тему и размер текста',
+    describeDisplay({ ...БАЗА, textScale: 'normal' }) === 'тёмная · текст обычный',
+    describeDisplay({ ...БАЗА, textScale: 'normal' }))
+  check('крупный текст виден в строке корня',
+    describeDisplay({ ...БАЗА, textScale: 'xlarge' }) === 'тёмная · текст очень крупный')
   check('люди перечислены', describePeople(чп_семья.people) === 'Я, Отец')
+  check('у одного человека видны часы приёма',
+    describePeople([{ id: 'p1', name: 'Я' }], БАЗА.intakeTimes) === 'Я · часы приёма 08:00–22:00',
+    describePeople([{ id: 'p1', name: 'Я' }], БАЗА.intakeTimes))
+  check('у семьи часы в строке не показываются',
+    describePeople(чп_семья.people, БАЗА.intakeTimes) === 'Я, Отец')
   check('безымянный человек назван по месту', describePeople([{ id: 'p1', name: '  ' }]) === 'Человек 1')
   check('нормы', describeTargets(БАЗА) === 'давление 135/85 · сахар ведётся')
   check('нормы показывают цель выбранного человека',

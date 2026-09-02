@@ -8,6 +8,49 @@
 import type { FilePort } from '../ports'
 
 export const webFiles: FilePort = {
+  /**
+   * Скопировать текст в буфер обмена.
+   *
+   * Два пути, потому что первый подводит: `navigator.clipboard` требует
+   * защищённого происхождения и разрешения, и в WebView отказывает молча.
+   * Тогда остаётся старый приём с невидимым полем — он работает везде и не
+   * требует ничего. Раньше на отказ первого пути список скачивался файлом:
+   * человек нажимал «Скопировать» и получал загрузку.
+   */
+  async copyText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      try {
+        const поле = document.createElement('textarea')
+        поле.value = text
+        поле.setAttribute('readonly', '')
+        поле.style.position = 'fixed'
+        поле.style.opacity = '0'
+        document.body.appendChild(поле)
+        поле.select()
+        const ok = document.execCommand('copy')
+        document.body.removeChild(поле)
+        return ok
+      } catch {
+        return false
+      }
+    }
+  },
+
+  /** В браузере «поделиться» текстом умеет тот же системный лист. */
+  async shareText(text: string, title: string) {
+    const share = navigator.share?.bind(navigator)
+    if (!share) return false
+    try {
+      await share({ title, text })
+      return true
+    } catch {
+      return false
+    }
+  },
+
   /** В браузере ссылка и так открывается в браузере — новой вкладкой. */
   async openExternal(url: string) {
     window.open(url, '_blank', 'noopener,noreferrer')

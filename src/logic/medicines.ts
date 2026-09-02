@@ -727,8 +727,17 @@ export function restockList(items: Medicine[], now: number): RestockItem[] {
  * читают с экрана у прилавка. Действующее вещество идёт следом за названием:
  * в аптеке предложат аналог, и по веществу его сверяют.
  */
-export function restockText(list: RestockItem[], ownerName?: (medicine: Medicine) => string | null): string {
-  return list
+export function restockText(
+  list: RestockItem[],
+  ownerName?: (medicine: Medicine) => string | null,
+  options: { checklist?: boolean } = {},
+): string {
+  // Пустой квадрат перед строкой: в мессенджере это единственный способ
+  // передать список делами, а не абзацем. Своего формата списка покупок ни у
+  // Телеграма, ни у остальных нет — есть только текст, и он должен читаться
+  // списком сам по себе.
+  const метка = options.checklist ? '☐ ' : ''
+  const строки = list
     .map(({ medicine, need }) => {
       // Имя владельца впереди, когда список общий на семью: у прилавка
       // спрашивают не только «что», но и «кому» — от этого зависит, брать одну
@@ -750,9 +759,11 @@ export function restockText(list: RestockItem[], ownerName?: (medicine: Medicine
             : ` — ${need} шт. (${packs} ${plural(packs, 'пачка', 'пачки', 'пачек')} по ${medicine.packSize})`
       // Имя отделяем пробелом, остальное запятыми: «Отец: Метформин, 850 мг».
       const голова = чей ? `${parts[0]} ${parts.slice(1).join(', ')}` : parts.join(', ')
-      return `${голова}${inn}${count}`
+      return `${метка}${голова}${inn}${count}`
     })
     .join('\n')
+  if (!options.checklist) return строки
+  return `Купить в аптеке:\n${строки}`
 }
 
 /**

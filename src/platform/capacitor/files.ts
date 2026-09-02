@@ -54,6 +54,50 @@ interface SystemSettingsPrint {
 const SystemSettings = registerPlugin<SystemSettingsPrint>('SystemSettings')
 
 export const capacitorFiles: FilePort = {
+  /**
+   * Скопировать текст в буфер обмена.
+   *
+   * Два пути, потому что первый подводит: `navigator.clipboard` требует
+   * защищённого происхождения и разрешения, и в WebView отказывает молча.
+   * Тогда остаётся старый приём с невидимым полем — он работает везде и не
+   * требует ничего. Раньше на отказ первого пути список скачивался файлом:
+   * человек нажимал «Скопировать» и получал загрузку.
+   */
+  async copyText(text: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return true
+    } catch {
+      try {
+        const поле = document.createElement('textarea')
+        поле.value = text
+        поле.setAttribute('readonly', '')
+        поле.style.position = 'fixed'
+        поле.style.opacity = '0'
+        document.body.appendChild(поле)
+        поле.select()
+        const ok = document.execCommand('copy')
+        document.body.removeChild(поле)
+        return ok
+      } catch {
+        return false
+      }
+    }
+  },
+
+  async shareText(text: string, title: string) {
+    try {
+      // Текстом, а не файлом: получатель видит сообщение в ленте, а не
+      // вложение, которое надо открыть.
+      await Share.share({ title, text, dialogTitle: title })
+      return true
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (/cancel/i.test(message)) return false
+      throw error
+    }
+  },
+
   async openExternal(url: string) {
     // Через нативный плагин, а не `window.open`: тот отдаёт адрес системе, и
     // ссылку перехватывает приложение аптеки, открываясь на главной.
