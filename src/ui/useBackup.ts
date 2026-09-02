@@ -10,6 +10,7 @@ import {
   shouldWriteBackup,
   type BackupWarning,
 } from '../logic/backup'
+import { diarySignature } from '../logic/merge'
 
 /**
  * Состояние сохранности дневника и всё, что с ним можно сделать.
@@ -147,6 +148,15 @@ export function useBackup(
   const count = measurements.length + medicines.length
 
   /**
+   * Слепок содержимого: он и решает, писать ли копию.
+   *
+   * Надгробия в него не входят — они читаются из хранилища, а не из состояния
+   * экрана, и ради слепка лезть в базу на каждую отрисовку незачем. Удаление
+   * при этом всё равно меняет число записей, так что незамеченным не остаётся.
+   */
+  const signature = diarySignature(measurements, medicines, [])
+
+  /**
    * Настройки читаются из ссылки, а не из замыкания: автокопия срабатывает по
    * изменению данных, и если бы она зависела ещё и от настроек, то запускалась
    * бы повторно от собственной же отметки о времени.
@@ -163,7 +173,7 @@ export function useBackup(
     const { measurements: items, medicines: pills, settings: current } = latest.current
     // Ключ сопряжения — связь этого телефона с этим тонометром; в чужом
     // дневнике ему делать нечего, а в общей семейной папке — тем более.
-    const { backupLastAt: _at, backupLastCount: _count, pairingKey: _key, ...rest } = current
+    const { backupLastAt: _at, backupLastCount: _count, backupLastSignature: _sig, pairingKey: _key, ...rest } = current
     // Надгробия читаются из хранилища, а не из состояния экрана: в интерфейсе
     // их нет и быть не должно — удалённого человек видеть не хочет.
     const tombstones = await getAllTombstones().catch(() => [])
@@ -193,9 +203,9 @@ export function useBackup(
     void backupTarget.current().then(setTarget)
   }, [])
 
-  const markDone = useCallback((saved: number) => {
+  const markDone = useCallback((saved: number, слепок: string) => {
     const { settings: current, onSettings: save } = latest.current
-    save({ ...current, backupLastAt: Date.now(), backupLastCount: saved })
+    save({ ...current, backupLastAt: Date.now(), backupLastCount: saved, backupLastSignature: слепок })
   }, [])
 
   // Автоматическая копия: пишем, как только дневник разошёлся с файлом.
@@ -205,10 +215,11 @@ export function useBackup(
     const total = items.length + pills.length
 
     const надо = shouldWriteBackup(
-      { lastAt: current.backupLastAt, lastCount: current.backupLastCount },
+      { lastAt: current.backupLastAt, lastCount: current.backupLastCount, lastSignature: current.backupLastSignature },
       total,
       { written: writtenLock.current, current: lock },
       force.current,
+      signature,
     )
     // Замок запоминаем и когда не пишем: молчание означает «в файле уже то,
     // чем его закрывали», и следующая смена пароля должна это заметить.
@@ -231,7 +242,7 @@ export function useBackup(
         writtenLock.current = lock
         setFailed(false)
         setStalled(false)
-        markDone(total)
+        markDone(total, signature)
       } else if (result === 'retry') {
         // Файл на месте, доступ цел — недоступна сама папка. Отвязывать её
         // из-за выключенной сети нельзя: человек будет искать файл заново.
@@ -246,7 +257,7 @@ export function useBackup(
     return () => {
       cancelled = true
     }
-  }, [ready, target, count, settings.backupLastCount, settings.backupLastAt, lock, markDone, envelope])
+  }, [ready, target, signature, settings.backupLastSignature, settings.backupLastAt, lock, markDone, envelope])
 
   const readTarget = useCallback(() => backupTarget.read(), [])
 
@@ -285,7 +296,10 @@ export function useBackup(
       // Отметку ставим только при подтверждённом сохранении — ровно как в
       // shareNow ниже. На телефоне «сохранить» проходит через системное окно, и
       // отказ от него означает, что копии нет.
-      if (saved) markDone(latest.current.measurements.length + latest.current.medicines.length)
+      if (saved) {
+        const { measurements: м, medicines: л } = latest.current
+        markDone(м.length + л.length, diarySignature(м, л, []))
+      }
     } finally {
       setBusy(false)
     }
@@ -303,7 +317,10 @@ export function useBackup(
       const sent = await shareFile(backupFilename(Date.now()), содержимое, 'application/json')
       // Отметку ставим только при подтверждённой передаче: закрытое окно
       // «поделиться» означает, что копии нет, и делать вид иначе нельзя.
-      if (sent) markDone(latest.current.measurements.length + latest.current.medicines.length)
+      if (sent) {
+        const { measurements: м, medicines: л } = latest.current
+        markDone(м.length + л.length, diarySignature(м, л, []))
+      }
     } finally {
       setBusy(false)
     }

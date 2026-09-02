@@ -19,6 +19,7 @@ import {
   describeBackupRow,
   describePerson,
   describeSections,
+  describeFamily,
   setTargets,
   setGlucoseTargets,
   targetsOf,
@@ -151,6 +152,10 @@ export function run() {
       === 'кнопка 2 · часы 09:00–21:30')
   check('человек без кнопки прибора',
     describePerson({ id: 'p-k', name: 'Ребёнок' }, БАЗА.intakeTimes).startsWith('без кнопки прибора'))
+
+  check('семья не настроена', describeFamily(0, true) === 'обмен не настроен')
+  check('семья из трёх телефонов', describeFamily(2, true) === 'телефонов: 3')
+  check('в браузере обмена нет', describeFamily(0, false).startsWith('только в приложении'))
 
   check('скрытого нет', describeSections(БАЗА) === 'показаны все')
   check('скрыт один', describeSections({ sections: { ...БАЗА.sections, overview: false } }) === 'скрыт раздел «Обзор»')

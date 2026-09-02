@@ -89,6 +89,50 @@ public class BackupFile extends Plugin {
     }
 
     /**
+     * Выбрать чужой файл — копию другого телефона семьи, только для чтения.
+     *
+     * Отдельно от `choose`: тот создаёт файл и берёт право записи, а сюда
+     * приложение обязано не писать вовсе. Чужая копия принадлежит другому
+     * человеку, и портить её нам нечем — читаем и сливаем у себя.
+     */
+    @PluginMethod
+    public void openSource(PluginCall call) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*")
+                .putExtra(Intent.EXTRA_MIME_TYPES, new String[] { "application/json", "text/plain", "*/*" });
+        startActivityForResult(call, intent, "sourceOpened");
+    }
+
+    @ActivityCallback
+    private void sourceOpened(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        Intent data = result.getData();
+        Uri uri = data == null ? null : data.getData();
+        if (uri == null) {
+            JSObject empty = new JSObject();
+            empty.put("cancelled", true);
+            call.resolve(empty);
+            return;
+        }
+        try {
+            // Только чтение: права записи не просим и не берём. Если система
+            // долгоживущего доступа не даст, синхронизация без него бессмысленна
+            // — файл придётся выбирать заново при каждом запуске.
+            getContext().getContentResolver().takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (Exception error) {
+            call.reject("система не выдала долгоживущий доступ к файлу", error);
+            return;
+        }
+        JSObject out = new JSObject();
+        out.put("cancelled", false);
+        out.put("uri", uri.toString());
+        out.put("name", displayName(uri));
+        call.resolve(out);
+    }
+
+    /**
      * Записать копию.
      *
      * Режим `wt` усекает файл перед записью — иначе остаток прежнего, более

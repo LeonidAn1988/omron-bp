@@ -27,8 +27,10 @@ import { About } from './About'
 import { parseChangelog } from '../logic/changelog'
 import changelogSource from '../../CHANGELOG.md?raw'
 import { BackupScreen } from './BackupScreen'
+import { FamilyScreen } from './Family'
 import { People, PersonScreen } from './People'
 import type { BackupStatus } from './useBackup'
+import type { FamilySyncStatus } from './useFamilySync'
 import {
   DENSITIES,
   SECTIONS,
@@ -37,6 +39,7 @@ import {
   THEMES,
   describeBackupRow,
   describeDisplay,
+  describeFamily,
   describePeople,
   describeReminders,
   describeSections,
@@ -269,6 +272,7 @@ export function Settings({
   onRestore,
   onClearAll,
   backup,
+  family,
   screen,
   person,
   onOpen,
@@ -282,6 +286,8 @@ export function Settings({
   onRestore: (incoming: ImportResult) => Promise<{ added: number; medicines: number; settingsRestored: boolean }>
   onClearAll: () => Promise<void>
   backup: BackupStatus
+  /** Семейный обмен: список телефонов и что принесло последнее чтение. */
+  family: FamilySyncStatus
   /**
    * Какой подэкран открыт. Приходит снаружи, из стека экранов приложения: на
    * подэкран ведут и глубокие ссылки с «Обзора», где эти настройки ещё не
@@ -345,6 +351,17 @@ export function Settings({
     )
   }
 
+  if (screen === 'family') {
+    return (
+      <FamilyScreen
+        family={family}
+        target={backup.target}
+        onBack={onBack}
+        onOpenBackup={() => onOpen('backup')}
+      />
+    )
+  }
+
   if (screen === 'about') {
     return (
       <div className="stack">
@@ -398,6 +415,11 @@ export function Settings({
             title={SUBSCREEN_TITLE.backup}
             value={describeBackupRow(backup.lastAt, Date.now())}
             onOpen={() => onOpen('backup')}
+          />
+          <NavRow
+            title={SUBSCREEN_TITLE.family}
+            value={describeFamily(family.sources.length, family.supported)}
+            onOpen={() => onOpen('family')}
           />
           <NavRow title={SUBSCREEN_TITLE.about} value={releases[0]?.version} onOpen={() => onOpen('about')} />
         </ul>

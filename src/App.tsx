@@ -48,6 +48,7 @@ import {
 import type { ImportResult } from './logic/io'
 import { applyDisplay, applyTheme } from './ui/theme'
 import { useBackup } from './ui/useBackup'
+import { useFamilySync } from './ui/useFamilySync'
 import { useReminders } from './ui/useReminders'
 import { BackupNudge } from './ui/Backup'
 import { Settings } from './ui/Settings'
@@ -530,6 +531,22 @@ export default function App() {
   )
 
   const backup = useBackup(measurements, medicines, settings, updateSettings, ready)
+
+  /**
+   * Семейный обмен: читаем копии других телефонов при каждом открытии.
+   *
+   * Свой файл при этом пишет обычная автокопия — отдельного канала для «своего»
+   * не нужно, это тот же файл, который человек уже выбрал.
+   */
+  const family = useFamilySync({
+    ready,
+    settings,
+    onSettings: updateSettings,
+    onChanged: async () => {
+      await refresh()
+      await refreshMedicines()
+    },
+  })
   /** Копия просрочена — точка на «Настройках» горит и после «Понятно». */
   const settingsMark = backup.warning !== null
 
@@ -1198,6 +1215,7 @@ export default function App() {
           measurements={measurements}
           onRestore={handleRestore}
           onClearAll={handleClearAll}
+          family={family}
           screen={подэкранНастроек}
           person={открытыйЧеловек}
           onOpen={(next) => открыть({ kind: 'sub', sub: next })}

@@ -44,6 +44,7 @@ const suites = [
   ['Люди в дневнике', await import('./people.test.mjs')],
   ['Стек экранов', await import('./nav.test.mjs')],
   ['Правила настроек', await import('./settings.test.mjs')],
+  ['Слияние дневников', await import('./merge.test.mjs')],
   ['Следы удалений', await import('./tombstones.test.mjs')],
   ['Свёрнутая история приёма', await import('./history.test.mjs')],
   ['История изменений', await import('./changelog.test.mjs')],

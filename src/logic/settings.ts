@@ -66,7 +66,7 @@ export const INTAKE_SLOTS: { key: keyof Settings['intakeTimes']; title: string }
 ]
 
 /** Подэкраны настроек. Порядок тот же, что в корне: частое выше редкого. */
-export const SUBSCREENS = ['display', 'people', 'targets', 'reminders', 'backup', 'about'] as const
+export const SUBSCREENS = ['display', 'people', 'targets', 'reminders', 'backup', 'family', 'about'] as const
 export type Subscreen = (typeof SUBSCREENS)[number]
 
 export const SUBSCREEN_TITLE: Record<Subscreen, string> = {
@@ -75,6 +75,7 @@ export const SUBSCREEN_TITLE: Record<Subscreen, string> = {
   targets: 'Нормы',
   reminders: 'Напоминания',
   backup: 'Копия дневника',
+  family: 'Семья',
   about: 'О приложении',
 }
 
@@ -231,6 +232,13 @@ export function describeReminders(settings: Pick<Settings, 'remindersOn' | 'remi
   if (!settings.remindersOn) return 'выключены'
   if (!settings.remindersRepeat) return 'включены, без повтора'
   return `включены, повтор ${REPEATS} ${plural(REPEATS, 'раз', 'раза', 'раз')}`
+}
+
+/** Строка «Семья» в корне: сколько телефонов подключено. */
+export function describeFamily(sources: number, supported: boolean): string {
+  if (!supported) return 'только в приложении для Android'
+  if (sources === 0) return 'обмен не настроен'
+  return `телефонов: ${sources + 1}`
 }
 
 /** «последняя вчера» или «копий ещё не было» — обычным тоном, это не тревога. */

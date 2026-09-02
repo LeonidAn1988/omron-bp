@@ -173,9 +173,14 @@ export {
   describeBackupRow,
   describePerson,
   describeSections,
+  describeFamily,
   setTargets,
   setGlucoseTargets,
 } from '../src/logic/settings'
+
+/** Слияние дневников двух телефонов: чистые правила, без хранилища. */
+export { mergeDiary, mergeMedicine, mergeChangedAnything, diarySignature } from '../src/logic/merge'
+export type { Diary, Incoming, MergeResult, MergeLog } from '../src/logic/merge'
 
 export { installWebPlatform, useIndexedDbFactory } from '../src/platform/web'
 

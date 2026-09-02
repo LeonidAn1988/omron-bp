@@ -80,6 +80,32 @@ async function writeHandle(handle: FileHandle | null): Promise<void> {
 }
 
 export const webBackup: BackupPort = {
+  /**
+   * Чужие копии в браузере не поддерживаются.
+   *
+   * Доступ к файлу здесь живёт ровно столько, сколько открыта вкладка: у
+   * File System Access есть долгоживущие ссылки, но подтверждать их надо
+   * жестом при каждом запуске, а синхронизация должна происходить сама.
+   * Семья живёт на телефонах, и там это работает.
+   */
+  canReadSources() {
+    return false
+  },
+
+  async addSource() {
+    return null
+  },
+
+  async sources() {
+    return []
+  },
+
+  async readSource() {
+    return null
+  },
+
+  async removeSource() {},
+
   isSupported() {
     return picker() !== null
   },

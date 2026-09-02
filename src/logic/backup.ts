@@ -20,8 +20,13 @@
 export interface BackupState {
   /** Когда копия сделана. `null` — не делалась ни разу. */
   lastAt: number | null
-  /** Сколько записей было в копии. По нему видно, разошлась ли она с дневником. */
+  /** Сколько записей было в копии. По нему считается, на сколько она отстала. */
   lastCount: number
+  /**
+   * Слепок содержимого на момент копии. По нему решается, писать ли: он ловит
+   * и правку внутри записи, а не только появление новой.
+   */
+  lastSignature?: string
 }
 
 export const NO_BACKUP: BackupState = { lastAt: null, lastCount: 0 }
@@ -48,8 +53,13 @@ export const BEHIND_COUNT = 5
  * даже на годы измерений, поэтому экономить на записи незачем: любое отличие
  * это потенциальная потеря.
  */
-export function shouldAutoBackup(state: BackupState, count: number): boolean {
-  return count > 0 && (state.lastAt === null || state.lastCount !== count)
+export function shouldAutoBackup(state: BackupState, count: number, signature?: string): boolean {
+  if (count === 0) return false
+  if (state.lastAt === null) return true
+  // Слепок точнее счётчика и отвечает на тот же вопрос: разошёлся ли дневник с
+  // файлом. Пока его нет (копия сделана прежней версией) — считаем по записям.
+  if (signature !== undefined && state.lastSignature !== undefined) return state.lastSignature !== signature
+  return state.lastCount !== count
 }
 
 /**
@@ -74,13 +84,14 @@ export function shouldWriteBackup(
   count: number,
   lock: { written: string | null; current: string },
   force: boolean,
+  signature?: string,
 ): boolean {
   // Пустой дневник не пишем ни при каких условиях: записать поверх копии
   // пустоту — это потерять её. Ни смена пароля, ни свежий файл того не стоят.
   if (count === 0) return false
   if (force) return true
   if (lock.written !== null && lock.written !== lock.current) return true
-  return shouldAutoBackup(state, count)
+  return shouldAutoBackup(state, count, signature)
 }
 
 export type BackupWarning =

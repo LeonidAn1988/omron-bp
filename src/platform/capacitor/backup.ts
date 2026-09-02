@@ -23,10 +23,11 @@
  */
 
 import { registerPlugin } from '@capacitor/core'
-import type { BackupPort, BackupWriteResult } from '../ports'
+import type { BackupPort, BackupSource, BackupWriteResult } from '../ports'
 
 interface BackupFilePlugin {
   choose(options: { suggestedName: string }): Promise<{ cancelled: boolean; uri?: string; name?: string }>
+  openSource(): Promise<{ cancelled: boolean; uri?: string; name?: string }>
   write(options: { uri: string; content: string }): Promise<{ ok: boolean }>
   read(options: { uri: string }): Promise<{ content: string }>
   check(options: { uri: string }): Promise<{ ok: boolean; name: string | null }>
@@ -43,6 +44,39 @@ const BackupFile = registerPlugin<BackupFilePlugin>('BackupFile')
  */
 const URI_KEY = 'omron.backup-uri'
 const NAME_KEY = 'omron.backup-name'
+
+/**
+ * Чужие копии — телефоны остальных членов семьи.
+ *
+ * Здесь же, в localStorage, и по той же причине: это связь с системой, а не
+ * данные дневника. В резервную копию список попасть не должен — на другом
+ * телефоне эти адреса недействительны, и подтянуть их туда значит показать
+ * человеку список файлов, которых у него нет.
+ */
+const SOURCES_KEY = 'omron.backup-sources'
+
+function сохранённыеИсточники(): { uri: string; name: string }[] {
+  try {
+    const raw = localStorage.getItem(SOURCES_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (item): item is { uri: string; name: string } =>
+        typeof item === 'object' && item !== null && typeof (item as { uri?: unknown }).uri === 'string',
+    )
+  } catch {
+    return []
+  }
+}
+
+function записатьИсточники(items: { uri: string; name: string }[]) {
+  try {
+    localStorage.setItem(SOURCES_KEY, JSON.stringify(items))
+  } catch {
+    // Приватный режим: список проживёт эту сессию.
+  }
+}
 
 function remember(uri: string, name: string) {
   try {
@@ -137,6 +171,39 @@ export const capacitorBackup: BackupPort = {
     } catch {
       return null
     }
+  },
+
+  canReadSources() {
+    return true
+  },
+
+  async addSource(): Promise<BackupSource | null> {
+    const result = await BackupFile.openSource()
+    if (result.cancelled || !result.uri) return null
+    const было = сохранённыеИсточники().filter((item) => item.uri !== result.uri)
+    const item = { uri: result.uri, name: result.name ?? 'копия' }
+    записатьИсточники([...было, item])
+    return { id: item.uri, name: item.name }
+  },
+
+  async sources(): Promise<BackupSource[]> {
+    return сохранённыеИсточники().map((item) => ({ id: item.uri, name: item.name }))
+  },
+
+  async readSource(id) {
+    try {
+      const { content } = await BackupFile.read({ uri: id })
+      return content
+    } catch {
+      // Файл удалили, переименовали или отозвали доступ. Это не ошибка
+      // приложения, и падать на ней нельзя: остальные источники читаются.
+      return null
+    }
+  },
+
+  async removeSource(id) {
+    записатьИсточники(сохранённыеИсточники().filter((item) => item.uri !== id))
+    await BackupFile.forget({ uri: id }).catch(() => undefined)
   },
 
   async forget() {
