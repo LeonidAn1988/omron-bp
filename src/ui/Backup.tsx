@@ -105,7 +105,12 @@ export function DataSafety({
           )}
         </div>
 
-        <div className="row">
+        {/* Сделать копию — столбиком во всю ширину: две кнопки об одном и том
+            же деле должны выглядеть одинаково, а не лесенкой по длине подписи.
+            Выбор файла стоит рядом с ними, пока он не сделан: без него копия
+            не обновляется сама. Когда файл выбран, отключение — редкое
+            действие, и оно уезжает вниз, под объяснение. */}
+        <div className="row row--stack">
           {status.canShare && (
             <button
               className="btn btn--primary"
@@ -122,17 +127,20 @@ export function DataSafety({
           >
             Сохранить в файл
           </button>
-          {supported &&
-            (target ? (
-              <button className="btn" onClick={() => void status.forgetTarget()} disabled={busy}>
-                Отключить автокопии
-              </button>
-            ) : (
-              <button className="btn" onClick={() => void status.chooseTarget()} disabled={busy}>
-                Выбрать файл для автокопий
-              </button>
-            ))}
+          {supported && !target && (
+            <button className="btn" onClick={() => void status.chooseTarget()} disabled={busy}>
+              Выбрать файл для автокопий
+            </button>
+          )}
         </div>
+
+        {supported && target && (
+          <div className="row">
+            <button className="btn btn--sm" onClick={() => void status.forgetTarget()} disabled={busy}>
+              Отключить автокопии
+            </button>
+          </div>
+        )}
 
         {supported && (
           <p className="muted" style={{ margin: 0 }}>

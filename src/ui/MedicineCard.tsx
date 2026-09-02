@@ -98,7 +98,8 @@ export function MedicineCard({
 
         {showSupply && <Supply days={supply!} until={runsOutAt(medicine, now)} />}
 
-        <div className="row" style={{ marginTop: 'var(--space-4)' }}>
+        {/* Обе кнопки про остаток, и выглядеть они должны одинаково. */}
+        <div className="row row--stack" style={{ marginTop: 'var(--space-4)' }}>
           {medicine.packSize ? (
             <button className="btn btn--primary" onClick={() => void onSave(addPack(medicine, Date.now()))}>
               Купил упаковку — {medicine.packSize} шт.

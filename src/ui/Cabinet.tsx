@@ -237,7 +237,9 @@ export function Cabinet({
           </ul>
         )}
 
-        <div className="row" style={{ marginTop: 'var(--space-5)' }}>
+        {/* Столбиком во всю ширину: в строку эти две не помещаются, а по
+            отдельности получаются разной длины — лесенкой. */}
+        <div className="row row--stack" style={{ marginTop: 'var(--space-5)' }}>
           <button className="btn btn--primary" onClick={onAdd}>
             Добавить препарат
           </button>

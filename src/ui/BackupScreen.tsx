@@ -129,7 +129,7 @@ export function BackupScreen({
           <span className="muted">сейчас записей: {measurements.length}</span>
         </div>
 
-        <div className="row">
+        <div className="row row--stack">
           {/* Имя файла — подписью под кнопкой, а не в самой кнопке: «Вернуть из
               «дневник-здоровья-2026-09-01.json»» разворачивалось на две строки
               и читалось как ошибка вёрстки. */}
@@ -198,7 +198,7 @@ export function BackupScreen({
       <div className="card">
         <details>
           <summary>Для таблиц и других программ</summary>
-          <div className="row" style={{ marginTop: 'var(--space-4)' }}>
+          <div className="row row--stack" style={{ marginTop: 'var(--space-4)' }}>
             <button
               className="btn"
               onClick={() => download(`dnevnik-${today()}.csv`, toCsv(measurements), 'text/csv')}
