@@ -137,6 +137,44 @@ export {
 export { parseChangelog, currentVersion } from '../src/logic/changelog'
 export { fillMissingFromCopy, mergeRestoredSettings, takesPersonalFrom } from '../src/logic/io'
 
+/** Стек экранов: чистая модель навигации, без window и document. */
+export {
+  rootStack,
+  tabOf,
+  topOf,
+  push,
+  pop,
+  replaceTop,
+  depthOf,
+  tapTab,
+  toTab,
+  pathOf,
+  prune,
+} from '../src/logic/nav'
+
+/** Правила и подписи настроек: без React, чтобы проверялись обычными тестами. */
+export {
+  SECTIONS,
+  THEMES,
+  TEXT_SCALES,
+  DENSITIES,
+  INTAKE_SLOTS,
+  SUBSCREENS,
+  SUBSCREEN_TITLE,
+  visibleSections,
+  lockedSection,
+  toggleSection,
+  setTrackGlucose,
+  setIntakeTime,
+  describeDisplay,
+  describePeople,
+  describeTargets,
+  describeReminders,
+  describeBackupRow,
+  describePerson,
+  describeSections,
+} from '../src/logic/settings'
+
 export { installWebPlatform, useIndexedDbFactory } from '../src/platform/web'
 
 import type { Medicine } from '../src/types'

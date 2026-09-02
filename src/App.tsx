@@ -25,6 +25,9 @@ import { Readings } from './ui/Readings'
 import { MedicineNudge } from './ui/Medicines'
 import { DeviceIcon, ReportIcon, SettingsIcon } from './ui/icons'
 import { fillMissingFromCopy, mergeRestoredSettings, takesPersonalFrom } from './logic/io'
+import { depthOf, pathOf, pop, prune, push, rootStack, tabOf, tapTab, toTab, type Node, type Stack } from './logic/nav'
+import { platform } from './platform/ports'
+import { SUBSCREENS, type Subscreen } from './logic/settings'
 import { medicinesForReminder } from './logic/reminders'
 import { Onboarding } from './ui/Onboarding'
 import { PersonSwitch } from './ui/People'
@@ -79,6 +82,9 @@ const TOOLS = [
 
 type TabKey = (typeof TABS)[number]['key'] | (typeof TOOLS)[number]['key']
 
+/** Разделы из шапки: они ложатся поверх вкладки, а не заменяют её. */
+const ИНСТРУМЕНТЫ = new Set<string>(TOOLS.map((item) => item.key))
+
 function PeriodPicker({ value, onChange }: { value: PeriodKey; onChange: (next: PeriodKey) => void }) {
   // `--fill` — равные доли и перенос подписи. В проекте он заведён ровно на
   // случай крупного системного шрифта, но этот переключатель его не
@@ -99,7 +105,18 @@ export default function App() {
   const [medicines, setMedicines] = useState<Medicine[]>([])
   const [settings, setSettings] = useState<SettingsData>(DEFAULT_SETTINGS)
   const [period, setPeriod] = useState<PeriodKey>('30d')
-  const [tab, setTab] = useState<TabKey>('overview')
+  /**
+   * Где человек находится — стек экранов, а не одна вкладка.
+   *
+   * Дно стека всегда нижняя вкладка; разделы из шапки и подэкраны настроек
+   * ложатся поверх. Из этого следует поведение аппаратной «Назад»: она снимает
+   * верхний узел, а когда снимать нечего — сворачивает приложение. Раньше
+   * глубины не существовало вовсе, и «Назад» из середины настроек выбрасывала
+   * человека на рабочий стол.
+   */
+  const [stack, setStack] = useState<Stack>(() => rootStack('overview'))
+  const stackRef = useRef<Stack>(stack)
+  stackRef.current = stack
   /** Растёт при повторном нажатии на активную вкладку — сигнал разделу вернуться в начало. */
   const [rootSignal, setRootSignal] = useState(0)
   /** Стартовый экран из настроек применяется один раз, после загрузки данных. */
@@ -122,6 +139,88 @@ export default function App() {
   const [undo, setUndo] = useState<Measurement | null>(null)
   // ReturnType, а не number: в браузере таймер это число, в Node — объект.
   const undoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  /**
+   * Какой экран показывать. Раздел из шапки лежит поверх вкладки, поэтому,
+   * пока он открыт, показывается он, а вкладка ждёт под ним и получает
+   * человека обратно по «Назад».
+   */
+  const инструмент = stack.find((node) => node.kind === 'sub' && ИНСТРУМЕНТЫ.has(node.sub))
+  const tab = ((инструмент && инструмент.kind === 'sub' ? инструмент.sub : tabOf(stack)) || 'overview') as TabKey
+
+  /**
+   * Открыть раздел. Нижняя вкладка заменяет стек целиком, раздел из шапки
+   * ложится поверх текущей вкладки — «Назад» из настроек вернёт туда, откуда
+   * человек в них зашёл, а не на «Обзор».
+   */
+  /**
+   * Какой подэкран настроек открыт и чей человек внутри «Людей».
+   *
+   * Узел настроек лежит на стеке первым, подэкран — вторым: путь читается как
+   * «intake/settings/backup». Значение приходит сюда, а не хранится в самих
+   * настройках, потому что на подэкран ведут глубокие ссылки с «Обзора», где
+   * настройки ещё не отрисованы.
+   */
+  const узелПодэкрана = stack.find(
+    (node, index) => node.kind === 'sub' && index > 0 && !ИНСТРУМЕНТЫ.has(node.sub),
+  )
+  const подэкранНастроек =
+    узелПодэкрана && узелПодэкрана.kind === 'sub' && (SUBSCREENS as readonly string[]).includes(узелПодэкрана.sub)
+      ? (узелПодэкрана.sub as Subscreen)
+      : null
+  const узелЧеловека = stack.find((node) => node.kind === 'person')
+  const открытыйЧеловек = узелЧеловека && узелЧеловека.kind === 'person' ? узелЧеловека.id : null
+
+  /**
+   * Открыть экран выбранного человека прямо из баннера «нет кнопки прибора».
+   * Одно нажатие вместо «Настройки → Люди → нужный человек».
+   */
+  const кНастройкамЧеловека = useCallback(() => {
+    const кто = activePersonOf(settingsRef.current)
+    setStack([
+      ...rootStack(tabOf(stackRef.current)),
+      { kind: 'sub', sub: 'settings' },
+      { kind: 'sub', sub: 'people' },
+      ...(кто ? [{ kind: 'person', id: кто.id } as Node] : []),
+    ])
+  }, [])
+
+  /** Шаг знакомства: тоже узел стека, чтобы «Назад» возвращала на первый шаг. */
+  const узелШага = stack.find((node) => node.kind === 'step')
+  const шагЗнакомства: 1 | 2 = узелШага && узелШага.kind === 'step' && узелШага.step === 2 ? 2 : 1
+
+  /** Что открыто поверх аптечки. Форма выше карточки: из неё возвращаются в карточку. */
+  const узелКарточки = stack.find((node) => node.kind === 'card')
+  const узелФормы = stack.find((node) => node.kind === 'form')
+  const открытаяКоробка = узелКарточки && узелКарточки.kind === 'card' ? узелКарточки.id : null
+  const открытаяФорма = узелФормы && узелФормы.kind === 'form' ? { id: узелФормы.id } : null
+
+  const setTab = useCallback((key: TabKey) => {
+    setStack((текущий) =>
+      ИНСТРУМЕНТЫ.has(key)
+        ? [...rootStack(tabOf(текущий)), { kind: 'sub', sub: key } as Node]
+        : rootStack(key),
+    )
+  }, [])
+
+  /** Снять уровень. `false` — снимать нечего, платформа свернёт приложение. */
+  /** Открыть что-то поверх текущего экрана: карточку, форму, подэкран. */
+  const открыть = useCallback((node: Node) => setStack((текущий) => push(текущий, node)), [])
+
+  const назад = useCallback(() => {
+    const следующий = pop(stackRef.current)
+    if (!следующий) return false
+    setStack(следующий)
+    return true
+  }, [])
+
+  // Единственное место, где приложение узнаёт о системной «Назад». Слот один:
+  // накопить подписки при перерисовке нельзя, иначе одно нажатие снимало бы
+  // несколько уровней разом.
+  useEffect(() => platform().nav.onBack(назад), [назад])
+
+  // Единственное место, где о глубине узнаёт платформа: забыть вызов негде.
+  useEffect(() => platform().nav.sync(depthOf(stack)), [stack])
 
   useEffect(() => {
     /**
@@ -151,7 +250,8 @@ export default function App() {
       // приёма, а на «Обзор» — и не понимал, куда делась таблетка.
       if (!started.current) {
         started.current = true
-        if (loaded.startTab && !openedByReminder.current) setTab(loaded.startTab as TabKey)
+        const стартовый = toTab(loaded.startTab, TABS.map((item) => item.key))
+        if (стартовый && !openedByReminder.current) setTab(стартовый as TabKey)
       }
       setReady(true)
 
@@ -595,8 +695,37 @@ export default function App() {
   const tabExists = visibleTabs.some((item) => item.key === tab) || TOOLS.some((item) => item.key === tab)
   const fallbackTab = visibleTabs[0].key
   useEffect(() => {
-    if (!tabExists) setTab(fallbackTab)
+    if (!tabExists) setStack(rootStack(fallbackTab))
   }, [tabExists, fallbackTab])
+
+  /**
+   * День из напоминания живёт ровно один заход на «Приём».
+   *
+   * Раньше он не сбрасывался никогда: нажав на вечернее уведомление о вчерашнем
+   * приёме, человек попадал во вчера — и попадал туда снова каждый раз, когда
+   * возвращался на «Приём» с другой вкладки. Экран инициализируется этим днём
+   * при монтировании, а переход между вкладками его размонтирует.
+   */
+  const наПриёме = tab === 'intake'
+  useEffect(() => {
+    if (!наПриёме && reminderDay !== null) {
+      setReminderDay(null)
+      openedByReminder.current = false
+    }
+  }, [наПриёме, reminderDay])
+
+  // Коробка могла исчезнуть, пока человек был в её карточке: восстановление из
+  // копии применяет чужие удаления. Оставить его на экране пустой карточки
+  // нельзя, а показывать «препарат не найден» незачем — возвращаем к списку.
+  const идентификаторыКоробок = medicines.map((item) => item.id).join(',')
+  useEffect(() => {
+    setStack((текущий) => {
+      const есть = new Set(идентификаторыКоробок ? идентификаторыКоробок.split(',') : [])
+      return prune(текущий, (node) =>
+        node.kind === 'card' ? есть.has(node.id) : node.kind === 'form' ? node.id === null || есть.has(node.id) : true,
+      )
+    })
+  }, [идентификаторыКоробок])
   const periodLabel = PERIODS.find((p) => p.key === period)?.label ?? ''
   // Имя пациента в отчёте — имя человека, а не подпись кнопки на приборе.
   const patientName = person?.name?.trim() || 'Пользователь'
@@ -608,7 +737,15 @@ export default function App() {
     return (
       <Onboarding
         settings={settings}
-        onApply={(patch) => updateSettings({ ...settingsRef.current, ...patch })}
+        onApply={(patch) => {
+          updateSettings({ ...settingsRef.current, ...patch })
+          // Знакомство кончилось — стек начинается заново, с выбранного
+          // раздела. Иначе шаг знакомства остался бы под приложением, и первое
+          // нажатие «Назад» уходило бы в пустоту.
+          setStack(rootStack(toTab(patch.startTab, TABS.map((item) => item.key)) ?? tabOf(stackRef.current)))
+        }}
+        шаг={шагЗнакомства}
+        onШаг={(next) => (next === 1 ? назад() : открыть({ kind: 'step', step: next }))}
       />
     )
   }
@@ -688,7 +825,10 @@ export default function App() {
   )
 
   return (
-    <div className="app">
+    // `data-nav` — путь по стеку экранов («settings/backup»). Нужен проверкам:
+    // судить о том, куда попал человек, по тексту экрана нельзя — свёрнутое
+    // содержимое остаётся в разметке.
+    <div className="app" data-nav={pathOf(stack)}>
       <header className="topbar">
         <div className="topbar__title">
           <h1>Дневник здоровья</h1>
@@ -721,7 +861,12 @@ export default function App() {
       {/* Между шапкой и вкладками: смена человека меняет всё, что ниже, и
           выглядеть частью одного экрана она не должна. Появляется, только
           когда людей больше одного. */}
-      <PersonSwitch settings={settings} onChange={(fields) => updateSettings({ ...settingsRef.current, ...fields })} />
+      {/* В настройках полосы нет: всё личное живёт внутри «Людей», и
+          переключатель здесь только сбивал бы с толку — он не меняет ничего из
+          того, что видно на экране. */}
+      {tab !== 'settings' && (
+        <PersonSwitch settings={settings} onChange={(fields) => updateSettings({ ...settingsRef.current, ...fields })} />
+      )}
 
       <nav
         className="tabs"
@@ -740,8 +885,12 @@ export default function App() {
               // ведут себя нижние панели в iOS и Android, и человек, зашедший
               // вглубь, жмёт именно сюда. Без этого вкладка подсвечена, а экран
               // всё тот же, и выход приходится искать.
-              if (item.key === tab) setRootSignal((value) => value + 1)
-              setTab(item.key)
+              //
+              // Когда человек уже на корне своей вкладки, навигации не
+              // происходит — экрану уходит сигнал вернуться к сегодняшнему дню.
+              const { stack: следующий, toRoot } = tapTab(stackRef.current, item.key)
+              setStack(следующий)
+              if (toRoot) setRootSignal((value) => value + 1)
             }}
           >
             <span className="tab__full">{item.label}</span>
@@ -788,7 +937,16 @@ export default function App() {
                   {!nudgeHidden.backup && (
                     <BackupNudge
                       status={backup}
-                      onOpenSettings={() => setTab('settings')}
+                      // Открываем сразу «Копию дневника»: баннер говорит про
+                      // копию, и высаживать человека в корень настроек значит
+                      // заставлять искать то, о чём его только что спросили.
+                      onOpenSettings={() =>
+                        setStack([
+                          ...rootStack(tabOf(stackRef.current)),
+                          { kind: 'sub', sub: 'settings' },
+                          { kind: 'sub', sub: 'backup' },
+                        ])
+                      }
                       onDismiss={() => snoozeNudge('backup')}
                     />
                   )}
@@ -854,10 +1012,15 @@ export default function App() {
         <div className="stack">
           {deviceUser === null ? (
             <Banner tone="info">
-              <b>У этого человека нет памяти на тонометре.</b>
+              <b>У этого человека нет кнопки на тонометре.</b>
               <div style={{ marginTop: 4 }}>
-                Прибор ведёт память только на двоих, и записывать давление здесь пока некуда. Лекарства и приём
-                работают как у всех. Память назначается в «Настройках», в разделе «Люди».
+                Прибор помнит только двоих, и записывать давление здесь пока некуда. Лекарства и приём работают как у
+                всех.
+              </div>
+              <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+                <button className="btn btn--sm" onClick={кНастройкамЧеловека}>
+                  Назначить кнопку прибора
+                </button>
               </div>
             </Banner>
           ) : (
@@ -904,9 +1067,12 @@ export default function App() {
         <div className="stack">
           {deviceUser === null ? (
             <Banner tone="info">
-              <b>У этого человека нет памяти на тонометре.</b>
-              <div style={{ marginTop: 4 }}>
-                Дневник сахара привязан к той же памяти. Назначить её можно в «Настройках», в разделе «Люди».
+              <b>У этого человека нет кнопки на тонометре.</b>
+              <div style={{ marginTop: 4 }}>Дневник сахара привязан к той же кнопке.</div>
+              <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+                <button className="btn btn--sm" onClick={кНастройкамЧеловека}>
+                  Назначить кнопку прибора
+                </button>
               </div>
             </Banner>
           ) : (
@@ -951,7 +1117,12 @@ export default function App() {
             onSave={handleSaveMedicine}
             onDelete={handleDeleteMedicine}
             onPickPerson={(id) => updateSettings({ ...settingsRef.current, activePerson: id })}
-            toRoot={rootSignal}
+            card={открытаяКоробка}
+            form={открытаяФорма}
+            onOpenCard={(id) => открыть({ kind: 'card', id })}
+            onEditCard={(id) => открыть({ kind: 'form', id })}
+            onAdd={() => открыть({ kind: 'form', id: null })}
+            onBack={назад}
           />
         </>
       )}
@@ -959,6 +1130,7 @@ export default function App() {
       {tab === 'sync' && (
         <Sync
           pairingKey={settings.pairingKey}
+          onPairingKey={(next) => updateSettings({ ...settingsRef.current, pairingKey: next })}
           onImport={handleImport}
           onImportGlucose={handleImport}
           onGoManual={() => setTab('bp')}
@@ -991,6 +1163,11 @@ export default function App() {
           measurements={measurements}
           onRestore={handleRestore}
           onClearAll={handleClearAll}
+          screen={подэкранНастроек}
+          person={открытыйЧеловек}
+          onOpen={(next) => открыть({ kind: 'sub', sub: next })}
+          onOpenPerson={(id) => открыть({ kind: 'person', id })}
+          onBack={назад}
           backup={backup}
         />
       )}

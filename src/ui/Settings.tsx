@@ -1,249 +1,76 @@
-import { useRef, useState } from 'react'
-import type { Measurement, Medicine, SectionKey, Settings as SettingsData, ThemeChoice } from '../types'
-import { DEFAULT_PAIRING_KEY } from '../ble/session'
+/**
+ * Настройки в два уровня.
+ *
+ * До 0.8.0 это был один свиток из одиннадцати одинаковых карточек — восемь
+ * экранов на телефоне и почти тринадцать при «Очень крупном» тексте, в порядке,
+ * сложившемся по истории разработки: первым шло то, что убирает разделы из
+ * нижней строки, последним — то, за чем сюда приходят.
+ *
+ * Теперь корень отвечает на вопрос «что здесь вообще есть»: единственный орган
+ * управления — размер текста, ради которого сюда и приходит пожилой человек, —
+ * и шесть строк со значениями, чтобы не открывать подэкран ради проверки.
+ * Измерено: один экран обычным текстом и полтора при «Очень крупном» вместо
+ * восьми и почти тринадцати. Самый длинный подэкран — копия дневника, два
+ * экрана вместо десяти.
+ *
+ * Правила, общие для разных подэкранов, живут в `logic/settings.ts`: они
+ * проверяются тестами без браузера, и разойтись двум их копиям негде.
+ */
+
+import type { Measurement, Medicine, Settings as SettingsData } from '../types'
 import { Reminders } from './Reminders'
-import { download, parseImportFile, toCsv, toJson, type ImportResult, takesPersonalFrom } from '../logic/io'
-import { decryptBackup, isEncrypted } from '../logic/crypto'
+import type { ImportResult } from '../logic/io'
 import { platform } from '../platform/ports'
-import { Banner, Field } from './bits'
-import { activePersonOf, intakeTimesOf } from '../logic/people'
-import { People } from './People'
+import { BackBar, NavRow, Reveal, Field } from './bits'
 import { About } from './About'
 import { parseChangelog } from '../logic/changelog'
 import changelogSource from '../../CHANGELOG.md?raw'
-import { DataSafety } from './Backup'
+import { BackupScreen } from './BackupScreen'
+import { People, PersonScreen } from './People'
 import type { BackupStatus } from './useBackup'
-
-const today = () => new Date().toISOString().slice(0, 10)
+import {
+  DENSITIES,
+  SECTIONS,
+  SUBSCREEN_TITLE,
+  TEXT_SCALES,
+  THEMES,
+  describeBackupRow,
+  describeDisplay,
+  describePeople,
+  describeReminders,
+  describeSections,
+  describeTargets,
+  lockedSection,
+  setTrackGlucose,
+  toggleSection,
+  visibleSections,
+  type Subscreen,
+} from '../logic/settings'
 
 /** История читается один раз: файл в бандле, и меняться в работе ему негде. */
 const releases = parseChangelog(changelogSource)
 
-/**
- * Разделы, которые можно скрыть.
- *
- * У одного пользователя гипертония и диабет — ему нужны все три дневника.
- * Другому нужны только лекарства, и два лишних пункта внизу он видит каждый
- * день без всякой пользы.
- */
-const SECTIONS: { key: SectionKey; title: string; hint: string }[] = [
-  { key: 'overview', title: 'Обзор', hint: 'сводка давления и сахара' },
-  { key: 'bp', title: 'Давление', hint: 'ввод, история и графики' },
-  { key: 'glucose', title: 'Сахар', hint: 'ввод, история и графики' },
-  { key: 'intake', title: 'Приём лекарств', hint: 'что принять сегодня' },
-  { key: 'cabinet', title: 'Аптечка', hint: 'что есть дома, сроки и остатки' },
-]
-
-const THEMES: { key: ThemeChoice; title: string }[] = [
-  { key: 'auto', title: 'Как в системе' },
-  { key: 'light', title: 'Светлая' },
-  { key: 'dark', title: 'Тёмная' },
-]
-
-
-const TEXT_SCALES: { key: SettingsData['textScale']; title: string }[] = [
-  { key: 'small', title: 'Мельче' },
-  { key: 'normal', title: 'Обычный' },
-  { key: 'large', title: 'Крупный' },
-  { key: 'xlarge', title: 'Очень крупный' },
-]
-
-const INTAKE_SLOTS: { key: keyof SettingsData['intakeTimes']; title: string }[] = [
-  { key: 'morning', title: 'Утром' },
-  { key: 'day', title: 'Днём' },
-  { key: 'evening', title: 'Вечером' },
-  { key: 'night', title: 'На ночь' },
-]
-
-const DENSITIES: { key: SettingsData['density']; title: string }[] = [
-  { key: 'compact', title: 'Плотно' },
-  { key: 'normal', title: 'Обычно' },
-  { key: 'roomy', title: 'Просторно' },
-]
-export function Settings({
-  settings,
-  onChange,
-  measurements,
-  medicines,
-  onRestore,
-  onClearAll,
-  backup,
-}: {
+type Общее = {
   settings: SettingsData
-  onChange: (next: SettingsData) => void
-  medicines: Medicine[]
-  measurements: Measurement[]
-  onRestore: (incoming: ImportResult) => Promise<{ added: number; medicines: number; settingsRestored: boolean }>
-  onClearAll: () => Promise<void>
-  backup: BackupStatus
-}) {
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [message, setMessage] = useState<{ tone: 'good' | 'critical'; text: string } | null>(null)
-  const [confirmClear, setConfirmClear] = useState(false)
-  /** Зашифрованный файл, ждущий пароля. Держим текст, а не сам файл: второй раз его не прочитать. */
-  const [закрытый, setЗакрытый] = useState<{ name: string; text: string } | null>(null)
-  const [пароль, setПароль] = useState('')
+  onPatch: (fields: Partial<SettingsData>) => void
+}
 
-  const patch = (fields: Partial<SettingsData>) => onChange({ ...settings, ...fields })
-
-  /** Чьи часы приёма правим. Пока человек один — общие, как и было. */
-  const выбранный = activePersonOf(settings)
-  const часы = intakeTimesOf(выбранный, settings.intakeTimes)
-
-  async function восстановить(name: string, text: string) {
-    try {
-      const parsed = parseImportFile(name, text)
-      const { added, medicines, settingsRestored } = await onRestore(parsed)
-      const parts = [`Разобрано записей: ${parsed.measurements.length}, добавлено новых: ${added}.`]
-      if (medicines > 0) parts.push(`Добавлено препаратов в аптечку: ${medicines}.`)
-      if (settingsRestored) parts.push('Настройки восстановлены.')
-      else if (parsed.settings) parts.push('Люди, цели и часы приёма оставлены свои: в файле не все здешние люди.')
-      if (parsed.skipped) parts.push(`Пропущено нечитаемых строк: ${parsed.skipped}.`)
-      setMessage({ tone: 'good', text: parts.join(' ') })
-      setЗакрытый(null)
-      setПароль('')
-    } catch (error) {
-      setMessage({ tone: 'critical', text: error instanceof Error ? error.message : String(error) })
-    }
-  }
-
-  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-    const text = await file.text()
-    // Зашифрованный файл не разбираем, а просим пароль: сказать «файл
-    // нечитаемый» о собственной защищённой копии — верный способ убедить
-    // человека, что дневник потерян.
-    if (isEncrypted(text)) {
-      setMessage(null)
-      setЗакрытый({ name: file.name, text })
-      return
-    }
-    setЗакрытый(null)
-    await восстановить(file.name, text)
-  }
-
-  /**
-   * Восстановление из того файла, куда идут автокопии.
-   *
-   * Системный выбор файла это тоже умеет, но там человеку надо опознать
-   * `дневник-копия.json` среди своих файлов. Тому, кто откатывает случайное
-   * удаление, короткий путь важнее.
-   */
-  async function изФайлаКопий() {
-    const text = await backup.readTarget()
-    if (text === null) {
-      setMessage({ tone: 'critical', text: 'Файл копии не читается: его удалили, переместили или отозвали доступ.' })
-      return
-    }
-    if (isEncrypted(text)) {
-      setMessage(null)
-      setЗакрытый({ name: backup.target ?? 'копия.json', text })
-      return
-    }
-    setЗакрытый(null)
-    await восстановить('копия.json', text)
-  }
-
-  async function расшифровать() {
-    if (!закрытый) return
-    try {
-      const открытый = await decryptBackup(закрытый.text, пароль)
-      // Пароль подошёл. Если копия своя — включаем шифрование и запоминаем
-      // пароль: иначе на новом телефоне зашифрованная копия перезаписалась бы
-      // открытой при первой же записи. Чужую копию (отца, чтобы посмотреть)
-      // открыть можно, но свои автокопии её паролем не закрываем.
-      const разобранная = parseImportFile('копия.json', открытый)
-      if (!разобранная.settings || takesPersonalFrom(settings, разобранная.settings)) {
-        patch({ backupEncrypt: true })
-        backup.setPassword(пароль)
-      }
-      // Имя берём исходное, но разбор всегда как JSON: зашифрованной бывает
-      // только полная копия, а расширение у файла может быть любым.
-      await восстановить(закрытый.name.endsWith('.json') ? закрытый.name : `${закрытый.name}.json`, открытый)
-    } catch (error) {
-      setMessage({ tone: 'critical', text: error instanceof Error ? error.message : String(error) })
-    }
-  }
-
-  // Сахар в стартовые не предлагаем, пока дневник сахара выключен: раздела в
-  // навигации нет, и приложение открылось бы на несуществующей вкладке.
-  const visible = SECTIONS.filter(
-    (item) => settings.sections[item.key] && (item.key !== 'glucose' || settings.trackGlucose),
-  )
-  const startOptions = visible.map((i) => ({ key: i.key, title: i.title }))
-  /** Последний включённый раздел не отдаём: без него от приложения ничего не остаётся. */
-  const locked = visible.length === 1 ? visible[0].key : null
+/**
+ * Экран: тема, плотность и — в самом низу, свёрнутым — то, что меняет саму
+ * навигацию. Спрятано не ради красоты: это единственное в настройках, чем
+ * можно «сломать» приложение до неузнаваемости, убрав разделы снизу.
+ */
+function DisplayScreen({ settings, onPatch, onBack }: Общее & { onBack: () => void }) {
+  const видимые = visibleSections(settings)
+  const заперт = lockedSection(settings)
 
   return (
     <div className="stack">
-      <div className="card">
-        <div className="card__head">
-          <h2>Разделы</h2>
-        </div>
-
-        {/* Строки на `.optrow__label`, а не на `.badge`: тот центрирует
-            содержимое по вертикали, и на двухстрочной подписи галка вставала
-            между строк, а сама подпись не переносилась и уезжала за карточку. */}
-        <div className="stack" style={{ gap: 'var(--space-3)' }}>
-          {SECTIONS.map((item) => (
-            <label className="optrow__label" key={item.key}>
-              <input
-                type="checkbox"
-                checked={settings.sections[item.key]}
-                disabled={locked === item.key}
-                onChange={(event) => {
-                  const sections = { ...settings.sections, [item.key]: event.target.checked }
-                  // Стартовый экран не должен указывать на спрятанное: приложение
-                  // открылось бы на вкладке, которой нет в навигации. Замена —
-                  // первый оставшийся раздел, а не «Обзор»: его тоже могли скрыть.
-                  const rest = SECTIONS.filter(
-                    (s) => sections[s.key] && (s.key !== 'glucose' || settings.trackGlucose),
-                  )
-                  const startTab =
-                    !event.target.checked && settings.startTab === item.key
-                      ? (rest[0]?.key ?? settings.startTab)
-                      : settings.startTab
-                  patch({ sections, startTab })
-                }}
-              />
-              <span className="optrow__title">
-                {item.title}
-                <span className="fact__note">
-                  {locked === item.key ? 'последний раздел — скрыть его нельзя' : item.hint}
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
-
-        <p className="muted" style={{ margin: 'var(--space-4) 0 0' }}>
-          Скрытый раздел пропадает только из нижней строки. Записи остаются на месте и вернутся, как только вы включите
-          его обратно.
-        </p>
-
-        <div style={{ marginTop: 'var(--space-5)' }}>
-          <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
-            С чего открывать приложение
-          </div>
-          <div className="segmented segmented--fill segmented--stack" role="group" aria-label="Стартовый экран">
-            {startOptions.map((item) => (
-              <button
-                key={item.key}
-                aria-pressed={settings.startTab === item.key}
-                onClick={() => patch({ startTab: item.key })}
-              >
-                {item.title}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      <BackBar label="К настройкам" onBack={onBack} />
 
       <div className="card">
         <div className="card__head">
-          <h2>Оформление</h2>
+          <h2>Экран</h2>
         </div>
 
         <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
@@ -251,21 +78,7 @@ export function Settings({
         </div>
         <div className="segmented segmented--fill" role="group" aria-label="Тема оформления">
           {THEMES.map(({ key, title }) => (
-            <button key={key} aria-pressed={settings.theme === key} onClick={() => patch({ theme: key })}>
-              {title}
-            </button>
-          ))}
-        </div>
-        <p className="muted" style={{ marginTop: 'var(--space-3)', marginBottom: 0 }}>
-          «Как в системе» — приложение темнеет вместе с телефоном или компьютером.
-        </p>
-
-        <div className="tile__label" style={{ margin: 'var(--space-5) 0 var(--space-2)' }}>
-          Размер текста
-        </div>
-        <div className="segmented segmented--fill segmented--stack" role="group" aria-label="Размер текста">
-          {TEXT_SCALES.map(({ key, title }) => (
-            <button key={key} aria-pressed={settings.textScale === key} onClick={() => patch({ textScale: key })}>
+            <button key={key} aria-pressed={settings.theme === key} onClick={() => onPatch({ theme: key })}>
               {title}
             </button>
           ))}
@@ -276,298 +89,284 @@ export function Settings({
         </div>
         <div className="segmented segmented--fill" role="group" aria-label="Плотность вёрстки">
           {DENSITIES.map(({ key, title }) => (
-            <button key={key} aria-pressed={settings.density === key} onClick={() => patch({ density: key })}>
+            <button key={key} aria-pressed={settings.density === key} onClick={() => onPatch({ density: key })}>
               {title}
             </button>
           ))}
         </div>
-
-        {/* Образец меняется вместе с настройкой: выбирать размер вслепую, а
-            потом искать, где посмотреть результат, — лишний шаг там, где он не
-            нужен. Здесь и заголовок, и обычный текст, и подпись: по одному
-            слову размер не оценишь. */}
-        <div className="sample">
-          <div style={{ fontSize: 'var(--fs-3)', fontWeight: 600 }}>Утренний приём — 08:00</div>
-          <div style={{ fontSize: 'var(--fs-2)', marginTop: 'var(--space-2)' }}>Периндоприл 5 мг, до еды</div>
-          <div className="muted" style={{ marginTop: 'var(--space-1)' }}>так будет выглядеть текст в приложении</div>
-        </div>
-
         <p className="muted" style={{ marginTop: 'var(--space-3)', marginBottom: 0 }}>
-          Размер меняет буквы, плотность — расстояния между блоками. Их выбирают порознь: «плохо вижу» и «не хочу
-          листать» — разные просьбы. Кнопки при этом не становятся меньше — по ним и так надо попадать.
+          Плотность меняет расстояния между блоками. Кнопки при этом не уменьшаются.
         </p>
       </div>
 
-      <DataSafety
-        status={backup}
-        encrypt={settings.backupEncrypt}
-        onEncryptChange={(next) => patch({ backupEncrypt: next })}
-      />
-
-      <Reminders
-        medicines={medicines}
-        enabled={settings.remindersOn}
-        sound={settings.reminderSound}
-        repeat={settings.remindersRepeat}
-        onPatch={patch}
-      />
-
       <div className="card">
-        <div className="card__head">
-          <h2>Часы приёма</h2>
-          {settings.people.length > 1 && <span className="muted">{выбранный?.name || 'человека'}</span>}
-        </div>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Это кнопки в форме препарата: «Утром», «Днём», «Вечером», «На ночь». Раньше часы были зашиты намертво, и
-          тому, у кого утро в шесть, приходилось вводить время руками для каждого лекарства.
-          {settings.people.length > 1 && ' У каждого человека они свои — здесь показаны часы выбранного.'}
-        </p>
-        <div className="stack" style={{ gap: 'var(--space-3)' }}>
-          {INTAKE_SLOTS.map(({ key, title }) => (
-            <Field key={key} label={title}>
-              <input
-                type="time"
-                value={часы[key]}
-                onChange={(e) => {
-                  const next = { ...часы, [key]: e.target.value || часы[key] }
-                  // Пока человек один, часы остаются общей настройкой: заводить
-                  // ему личные — значит развести два места, где лежит одно и то
-                  // же, и потом гадать, какое из них главнее.
-                  if (settings.people.length <= 1 || !выбранный) patch({ intakeTimes: next })
-                  else patch({ people: settings.people.map((p) => (p.id === выбранный.id ? { ...p, intakeTimes: next } : p)) })
-                }}
-              />
-            </Field>
-          ))}
-        </div>
-        <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
-          Уже заведённые препараты не меняются: у них своё время, и переписывать его за человека нельзя.
-        </div>
+        <details>
+          <summary>Что показывать внизу — {describeSections(settings)}</summary>
+
+          <div className="stack" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-4)' }}>
+            {SECTIONS.map((item) => (
+              <label className="optrow__label" key={item.key}>
+                <input
+                  type="checkbox"
+                  checked={settings.sections[item.key]}
+                  disabled={заперт === item.key}
+                  onChange={(event) => onPatch(toggleSection(settings, item.key, event.target.checked))}
+                />
+                <span className="optrow__title">
+                  {item.title}
+                  <span className="fact__note">
+                    {заперт === item.key ? 'последний раздел — скрыть его нельзя' : item.hint}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="muted" style={{ margin: 'var(--space-4) 0 0' }}>
+            Записи скрытого раздела остаются на месте. Сахар включается на «Нормах».
+          </p>
+
+          <div style={{ marginTop: 'var(--space-5)' }}>
+            <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
+              С чего открывать приложение
+            </div>
+            <div className="segmented segmented--fill segmented--stack" role="group" aria-label="Стартовый экран">
+              {видимые.map((key) => (
+                <button key={key} aria-pressed={settings.startTab === key} onClick={() => onPatch({ startTab: key })}>
+                  {SECTIONS.find((item) => item.key === key)?.title ?? 'Сахар'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </details>
       </div>
+    </div>
+  )
+}
 
-      <People settings={settings} medicines={medicines} onChange={patch} />
+/** Нормы: целевое давление и дневник сахара с порогами. */
+function TargetsScreen({ settings, onPatch, onBack }: Общее & { onBack: () => void }) {
+  return (
+    <div className="stack">
+      <BackBar label="К настройкам" onBack={onBack} />
 
       <div className="card">
         <div className="card__head">
-          <h2>Целевые значения</h2>
+          <h2>Целевое давление</h2>
+          {settings.people.length > 1 && <span className="muted">одно на всех людей</span>}
         </div>
 
         <div className="grid grid--two">
-          <Field label="Целевое верхнее давление">
+          <Field label="Верхнее">
             <input
               inputMode="numeric"
               value={settings.targetSys}
-              onChange={(e) => patch({ targetSys: Number(e.target.value) || 135 })}
+              onChange={(e) => onPatch({ targetSys: Number(e.target.value) || 135 })}
             />
           </Field>
-          <Field label="Целевое нижнее давление">
+          <Field label="Нижнее">
             <input
               inputMode="numeric"
               value={settings.targetDia}
-              onChange={(e) => patch({ targetDia: Number(e.target.value) || 85 })}
+              onChange={(e) => onPatch({ targetDia: Number(e.target.value) || 85 })}
             />
           </Field>
         </div>
-        <div className="muted" style={{ marginTop: 10 }}>
-          По умолчанию стоит 135/85 — общепринятый порог для измерений дома. Он ниже привычного 140/90, потому что тот
-          относится к измерениям в кабинете врача. Если врач назначил вам индивидуальную цель, поставьте её.
+        <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
+          135/85 — порог для измерений дома, он ниже кабинетного 140/90. Врач мог назначить вам другой.
         </div>
       </div>
 
       <div className="card">
         <div className="card__head">
           <h2>Дневник сахара</h2>
-          <label className="badge">
-            <input
-              type="checkbox"
-              checked={settings.trackGlucose}
-              onChange={(e) => patch({ trackGlucose: e.target.checked })}
-            />
-            вести
-          </label>
         </div>
 
-        {settings.trackGlucose ? (
-          <>
-            <div className="grid grid--two">
-              <Field label="Норма натощак и до еды, ммоль/л">
-                <input
-                  inputMode="decimal"
-                  value={settings.glucoseFastingMax}
-                  onChange={(e) => patch({ glucoseFastingMax: Number(e.target.value.replace(',', '.')) || 7 })}
-                />
-              </Field>
-              <Field label="Норма через 2 часа после еды, ммоль/л">
-                <input
-                  inputMode="decimal"
-                  value={settings.glucosePostMealMax}
-                  onChange={(e) => patch({ glucosePostMealMax: Number(e.target.value.replace(',', '.')) || 10 })}
-                />
-              </Field>
-              <Field label="Порог низкого сахара, ммоль/л">
-                <input
-                  inputMode="decimal"
-                  value={settings.glucoseLow}
-                  onChange={(e) => patch({ glucoseLow: Number(e.target.value.replace(',', '.')) || 3.9 })}
-                />
-              </Field>
-            </div>
-            <div className="muted" style={{ marginTop: 10 }}>
-              Значения по умолчанию — общие ориентиры. Цели при диабете назначает врач индивидуально, и они могут
-              отличаться; поставьте те, что назвал ваш.
-            </div>
-          </>
-        ) : (
-          <div className="muted">
-            Выключен. Включите, если ведёте ещё и уровень глюкозы — он появится рядом с давлением и попадёт в отчёт для
-            врача. Уже внесённые замеры при выключении не удаляются.
-          </div>
-        )}
-      </div>
+        <label className="optrow__label">
+          <input
+            type="checkbox"
+            checked={settings.trackGlucose}
+            onChange={(e) => onPatch(setTrackGlucose(settings, e.target.checked))}
+          />
+          <span className="optrow__title">
+            Вести дневник сахара
+            <span className="fact__note">появится рядом с давлением и в отчёте врачу</span>
+          </span>
+        </label>
 
-      <div className="card">
-        <div className="card__head">
-          <h2>Данные</h2>
-          <span className="muted">всего записей: {measurements.length}</span>
-        </div>
-
-        <div className="row">
-          <button className="btn" onClick={() => download(`dnevnik-${today()}.csv`, toCsv(measurements), 'text/csv')} disabled={!measurements.length}>
-            Экспорт CSV
-          </button>
-          <button className="btn" onClick={() => download(`dnevnik-${today()}.json`, toJson(measurements), 'application/json')} disabled={!measurements.length}>
-            Только измерения, JSON
-          </button>
-          <button className="btn" onClick={() => fileRef.current?.click()}>
-            Импорт из файла
-          </button>
-          {backup.target && (
-            <button className="btn" onClick={() => void изФайлаКопий()}>
-              Вернуть из «{backup.target}»
-            </button>
-          )}
-          <input ref={fileRef} type="file" accept=".csv,.json,.tsv,text/csv,application/json" onChange={handleFile} hidden />
-        </div>
-
-        <div className="muted" style={{ marginTop: 10 }}>
-          {/* Разница между этими выгрузками и полной копией стоила бы дорого:
-              человек, переносящий дневник на другое устройство, взял бы отсюда
-              файл без аптечки и заметил бы это через неделю. */}
-          <b>Здесь только измерения.</b> Чтобы перенести дневник целиком — с аптечкой, расписанием приёма и
-          настройками, — берите «Сохранить в файл» в разделе «Сохранность данных» выше.
-          <div style={{ marginTop: 6 }}>
-            Импорт понимает и то и другое, а ещё CSV с русскими или английскими заголовками и{' '}
-            <kbd>ubpm.json</kbd> с <kbd>user1.csv</kbd> от omblepy. Совпадающие измерения не задваиваются.
-          </div>
-        </div>
-
-        {закрытый && (
-          <div className="card card--inset" style={{ marginTop: 12 }}>
-            <div className="card__head">
-              <h3>Копия закрыта паролем</h3>
-            </div>
-            <p className="muted" style={{ marginTop: 0 }}>
-              Файл <b>{закрытый.name}</b> зашифрован. Введите пароль, которым он был закрыт.
-            </p>
-            <Field label="Пароль копии">
+        <Reveal open={settings.trackGlucose}>
+          <div className="grid grid--two" style={{ marginTop: 'var(--space-4)' }}>
+            <Field label="Норма натощак, ммоль/л">
               <input
-                type="password"
-                value={пароль}
-                autoComplete="off"
-                autoFocus
-                onChange={(event) => setПароль(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') void расшифровать()
-                }}
+                inputMode="decimal"
+                value={settings.glucoseFastingMax}
+                onChange={(e) => onPatch({ glucoseFastingMax: Number(e.target.value.replace(',', '.')) || 7 })}
               />
             </Field>
-            <div className="row" style={{ marginTop: 'var(--space-3)' }}>
-              <button className="btn btn--primary" onClick={() => void расшифровать()} disabled={!пароль}>
-                Расшифровать и восстановить
-              </button>
-              <button
-                className="btn"
-                onClick={() => {
-                  setЗакрытый(null)
-                  setПароль('')
-                }}
-              >
-                Отмена
-              </button>
-            </div>
+            <Field label="Через 2 часа после еды">
+              <input
+                inputMode="decimal"
+                value={settings.glucosePostMealMax}
+                onChange={(e) => onPatch({ glucosePostMealMax: Number(e.target.value.replace(',', '.')) || 10 })}
+              />
+            </Field>
+            <Field label="Порог низкого сахара">
+              <input
+                inputMode="decimal"
+                value={settings.glucoseLow}
+                onChange={(e) => onPatch({ glucoseLow: Number(e.target.value.replace(',', '.')) || 3.9 })}
+              />
+            </Field>
           </div>
-        )}
-
-        {message && (
-          <div style={{ marginTop: 12 }}>
-            <Banner tone={message.tone}>{message.text}</Banner>
+          <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
+            Значения по умолчанию — общие ориентиры. При диабете цели назначает врач.
           </div>
-        )}
+        </Reveal>
+      </div>
+    </div>
+  )
+}
 
-        <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '16px 0' }} />
+export function Settings({
+  settings,
+  onChange,
+  measurements,
+  medicines,
+  onRestore,
+  onClearAll,
+  backup,
+  screen,
+  person,
+  onOpen,
+  onOpenPerson,
+  onBack,
+}: {
+  settings: SettingsData
+  onChange: (next: SettingsData) => void
+  medicines: Medicine[]
+  measurements: Measurement[]
+  onRestore: (incoming: ImportResult) => Promise<{ added: number; medicines: number; settingsRestored: boolean }>
+  onClearAll: () => Promise<void>
+  backup: BackupStatus
+  /**
+   * Какой подэкран открыт. Приходит снаружи, из стека экранов приложения: на
+   * подэкран ведут и глубокие ссылки с «Обзора», где эти настройки ещё не
+   * отрисованы, и аппаратная «Назад», о которой знает только приложение.
+   */
+  screen: Subscreen | null
+  /** Человек, чей экран открыт внутри «Людей». */
+  person: string | null
+  onOpen: (screen: Subscreen) => void
+  onOpenPerson: (id: string) => void
+  onBack: () => void
+}) {
+  const patch = (fields: Partial<SettingsData>) => onChange({ ...settings, ...fields })
+  const напоминанияЕсть = platform().reminders.isSupported()
 
-        {confirmClear ? (
-          <div className="row">
-            <span style={{ fontSize: '0.875rem' }}>Удалить все измерения без возможности восстановления?</span>
-            {/* Безопасное действие первым, опасное дальше — тем же порядком,
-                что на карточке препарата: подтверждение не должно вставать под
-                палец, который только что нажал «Очистить базу». */}
-            <button className="btn btn--sm" onClick={() => setConfirmClear(false)}>
-              Отмена
+  if (screen === 'display') return <DisplayScreen settings={settings} onPatch={patch} onBack={onBack} />
+  if (screen === 'targets') return <TargetsScreen settings={settings} onPatch={patch} onBack={onBack} />
+
+  if (screen === 'people') {
+    const открытый = settings.people.find((p) => p.id === person)
+    if (открытый) {
+      return (
+        <PersonScreen
+          person={открытый}
+          settings={settings}
+          medicines={medicines}
+          onChange={patch}
+          onBack={onBack}
+        />
+      )
+    }
+    return <People settings={settings} onChange={patch} onOpenPerson={onOpenPerson} onBack={onBack} />
+  }
+
+  if (screen === 'reminders') {
+    return (
+      <div className="stack">
+        <BackBar label="К настройкам" onBack={onBack} />
+        <Reminders
+          medicines={medicines}
+          enabled={settings.remindersOn}
+          sound={settings.reminderSound}
+          repeat={settings.remindersRepeat}
+          onPatch={patch}
+        />
+      </div>
+    )
+  }
+
+  if (screen === 'backup') {
+    return (
+      <BackupScreen
+        settings={settings}
+        onPatch={patch}
+        measurements={measurements}
+        onRestore={onRestore}
+        onClearAll={onClearAll}
+        backup={backup}
+        onBack={onBack}
+      />
+    )
+  }
+
+  if (screen === 'about') {
+    return (
+      <div className="stack">
+        <BackBar label="К настройкам" onBack={onBack} />
+        <About releases={releases} />
+      </div>
+    )
+  }
+
+  // ── корень ───────────────────────────────────────────────────────────────
+  return (
+    <div className="stack">
+      {/* Размер текста — единственная настройка, за которой приходят каждый
+          раз, и единственная, которую нельзя прятать за строкой списка: её
+          выбирают именно тогда, когда мелкий текст плохо читается. */}
+      <div className="card">
+        <div className="card__head">
+          <h2>Размер текста</h2>
+        </div>
+        <div className="segmented segmented--fill segmented--stack" role="group" aria-label="Размер текста">
+          {TEXT_SCALES.map(({ key, title }) => (
+            <button key={key} aria-pressed={settings.textScale === key} onClick={() => patch({ textScale: key })}>
+              {title}
             </button>
-            <button
-              className="btn btn--danger btn--sm"
-              onClick={async () => {
-                await onClearAll()
-                setConfirmClear(false)
-                setMessage({ tone: 'good', text: 'Все измерения удалены.' })
-              }}
-            >
-              Да, удалить всё
-            </button>
-          </div>
-        ) : (
-          <button className="btn btn--danger btn--sm" onClick={() => setConfirmClear(true)} disabled={!measurements.length}>
-            Очистить базу
-          </button>
-        )}
-        <div className="muted" style={{ marginTop: 10 }}>
-          Приложение никуда не отправляет ваши данные само. Копия уходит только туда, куда вы её направили.{' '}
-          {platform().kind === 'native'
-            ? 'Удаление приложения или очистка его данных их сотрут — держите резервную копию.'
-            : 'Очистка истории браузера или режим инкогнито их удалят — держите резервную копию.'}
+          ))}
+        </div>
+        {/* Образец меняется вместе с настройкой: выбирать размер вслепую, а
+            потом искать, где посмотреть результат, — лишний шаг там, где он не
+            нужен. Подписи под образцом нет: он и так стоит под переключателем,
+            а при «Очень крупном» каждая лишняя строка — это четверть экрана. */}
+        <div className="sample">
+          <div style={{ fontSize: 'var(--fs-3)', fontWeight: 600 }}>Утренний приём — 08:00</div>
+          <div style={{ fontSize: 'var(--fs-2)', marginTop: 'var(--space-2)' }}>Периндоприл 5 мг, до еды</div>
         </div>
       </div>
 
       <div className="card">
-        <div className="card__head">
-          <h2>Ключ сопряжения</h2>
-        </div>
-        <Field label="16 байт в шестнадцатеричном виде">
-          <input
-            value={settings.pairingKey}
-            spellCheck={false}
-            onChange={(e) => patch({ pairingKey: e.target.value.trim() })}
-            style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+        <ul className="pills">
+          <NavRow title={SUBSCREEN_TITLE.display} value={describeDisplay(settings)} onOpen={() => onOpen('display')} />
+          <NavRow title={SUBSCREEN_TITLE.people} value={describePeople(settings.people)} onOpen={() => onOpen('people')} />
+          <NavRow title={SUBSCREEN_TITLE.targets} value={describeTargets(settings)} onOpen={() => onOpen('targets')} />
+          {/* В браузере настоящих напоминаний нет вовсе, и строки тоже. */}
+          {напоминанияЕсть && (
+            <NavRow
+              title={SUBSCREEN_TITLE.reminders}
+              value={describeReminders(settings)}
+              onOpen={() => onOpen('reminders')}
+            />
+          )}
+          <NavRow
+            title={SUBSCREEN_TITLE.backup}
+            value={describeBackupRow(backup.lastAt, Date.now())}
+            onOpen={() => onOpen('backup')}
           />
-        </Field>
-        <div className="row" style={{ marginTop: 10 }}>
-          <button
-            className="btn btn--sm"
-            onClick={() => patch({ pairingKey: DEFAULT_PAIRING_KEY })}
-            disabled={settings.pairingKey === DEFAULT_PAIRING_KEY}
-          >
-            Вернуть значение по умолчанию
-          </button>
-        </div>
-        <div className="muted" style={{ marginTop: 10 }}>
-          Этот ключ приложение предъявляет прибору, чтобы тот открыл доступ к памяти. Значение по умолчанию совпадает с
-          ключом omblepy — благодаря этому прибор, сопряжённый через терминал, сразу работает и здесь. Менять ключ
-          нужно только если вы сопрягали прибор с собственным значением.
-        </div>
+          <NavRow title={SUBSCREEN_TITLE.about} value={releases[0]?.version} onOpen={() => onOpen('about')} />
+        </ul>
       </div>
-
-      <About releases={releases} />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { BpReading, GlucoseReading } from '../types'
 import { readingId } from '../db/store'
+import { DEFAULT_PAIRING_KEY } from '../ble/protocol'
 import {
   downloadRecords,
   getKnownDevices,
@@ -15,7 +16,7 @@ import {
   type GattDevice,
 } from '../ble/session'
 import { BleLog, logToText, useBleLog } from './BleLog'
-import { Banner, Reveal } from './bits'
+import { Banner, Field, Reveal } from './bits'
 import { GlucoseSync } from './GlucoseSync'
 import { download } from '../logic/io'
 
@@ -93,12 +94,15 @@ function explainBleError(message: string): { причина: string; дейст�
 
 export function Sync({
   pairingKey,
+  onPairingKey,
   onImport,
   onImportGlucose,
   onGoManual,
   showGlucose,
 }: {
   pairingKey: string
+  /** Правка ключа доступа к прибору: живёт здесь, а не в настройках. */
+  onPairingKey: (next: string) => void
   onImport: (readings: BpReading[]) => Promise<number>
   onImportGlucose: (readings: GlucoseReading[]) => Promise<number>
   onGoManual: () => void
@@ -409,9 +413,79 @@ export function Sync({
 
       {showGlucose && <GlucoseSync onImport={onImportGlucose} log={log} />}
 
+      {/* Всё, что нужно раз в жизни и только когда что-то не работает, — под
+          одной свёрткой. В настройках этому не место: там его искал бы каждый,
+          а нужно оно тому, у кого прибор не подключается. */}
       <div className="card">
+        <details>
+          <summary>Если не подключается</summary>
+
+          <div className="stack" style={{ gap: 'var(--space-4)', marginTop: 'var(--space-4)' }}>
+            <div>
+              <Field label="Ключ доступа к тонометру">
+                <input
+                  value={pairingKey}
+                  spellCheck={false}
+                  onChange={(e) => onPairingKey(e.target.value.trim())}
+                  style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                />
+              </Field>
+              <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+                <button
+                  className="btn btn--sm"
+                  onClick={() => onPairingKey(DEFAULT_PAIRING_KEY)}
+                  disabled={pairingKey === DEFAULT_PAIRING_KEY}
+                >
+                  Вернуть значение по умолчанию
+                </button>
+              </div>
+              <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
+                Этот ключ приложение предъявляет прибору. Менять его нужно, только если вы сопрягали прибор с
+                собственным значением.
+              </div>
+            </div>
+
+            <ЖурналОбмена
+              lines={lines}
+              showAll={showAll}
+              setShowAll={setShowAll}
+              showDebug={showDebug}
+              setShowDebug={setShowDebug}
+              onInspect={handleInspect}
+              busy={busy !== null}
+              onClear={clear}
+            />
+          </div>
+        </details>
+      </div>
+    </div>
+  )
+}
+
+/** Журнал обмена: нужен при разборе отказов, поэтому лежит под свёрткой. */
+function ЖурналОбмена({
+  lines,
+  showAll,
+  setShowAll,
+  showDebug,
+  setShowDebug,
+  onInspect,
+  busy,
+  onClear,
+}: {
+  lines: ReturnType<typeof useBleLog>['lines']
+  showAll: boolean
+  setShowAll: (next: boolean) => void
+  showDebug: boolean
+  setShowDebug: (next: boolean) => void
+  onInspect: () => void
+  busy: boolean
+  onClear: () => void
+}) {
+  return (
+    <div>
         <div className="card__head">
-          <h2>Журнал обмена</h2>
+          <h3>Журнал обмена</h3>
           <div className="row">
             <label className="badge">
               <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
@@ -427,10 +501,10 @@ export function Sync({
         <BleLog lines={lines} showDebug={showDebug} />
 
         <div className="row" style={{ marginTop: 'var(--space-3)' }}>
-          <button className="btn btn--sm" onClick={handleInspect} disabled={busy !== null}>
+          <button className="btn btn--sm" onClick={onInspect} disabled={busy}>
             Характеристики прибора
           </button>
-          <button className="btn btn--sm" onClick={clear} disabled={lines.length === 0}>
+          <button className="btn btn--sm" onClick={onClear} disabled={lines.length === 0}>
             Очистить
           </button>
           <button
@@ -444,7 +518,6 @@ export function Sync({
         <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
           Включите «подробно», если что-то пойдёт не так: в журнал попадут все пакеты обмена.
         </div>
-      </div>
     </div>
   )
 }

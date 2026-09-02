@@ -37,12 +37,20 @@ const РАЗМЕРЫ: { key: TextScale; title: string }[] = [
 export function Onboarding({
   settings,
   onApply,
+  шаг,
+  onШаг,
 }: {
   settings: SettingsData
   /** Сохранить выбор и уйти в приложение. */
   onApply: (patch: Partial<SettingsData>) => void
+  /**
+   * Какой шаг показывать. Снаружи, а не своим состоянием: аппаратная «Назад»
+   * на втором шаге должна возвращать на первый, а знает о ней только то место,
+   * где живёт вся глубина приложения.
+   */
+  шаг: 1 | 2
+  onШаг: (next: 1 | 2) => void
 }) {
-  const [шаг, setШаг] = useState<1 | 2>(1)
   const [выбрано, setВыбрано] = useState<Set<Что>>(new Set(['bp', 'meds']))
   const [размер, setРазмер] = useState<TextScale>(settings.textScale)
 
@@ -149,7 +157,7 @@ export function Onboarding({
 
         <div className="row" style={{ marginTop: 'var(--space-5)' }}>
           {шаг === 1 ? (
-            <button className="btn btn--primary" onClick={() => setШаг(2)}>
+            <button className="btn btn--primary" onClick={() => onШаг(2)}>
               Дальше
             </button>
           ) : (

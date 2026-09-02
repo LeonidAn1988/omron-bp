@@ -12,6 +12,7 @@ import { webStorage } from './storage'
 import { webFiles } from './files'
 import { webBackup } from './backup'
 import { webReminders } from './reminders'
+import { webNav, installWebBack } from './nav'
 
 export const webPlatform: Platform = {
   kind: 'web',
@@ -20,10 +21,12 @@ export const webPlatform: Platform = {
   files: webFiles,
   backup: webBackup,
   reminders: webReminders,
+  nav: webNav,
 }
 
 export function installWebPlatform() {
   installPlatform(webPlatform)
+  installWebBack()
 }
 
 export { useIndexedDbFactory } from './storage'

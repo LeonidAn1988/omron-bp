@@ -48,7 +48,12 @@ export function Cabinet({
   onSave,
   onDelete,
   onPickPerson,
-  toRoot = 0,
+  card = null,
+  form = null,
+  onOpenCard,
+  onEditCard,
+  onAdd,
+  onBack,
 }: {
   medicines: Medicine[]
   /** Вся аптечка семьи — для сводного вида. */
@@ -61,12 +66,22 @@ export function Cabinet({
   onDelete: (id: string) => Promise<void>
   /** Переключить человека: открывая чужую коробку, надо перейти к её владельцу. */
   onPickPerson: (id: string) => void
-  /** Меняется, когда человек нажал на уже активную вкладку: вернуться к списку. */
-  toRoot?: number
+  /**
+   * Открытая коробка и форма приходят снаружи, из стека экранов приложения.
+   *
+   * Своим состоянием они быть перестали: аппаратная «Назад» на Android должна
+   * закрывать карточку, а не сворачивать приложение, и знать о ней обязано то
+   * место, где живёт вся глубина. Заодно уход на другую вкладку и обратно
+   * больше не теряет открытую коробку — раньше её стирало размонтирование.
+   */
+  card?: string | null
+  /** Открытая форма: `id` — правка коробки, `null` внутри объекта — новая. */
+  form?: { id: string | null } | null
+  onOpenCard: (id: string) => void
+  onEditCard: (id: string) => void
+  onAdd: () => void
+  onBack: () => void
 }) {
-  const [openId, setOpenId] = useState<string | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [adding, setAdding] = useState(false)
   const [filter, setFilter] = useState<Filter>('all')
   /**
    * Чью аптечку показываем.
@@ -86,31 +101,28 @@ export function Cabinet({
   }
   /** Куда вернуть список после экрана препарата: терять место при возврате нельзя. */
   const scrollRef = useRef(0)
+  const былоГлубже = useRef(false)
 
-  // Возврат к списку по нажатию на свою же вкладку. Фильтр при этом остаётся:
-  // человек просил вернуться из карточки, а не сбросить всё, что настроил.
-  const first = useRef(true)
+  // Прокрутку возвращаем сами: наверх стек не смотрит, а список из полутора
+  // десятков коробок, открывшийся в начале, ощущается как потеря места.
+  const глубже = card !== null || form !== null
   useEffect(() => {
-    if (first.current) {
-      first.current = false
-      return
+    if (былоГлубже.current && !глубже) {
+      requestAnimationFrame(() => window.scrollTo({ top: scrollRef.current }))
     }
-    setOpenId(null)
-    setEditingId(null)
-    setAdding(false)
-  }, [toRoot])
+    былоГлубже.current = глубже
+  }, [глубже])
 
-  const now = Date.now()
-  const opened = видимые.find((item) => item.id === openId) ?? allMedicines.find((item) => item.id === openId) ?? null
-
-  const back = () => {
-    setOpenId(null)
-    // Восстанавливаем после отрисовки списка, иначе прокручивать ещё нечего.
-    requestAnimationFrame(() => window.scrollTo({ top: scrollRef.current }))
+  const открыть = (id: string) => {
+    scrollRef.current = window.scrollY
+    onOpenCard(id)
   }
 
-  if (editingId || adding) {
-    const item = allMedicines.find((m) => m.id === editingId)
+  const now = Date.now()
+  const opened = видимые.find((item) => item.id === card) ?? allMedicines.find((item) => item.id === card) ?? null
+
+  if (form) {
+    const item = allMedicines.find((m) => m.id === form.id)
     return (
       <div className="card">
         <div className="card__head">
@@ -123,13 +135,9 @@ export function Cabinet({
           intakeTimes={intakeTimes}
           onSave={async (next) => {
             await onSave(next)
-            setEditingId(null)
-            setAdding(false)
+            onBack()
           }}
-          onCancel={() => {
-            setEditingId(null)
-            setAdding(false)
-          }}
+          onCancel={onBack}
         />
       </div>
     )
@@ -139,15 +147,12 @@ export function Cabinet({
     return (
       <MedicineCard
         medicine={opened}
-        onBack={back}
+        onBack={onBack}
         onSave={onSave}
-        onEdit={() => {
-          setOpenId(null)
-          setEditingId(opened.id)
-        }}
+        onEdit={() => onEditCard(opened.id)}
         onDelete={async () => {
           await onDelete(opened.id)
-          back()
+          onBack()
         }}
       />
     )
@@ -216,7 +221,6 @@ export function Cabinet({
                 now={now}
                 owner={имяВладельца(item)}
                 onOpen={() => {
-                  scrollRef.current = window.scrollY
                   // Чужую коробку открываем от имени её владельца: правки и
                   // отметки должны идти тому, чья она. Иначе отметить приём не
                   // тому человеку — дело одного нажатия, а найти ошибку потом
@@ -226,7 +230,7 @@ export function Cabinet({
                     onPickPerson(чей)
                     setScope('mine')
                   }
-                  setOpenId(item.id)
+                  открыть(item.id)
                 }}
               />
             ))}
@@ -234,7 +238,7 @@ export function Cabinet({
         )}
 
         <div className="row" style={{ marginTop: 'var(--space-5)' }}>
-          <button className="btn btn--primary" onClick={() => setAdding(true)}>
+          <button className="btn btn--primary" onClick={onAdd}>
             Добавить препарат
           </button>
           {events > 0 && (

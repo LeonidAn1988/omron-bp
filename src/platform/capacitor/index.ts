@@ -5,13 +5,13 @@
  * при этом те же самые, что в вебе, — различаются только реализации портов.
  */
 
-import { App } from '@capacitor/app'
 import { installPlatform, type Platform, type StoragePort } from '../ports'
 import { webStorage } from '../web/storage'
 import { capacitorBluetooth } from './bluetooth'
 import { capacitorFiles } from './files'
 import { capacitorBackup } from './backup'
 import { capacitorReminders } from './reminders'
+import { capacitorNav, installBackButton } from './nav'
 
 /**
  * Хранилище берём браузерное: IndexedDB внутри WebView работает, и переписывать
@@ -40,28 +40,10 @@ export const capacitorPlatform: Platform = {
   files: capacitorFiles,
   backup: capacitorBackup,
   reminders: capacitorReminders,
-}
-
-/**
- * Аппаратная кнопка «Назад».
- *
- * Без обработчика первое же нажатие закрывает приложение — на телефоне это
- * ощущается как вылет. Приложение одностраничное и историей браузера не
- * пользуется, поэтому поведение простое: есть куда возвращаться внутри —
- * возвращаемся, некуда — сворачиваем приложение, а не закрываем. Свёрнутое
- * открывается мгновенно и с того же места.
- */
-function handleBackButton() {
-  void App.addListener('backButton', ({ canGoBack }) => {
-    if (canGoBack) {
-      window.history.back()
-      return
-    }
-    void App.minimizeApp()
-  })
+  nav: capacitorNav,
 }
 
 export function installCapacitorPlatform() {
   installPlatform(capacitorPlatform)
-  handleBackButton()
+  installBackButton()
 }
