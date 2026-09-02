@@ -146,8 +146,13 @@ export async function seed(page, frozen) {
       readings.forEach((r) => tx.objectStore('readings').put(r))
       // Дневник сахара включаем явно: иначе раздел прячется и снимок пустой.
       // `onboarded` — тоже явно: без него приложение на пустом дневнике
-      // показывает экран знакомства, а не себя.
-      tx.objectStore('meta').put({ trackGlucose: true, onboarded: true }, 'settings')
+      // показывает экран знакомства, а не себя. Человека тоже заводим сами: с
+      // 0.7.2 приложение даёт первому уникальный идентификатор от часов, и
+      // посев без этой строки перестал бы повторяться от прогона к прогону.
+      tx.objectStore('meta').put(
+        { trackGlucose: true, onboarded: true, people: [{ id: 'p1', name: 'Я', deviceUser: 1 }], activePerson: 'p1' },
+        'settings',
+      )
       tx.oncomplete = resolve
       tx.onerror = () => reject(tx.error)
     })

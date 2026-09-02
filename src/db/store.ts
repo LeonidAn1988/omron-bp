@@ -104,7 +104,7 @@ export async function loadSettings(): Promise<Settings> {
    * уже известно, — человек не должен отвечать на вопрос «а вы кто» только
    * потому, что мы поменяли модель данных у себя внутри.
    */
-  const people = merged.people.length > 0 ? merged.people : [firstPerson(merged)]
+  const people = merged.people.length > 0 ? merged.people : [firstPerson(merged, Date.now())]
   const activePerson = people.some((p) => p.id === merged.activePerson) ? merged.activePerson : people[0].id
   return { ...merged, people, activePerson }
 }

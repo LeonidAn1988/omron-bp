@@ -28,12 +28,17 @@ export const MAX_PEOPLE = 8
  * одного, и этот один уже где-то назван — подписью пользователя прибора.
  * Подпись из коробки («Пользователь 1») именем не считаем: человек её не писал,
  * и видеть её вместо своего имени неприятно.
+ *
+ * Идентификатор — уникальный, а не `p1`. Прежнее постоянное значение означало,
+ * что первый человек на каждом телефоне семьи получает один и тот же ключ: при
+ * слиянии дневников отец и жена оказались бы одним человеком, а лечится это
+ * потом только перебивкой, которая рвёт владельцев коробок и старые копии.
  */
-export function firstPerson(settings: Pick<Settings, 'userNames' | 'activeUser'>): Person {
+export function firstPerson(settings: Pick<Settings, 'userNames' | 'activeUser'>, now: number): Person {
   const подпись = (settings.userNames[settings.activeUser] ?? '').trim()
   const своё = подпись.length > 0 && !/^Пользователь\s*\d+$/.test(подпись)
   const memory: 1 | 2 = settings.activeUser === 2 ? 2 : 1
-  return { id: 'p1', name: своё ? подпись : ПЕРВЫЙ, deviceUser: memory }
+  return { id: newPersonId(now), name: своё ? подпись : ПЕРВЫЙ, deviceUser: memory }
 }
 
 /** Новый идентификатор человека. Время в основе: двоих в одну миллисекунду не заводят. */
