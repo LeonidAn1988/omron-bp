@@ -292,4 +292,48 @@ public class SystemSettings extends Plugin {
             call.reject("не удалось открыть системный экран", error);
         }
     }
+    /**
+     * Открыть ссылку в браузере, а не в приложении, которое её перехватывает.
+     *
+     * Проверено на приборе: ссылка на поиск в аптеке уводила в установленное
+     * приложение сети — и оно открывалось на своей главной, потеряв запрос.
+     * Человек нажимал «Аптека.ру» у амлодипина и попадал в каталог «Витамины и
+     * бад», а искать приходилось заново. Поэтому адрес отдаём именно браузеру:
+     * запрос он выполняет как написано.
+     */
+    @PluginMethod
+    public void openInBrowser(PluginCall call) {
+        String url = call.getString("url");
+        if (url == null) {
+            call.reject("нет адреса");
+            return;
+        }
+        Uri uri = Uri.parse(url);
+        Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+        intent.addCategory(Intent.CATEGORY_BROWSABLE);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            // Спрашиваем систему, кто у неё браузер по умолчанию, и отдаём
+            // адрес прямо ему. Без этого Android отдал бы ссылку приложению
+            // аптеки: у сетей включены «ссылки приложения» на свой домен.
+            Intent probe = new Intent(Intent.ACTION_VIEW, Uri.parse("http://example.com"));
+            android.content.pm.ResolveInfo browser = getContext()
+                    .getPackageManager()
+                    .resolveActivity(probe, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+            if (browser != null && browser.activityInfo != null) {
+                intent.setPackage(browser.activityInfo.packageName);
+            }
+            getContext().startActivity(intent);
+            call.resolve();
+        } catch (Exception error) {
+            // Браузера может не оказаться вовсе. Тогда пусть решает система —
+            // приложение аптеки лучше, чем ничего.
+            try {
+                getContext().startActivity(new Intent(Intent.ACTION_VIEW, uri).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                call.resolve();
+            } catch (Exception second) {
+                call.reject("не удалось открыть ссылку", second);
+            }
+        }
+    }
 }

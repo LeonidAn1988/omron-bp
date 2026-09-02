@@ -13,6 +13,7 @@ import {
 import { KIND_LABEL } from '../logic/drugs'
 import { plural } from '../logic/plural'
 import { pharmacyLinks } from '../logic/pharmacies'
+import { platform } from '../platform/ports'
 import { canShareFile, download, shareFile } from '../logic/io'
 import { Banner } from './bits'
 
@@ -221,7 +222,18 @@ export function Restock({
             {pharmacyLinks(medicine, pharmacies).length > 0 && (
               <span className="buy__where no-print">
                 {pharmacyLinks(medicine, pharmacies).map((аптека) => (
-                  <a key={аптека.id} href={аптека.href} target="_blank" rel="noopener noreferrer">
+                  <a
+                    key={аптека.id}
+                    href={аптека.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(event) => {
+                      // Через порт: на телефоне ссылку перехватывает приложение
+                      // аптеки и открывается на своей главной, теряя запрос.
+                      event.preventDefault()
+                      void platform().files.openExternal(аптека.href)
+                    }}
+                  >
                     {аптека.name}
                   </a>
                 ))}

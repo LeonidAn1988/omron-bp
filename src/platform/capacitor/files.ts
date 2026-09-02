@@ -47,12 +47,21 @@ async function writeToCache(filename: string, content: string): Promise<string> 
  * отдельно и узко, ровно тем методом, который нужен файлам.
  */
 interface SystemSettingsPrint {
+  openInBrowser(options: { url: string }): Promise<void>
   printPage(options: { jobName: string }): Promise<{ started: boolean }>
 }
 
 const SystemSettings = registerPlugin<SystemSettingsPrint>('SystemSettings')
 
 export const capacitorFiles: FilePort = {
+  async openExternal(url: string) {
+    // Через нативный плагин, а не `window.open`: тот отдаёт адрес системе, и
+    // ссылку перехватывает приложение аптеки, открываясь на главной.
+    await SystemSettings.openInBrowser({ url }).catch(() => {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    })
+  },
+
   /**
    * «Сохранить» на телефоне — это тоже «поделиться».
    *

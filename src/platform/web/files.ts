@@ -8,6 +8,11 @@
 import type { FilePort } from '../ports'
 
 export const webFiles: FilePort = {
+  /** В браузере ссылка и так открывается в браузере — новой вкладкой. */
+  async openExternal(url: string) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  },
+
   async save(filename, content, mime) {
     const blob = new Blob([content], { type: `${mime};charset=utf-8` })
     const url = URL.createObjectURL(blob)

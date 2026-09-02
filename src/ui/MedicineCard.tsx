@@ -12,6 +12,7 @@ import {
 } from '../logic/medicines'
 import { instructionUrl } from '../logic/drugs'
 import { pharmacyLinks, searchEngineUrl } from '../logic/pharmacies'
+import { platform } from '../platform/ports'
 import { plural } from '../logic/plural'
 import { NumberField } from './NumberField'
 import { Banner, BackBar } from './bits'
@@ -211,7 +212,17 @@ export function MedicineCard({
               случаях уходит с устройства человека, от нас наружу не идёт ничего. */}
           {аптеки.length > 0 ? (
             аптеки.map((аптека) => (
-              <a key={аптека.id} className="btn" href={аптека.href} target="_blank" rel="noopener noreferrer">
+              <a
+                key={аптека.id}
+                className="btn"
+                href={аптека.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => {
+                  event.preventDefault()
+                  void platform().files.openExternal(аптека.href)
+                }}
+              >
                 {аптека.name}
               </a>
             ))
