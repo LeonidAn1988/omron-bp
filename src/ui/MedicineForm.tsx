@@ -6,6 +6,7 @@ import { NumberField } from './NumberField'
 import { Field } from './bits'
 import { DrugPicker, VariantPicker } from './DrugPicker'
 import { substanceLabel } from './Medicines'
+import { ownerOf } from '../logic/people'
 
 /**
  * Заведение и правка препарата.
@@ -133,7 +134,11 @@ export function MedicineForm({
    * Без этого поля исправить это можно только удалив и заведя заново, потеряв
    * заодно отметки о приёме.
    */
-  const [owner, setOwner] = useState(medicine?.owner ?? activePerson)
+  // Новая коробка — тому, кто выбран сверху. Существующая без владельца
+  // (заведена до появления людей) лежит у первого человека, и форма обязана
+  // показать его же: иначе правка остатка при открытом «Отце» молча
+  // переписала бы владельца.
+  const [owner, setOwner] = useState(medicine ? (ownerOf(medicine, people) ?? activePerson) : activePerson)
   const [name, setName] = useState(medicine?.name ?? '')
   const [dose, setDose] = useState(medicine?.dose ?? '')
   const [left, setLeft] = useState(medicine?.left !== null && medicine?.left !== undefined ? String(medicine.left) : '')

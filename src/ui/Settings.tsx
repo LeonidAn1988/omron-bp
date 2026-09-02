@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import type { Measurement, Medicine, SectionKey, Settings as SettingsData, ThemeChoice } from '../types'
 import { DEFAULT_PAIRING_KEY } from '../ble/session'
 import { Reminders } from './Reminders'
-import { download, parseImportFile, toCsv, toJson, type ImportResult } from '../logic/io'
+import { download, parseImportFile, toCsv, toJson, type ImportResult, takesPersonalFrom } from '../logic/io'
 import { decryptBackup, isEncrypted } from '../logic/crypto'
 import { platform } from '../platform/ports'
 import { Banner, Field } from './bits'
@@ -97,6 +97,7 @@ export function Settings({
       const parts = [`Разобрано записей: ${parsed.measurements.length}, добавлено новых: ${added}.`]
       if (medicines > 0) parts.push(`Добавлено препаратов в аптечку: ${medicines}.`)
       if (settingsRestored) parts.push('Настройки восстановлены.')
+      else if (parsed.settings) parts.push('Люди, цели и часы приёма оставлены свои: в файле не все здешние люди.')
       if (parsed.skipped) parts.push(`Пропущено нечитаемых строк: ${parsed.skipped}.`)
       setMessage({ tone: 'good', text: parts.join(' ') })
       setЗакрытый(null)
@@ -149,11 +150,15 @@ export function Settings({
     if (!закрытый) return
     try {
       const открытый = await decryptBackup(закрытый.text, пароль)
-      // Пароль подошёл — человек только что доказал, что знает его. Включаем
-      // шифрование копий и запоминаем пароль: иначе на новом телефоне
-      // зашифрованная копия перезаписалась бы открытой при первой же записи.
-      patch({ backupEncrypt: true })
-      backup.setPassword(пароль)
+      // Пароль подошёл. Если копия своя — включаем шифрование и запоминаем
+      // пароль: иначе на новом телефоне зашифрованная копия перезаписалась бы
+      // открытой при первой же записи. Чужую копию (отца, чтобы посмотреть)
+      // открыть можно, но свои автокопии её паролем не закрываем.
+      const разобранная = parseImportFile('копия.json', открытый)
+      if (!разобранная.settings || takesPersonalFrom(settings, разобранная.settings)) {
+        patch({ backupEncrypt: true })
+        backup.setPassword(пароль)
+      }
       // Имя берём исходное, но разбор всегда как JSON: зашифрованной бывает
       // только полная копия, а расширение у файла может быть любым.
       await восстановить(закрытый.name.endsWith('.json') ? закрытый.name : `${закрытый.name}.json`, открытый)

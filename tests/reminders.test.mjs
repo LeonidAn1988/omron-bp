@@ -17,6 +17,7 @@ import {
   medicinesForReminder,
   reminderTimes,
   shortBody,
+  MAX_PEOPLE,
 } from './build/api.mjs'
 
 export function run() {
@@ -326,5 +327,13 @@ export function run() {
   const дней2 = new Set(набор2.map((r) => r.day)).size
   check('два человека с разными часами держат полный горизонт', дней2 === 14, `дней: ${дней2}`)
 
+
+  // Разряд человека в номере напоминания: людей в дневнике не больше, чем
+  // различает номер, и внутри предела номера не совпадают.
+  const пл_день = Date.UTC(2026, 8, 2)
+  const пл_номера = new Set(Array.from({ length: MAX_PEOPLE }, (_, i) => reminderId(пл_день, 3, 2, i)))
+  check('предел людей вмещается в разряд номера', MAX_PEOPLE <= 8)
+  check('внутри предела номера людей не совпадают', пл_номера.size === MAX_PEOPLE)
+  check('за пределом номер повторяется — потому предел и нужен', reminderId(пл_день, 3, 2, MAX_PEOPLE) === reminderId(пл_день, 3, 2, 0))
   return failures
 }

@@ -1,4 +1,4 @@
-import type { GlucoseContext, Measurement, Medicine, Settings, Tombstone } from '../types'
+import type { GlucoseContext, Measurement, Medicine, Person, Settings, Tombstone } from '../types'
 import { deviceMeasurementId } from '../db/store'
 import { platform } from '../platform/ports'
 
@@ -498,10 +498,7 @@ export function mergeRestoredSettings(local: Settings, incoming: NonNullable<Sna
   // него можно брать и людей, и всё личное: это та же семья, просто с другого
   // дня. Одиночный дневник с именем по умолчанию — тоже «свой»: ему семью
   // только предстоит завести.
-  const семьяЕщёНеЗаведена =
-    своиЛюди.length <= 1 && (своиЛюди[0]?.name ?? 'Я') === 'Я' && (своиЛюди[0]?.id ?? 'p1') === 'p1'
-  const файлСвой = изФайла.length > 0 && своиЛюди.every((p) => изФайла.some((q) => q.id === p.id))
-  const братьЛичное = семьяЕщёНеЗаведена || файлСвой
+  const братьЛичное = takesPersonalFrom(local, incoming)
 
   const семья = братьЛичное && изФайла.length > 0
     ? {
@@ -529,4 +526,43 @@ export function mergeRestoredSettings(local: Settings, incoming: NonNullable<Sna
     : {}
 
   return { ...local, ...личное, ...семья }
+}
+
+/**
+ * Берётся ли из копии личное — люди, цели, часы приёма. Да, если файл свой
+ * (все здешние люди в нём есть по идентификаторам) или семья здесь ещё не
+ * заведена: один человек с именем и идентификатором по умолчанию. Наружу —
+ * чтобы сообщение после восстановления не обещало того, чего не было.
+ */
+export function takesPersonalFrom(local: Pick<Settings, 'people'>, incoming: NonNullable<Snapshot['settings']>): boolean {
+  const своиЛюди = local.people
+  const изФайла = incoming.people ?? []
+  // Незаведённая семья — один человек с именем по умолчанию. Идентификатор
+  // не смотрим: после удаления и повторного добавления он уже не `p1`, а
+  // дневник от этого своим быть не перестаёт.
+  const семьяЕщёНеЗаведена = своиЛюди.length <= 1 && (своиЛюди[0]?.name ?? 'Я').trim() === 'Я'
+  // `p1` получает первый человек на любой установке, так что одного
+  // совпадения по нему мало: файл отца с его `p1` иначе сошёл бы за свой у
+  // переименованного одиночки. Для `p1` требуем ещё и то же имя.
+  const тотЖе = (p: Person, q: Person) =>
+    p.id === q.id && (p.id !== 'p1' || (q.name ?? '').trim() === (p.name ?? '').trim())
+  const файлСвой = изФайла.length > 0 && своиЛюди.every((p) => изФайла.some((q) => тотЖе(p, q)))
+  return семьяЕщёНеЗаведена || файлСвой
+}
+
+/** Поля коробки, которые прежние версии теряли при восстановлении из копии. */
+const ДОПИСЫВАЕМЫЕ = ['owner', 'since', 'startedAt', 'foldedUntil', 'history'] as const
+
+/**
+ * Дописать известной коробке то, чего у неё нет, из копии: владельца, даты,
+ * историю. Остаток и отметки — местные, их не трогаем: они свежее любой копии.
+ * Нужна тем, кто наполнял телефон копией до 0.7.1 и получил коробки без
+ * владельца и с «пропусками» за прошлое. Если дописывать нечего — тот же объект.
+ */
+export function fillMissingFromCopy(local: Medicine, incoming: Medicine): Medicine {
+  const патч: Partial<Medicine> = {}
+  for (const key of ДОПИСЫВАЕМЫЕ) {
+    if (local[key] === undefined && incoming[key] !== undefined) Object.assign(патч, { [key]: incoming[key] })
+  }
+  return Object.keys(патч).length > 0 ? { ...local, ...патч } : local
 }

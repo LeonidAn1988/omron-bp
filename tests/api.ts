@@ -45,8 +45,7 @@ export {
   freeDeviceUsers,
   newPersonId,
   intakeTimesOf,
-  ПЕРВЫЙ,
-} from '../src/logic/people'
+  ПЕРВЫЙ, MAX_PEOPLE } from '../src/logic/people'
 
 export {
   normalize,
@@ -136,7 +135,7 @@ export {
   recordsBehind,
 } from '../src/logic/backup'
 export { parseChangelog, currentVersion } from '../src/logic/changelog'
-export { mergeRestoredSettings } from '../src/logic/io'
+export { fillMissingFromCopy, mergeRestoredSettings, takesPersonalFrom } from '../src/logic/io'
 
 export { installWebPlatform, useIndexedDbFactory } from '../src/platform/web'
 

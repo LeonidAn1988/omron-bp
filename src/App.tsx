@@ -24,7 +24,7 @@ import { GlucoseEntry, GlucoseList, GlucoseTiles } from './ui/Glucose'
 import { Readings } from './ui/Readings'
 import { MedicineNudge } from './ui/Medicines'
 import { DeviceIcon, ReportIcon, SettingsIcon } from './ui/icons'
-import { mergeRestoredSettings } from './logic/io'
+import { fillMissingFromCopy, mergeRestoredSettings, takesPersonalFrom } from './logic/io'
 import { medicinesForReminder } from './logic/reminders'
 import { Onboarding } from './ui/Onboarding'
 import { PersonSwitch } from './ui/People'
@@ -301,10 +301,20 @@ export default function App() {
 
       const added = await addNewMeasurements(incoming.measurements)
 
-      const known = new Set((await getAllMedicines()).map((m) => m.id))
+      const local = await getAllMedicines()
+      const known = new Map(local.map((m) => [m.id, m]))
       const buried = new Set((await getAllTombstones()).map((t) => t.id))
       const freshMedicines = incoming.medicines.filter((m) => !known.has(m.id) && !buried.has(m.id))
       for (const item of freshMedicines) await putMedicine(item)
+      // Известные коробки не заменяем, но дописываем им то, что прежние версии
+      // теряли при восстановлении: владельца, даты, историю. Остаток и
+      // отметки остаются местными.
+      for (const item of incoming.medicines) {
+        const mine = known.get(item.id)
+        if (!mine) continue
+        const filled = fillMissingFromCopy(mine, item)
+        if (filled !== mine) await putMedicine(filled)
+      }
 
       let settingsRestored = false
       if (incoming.settings) {
@@ -312,7 +322,9 @@ export default function App() {
         // устройство своё (тема, размер, копии, ключ прибора), семья — только
         // если здесь её ещё нет. Раньше чужой файл затирал и людей, и цели.
         updateSettings(mergeRestoredSettings(settingsRef.current, incoming.settings))
-        settingsRestored = true
+        // «Восстановлены» — только если из файла взято личное. Чужой файл
+        // оставляет своих людей и цели, и сообщение обязано это сказать.
+        settingsRestored = takesPersonalFrom(settingsRef.current, incoming.settings)
       }
 
       await refresh()
@@ -470,6 +482,13 @@ export default function App() {
       // холодном старте действие приходит раньше, чем прочитаны настройки, и
       // в состоянии ещё пустой список — фильтр по человеку не нашёл бы никого.
       const { people } = await loadSettings()
+      // Карточка, поставленная ещё прежней версией, человека не несёт. При
+      // одном человеке гадать нечего; при нескольких не отмечать всем разом,
+      // а открыть экран приёма — там видно, чью таблетку отмечать.
+      if (!person && people.length > 1) {
+        setTab('intake')
+        return
+      }
       for (const medicine of medicinesForReminder(cabinet, people, slot, day, now, person)) {
         await putMedicine(markTakenAt(medicine, planned, now))
       }

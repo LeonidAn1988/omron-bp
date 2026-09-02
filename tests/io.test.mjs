@@ -1,7 +1,7 @@
 /** Круговой рейс экспорта-импорта и чтение чужих форматов. */
 import {
   FULL_MEDICINE,
-  mergeRestoredSettings, toCsv, toJson, parseCsv, parseJson, parseImportFile } from './build/api.mjs'
+  mergeRestoredSettings, takesPersonalFrom, fillMissingFromCopy, toCsv, toJson, parseCsv, parseJson, parseImportFile } from './build/api.mjs'
 
 export function run() {
   let failures = 0
@@ -266,6 +266,27 @@ export function run() {
   check('свой файл дописывает людей', слито3.people.length === 3)
   check('битый activePerson заменяется первым из файла', слито3.activePerson === 'p1')
   check('личное из своего файла берётся', слито3.targetSys === 130)
+
+  // То же условие наружу — для сообщения после восстановления.
+  check('личное не берётся: чужой файл при заведённой семье', takesPersonalFrom(семейное, изФайла) === false)
+  check('личное берётся: свой файл', takesPersonalFrom(семейное, свой) === true)
+  check('личное берётся: семья ещё не заведена', takesPersonalFrom(своё, изФайла) === true)
+  check('переименованный одиночка — уже семья, чужое не берётся', takesPersonalFrom({ people: [{ id: 'p1', name: 'Леонид', deviceUser: 1 }] }, изФайла) === false)
+  // `p1` есть на каждой установке — чужой файл с ним за свой не сходит, а свой с тем же именем — сходит.
+  check('чужой файл с p1 другого имени — не свой', takesPersonalFrom({ people: [{ id: 'p1', name: 'Леонид', deviceUser: 1 }] }, { people: [{ id: 'p1', name: 'Отец', deviceUser: 1 }, { id: 'p-mom', name: 'Мама' }] }) === false)
+  check('свой файл с p1 того же имени — свой', takesPersonalFrom({ people: [{ id: 'p1', name: 'Леонид', deviceUser: 1 }, { id: 'p-w', name: 'Жена' }] }, { people: [{ id: 'p1', name: 'Леонид ', deviceUser: 1 }, { id: 'p-w', name: 'Жена' }, { id: 'p-k', name: 'Ребёнок' }] }) === true)
+  check('старая копия без людей при заведённой семье — личное не берётся', takesPersonalFrom(семейное, { targetSys: 120 }) === false)
+  check('файл без одного из здешних людей — не свой', takesPersonalFrom(семейное, { people: [{ id: 'p1', name: 'Леонид', deviceUser: 1 }] }) === false)
+  check('одиночка «Я» с пересозданным идентификатором — семья не заведена, файл берётся', takesPersonalFrom({ people: [{ id: 'pmtizy0g4', name: 'Я', deviceUser: 1 }] }, изФайла) === true)
+
+  // Известной коробке из копии дописывается только отсутствующее.
+  const пд_своя = { id: 'm1', name: 'Конкор', left: 3, taken: [5, 6] }
+  const пд_изКопии = { id: 'm1', name: 'Конкор', left: 30, taken: [1], owner: 'p-dad', since: 100, startedAt: 50, foldedUntil: 90, history: { '2026-07': { planned: 10, taken: 9 } } }
+  const пд_дописано = fillMissingFromCopy(пд_своя, пд_изКопии)
+  check('владелец, даты и история дописаны', пд_дописано.owner === 'p-dad' && пд_дописано.since === 100 && пд_дописано.startedAt === 50 && пд_дописано.foldedUntil === 90 && пд_дописано.history['2026-07'].taken === 9)
+  check('остаток и отметки остались местными', пд_дописано.left === 3 && пд_дописано.taken.length === 2)
+  check('что уже есть — не перезаписывается', fillMissingFromCopy({ ...пд_своя, owner: 'p1', since: 7 }, пд_изКопии).owner === 'p1' && fillMissingFromCopy({ ...пд_своя, owner: 'p1', since: 7 }, пд_изКопии).since === 7)
+  check('нечего дописывать — тот же объект', fillMissingFromCopy(пд_дописано, пд_изКопии) === пд_дописано)
 
   return failures
 }

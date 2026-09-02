@@ -12,7 +12,7 @@
 
 import { useState } from 'react'
 import type { Medicine, Person, Settings as SettingsData } from '../types'
-import { freeDeviceUsers, newPersonId, ownerOf } from '../logic/people'
+import { freeDeviceUsers, MAX_PEOPLE, newPersonId, ownerOf } from '../logic/people'
 import { plural } from '../logic/plural'
 import { Banner, Field } from './bits'
 
@@ -168,10 +168,15 @@ export function People({
       </div>
 
       <div className="row" style={{ marginTop: 'var(--space-4)' }}>
-        <button className="btn" onClick={добавить}>
+        <button className="btn" onClick={добавить} disabled={people.length >= MAX_PEOPLE}>
           Добавить человека
         </button>
       </div>
+      {people.length >= MAX_PEOPLE && (
+        <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
+          В одном дневнике помещается {MAX_PEOPLE} человек — столько различают напоминания.
+        </div>
+      )}
 
       {people.length === 1 && (
         <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
