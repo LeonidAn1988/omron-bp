@@ -173,14 +173,18 @@ export function Restock({
   /** Выбранные аптеки: под каждой строкой появятся ссылки на поиск. */
   pharmacies?: readonly string[]
 }) {
+  // Все состояния объявлены до единственного выхода ниже. Иначе при пустом
+  // списке покупок React насчитывает меньше хуков, чем в прошлый раз, и роняет
+  // всё приложение в белый экран — ровно это и случилось у человека, который
+  // переключился на того, кому покупать нечего.
   const [copied, setCopied] = useState(false)
+  const [failed, setFailed] = useState(false)
   const list = restockList(medicines, Date.now())
   if (list.length === 0) return null
 
   // Галочки и заголовок: список уходит сообщением в мессенджер, и там он
   // должен читаться списком, а не абзацем.
   const text = restockText(list, ownerName, { checklist: true })
-  const [failed, setFailed] = useState(false)
 
   const copy = async () => {
     const ok = await copyTextOut(text)

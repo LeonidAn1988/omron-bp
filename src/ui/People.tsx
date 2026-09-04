@@ -301,9 +301,19 @@ export function People({
 export function PersonSwitch({
   settings,
   onChange,
+  extra,
 }: {
   settings: SettingsData
   onChange: (next: Partial<SettingsData>) => void
+  /**
+   * Лишний выбор рядом с людьми — «Вся семья» в аптечке.
+   *
+   * Он живёт здесь, а не отдельной полосой внутри экрана. Отдельная полоса уже
+   * была и оказалась дефектом: на «Аптечке» стояли два одинаковых ряда имён,
+   * верхний ничего не менял, а нижний молча уводил в пустой экран. Вопрос
+   * «чей это список» на экране один, и ряд кнопок к нему тоже должен быть один.
+   */
+  extra?: { title: string; active: boolean; onPick: (active: boolean) => void }
 }) {
   if (settings.people.length <= 1) return null
 
@@ -313,12 +323,22 @@ export function PersonSwitch({
         {settings.people.map((person, index) => (
           <button
             key={person.id}
-            aria-pressed={settings.activePerson === person.id}
-            onClick={() => onChange({ activePerson: person.id })}
+            aria-pressed={!extra?.active && settings.activePerson === person.id}
+            onClick={() => {
+              onChange({ activePerson: person.id })
+              // Выбрали человека — «вся семья» больше не выбрана: иначе нажатая
+              // кнопка не совпадала бы с тем, что показано.
+              extra?.onPick(false)
+            }}
           >
             {person.name || `Человек ${index + 1}`}
           </button>
         ))}
+        {extra && (
+          <button aria-pressed={extra.active} onClick={() => extra.onPick(true)}>
+            {extra.title}
+          </button>
+        )}
       </div>
     </div>
   )

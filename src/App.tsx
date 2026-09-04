@@ -186,6 +186,9 @@ export default function App() {
     ])
   }, [])
 
+  /** Показывать ли в аптечке всю семью. Живёт здесь: полоса людей общая. */
+  const [своднаяАптечка, setСводнаяАптечка] = useState(false)
+
   /** Шаг знакомства: тоже узел стека, чтобы «Назад» возвращала на первый шаг. */
   const узелШага = stack.find((node) => node.kind === 'step')
   const шагЗнакомства: 1 | 2 = узелШага && узелШага.kind === 'step' && узелШага.step === 2 ? 2 : 1
@@ -931,7 +934,13 @@ export default function App() {
           переключатель здесь только сбивал бы с толку — он не меняет ничего из
           того, что видно на экране. */}
       {tab !== 'settings' && (
-        <PersonSwitch settings={settings} onChange={(fields) => updateSettings({ ...settingsRef.current, ...fields })} />
+        <PersonSwitch
+          settings={settings}
+          onChange={(fields) => updateSettings({ ...settingsRef.current, ...fields })}
+          // «Вся семья» — только в аптечке: сводный список нужен, чтобы одним
+          // походом купить всё, а приём и давление общими быть не могут.
+          extra={tab === 'cabinet' ? { title: 'Вся семья', active: своднаяАптечка, onPick: setСводнаяАптечка } : undefined}
+        />
       )}
 
       <nav
@@ -1189,6 +1198,7 @@ export default function App() {
             activePerson={person?.id ?? ''}
             onSave={handleSaveMedicine}
             onDelete={handleDeleteMedicine}
+            familyScope={своднаяАптечка}
             pharmacies={settings.pharmacies ?? []}
             card={открытаяКоробка}
             form={открытаяФорма}

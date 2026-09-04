@@ -16,7 +16,7 @@ import { Banner } from './bits'
 import { ChevronIcon } from './icons'
 import { alertText, ALERT_TONE, KindTag, MedicineNudge, Restock, shortFormOf, Supply } from './Medicines'
 import { MedicineCard } from './MedicineCard'
-import { ownerOf, medicinesOf } from '../logic/people'
+import { ownerOf } from '../logic/people'
 import { MedicineForm } from './MedicineForm'
 
 /**
@@ -57,6 +57,7 @@ export function Cabinet({
   activePerson,
   onSave,
   onDelete,
+  familyScope = false,
   pharmacies = [],
   card = null,
   form = null,
@@ -74,6 +75,8 @@ export function Cabinet({
   activePerson: string
   onSave: (item: Medicine) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  /** Показывать всю семью, а не выбранного сверху человека. */
+  familyScope?: boolean
   /** Выбранные аптеки: кнопки поиска у препарата и в списке покупок. */
   pharmacies?: readonly string[]
   /**
@@ -101,18 +104,13 @@ export function Cabinet({
    * Он живёт только здесь: приём и отчёт врачу общими быть не могут — отметка
    * ставится человеку, и отчёт тоже про одного.
    */
-  const [scope, setScope] = useState<string>(activePerson)
   const семья = people.length > 1
-  // Выбранный сверху человек мог смениться на другом экране: показывать чужую
-  // аптечку с чужим именем в заголовке нельзя.
-  useEffect(() => {
-    if (scope !== 'family' && !people.some((p) => p.id === scope)) setScope(activePerson)
-  }, [scope, people, activePerson])
-  const видимые =
-    !семья || scope === 'family' ? (scope === 'family' ? allMedicines : medicines) : medicinesOf(allMedicines, people, scope)
+  // Кого показываем, решает полоса людей наверху — та же, что на остальных
+  // экранах. Своего ряда кнопок здесь больше нет: их было два, и они спорили.
+  const видимые = familyScope ? allMedicines : medicines
   const людиПоId = (id: string | null) => people.find((p) => p.id === id)?.name?.trim() || null
   const имяВладельца = (item: Medicine) => {
-    if (!семья || scope !== 'family') return null
+    if (!семья || !familyScope) return null
     const id = ownerOf(item, people)
     return people.find((p) => p.id === id)?.name?.trim() || null
   }
@@ -197,36 +195,13 @@ export function Cabinet({
 
   return (
     <div className="stack">
-      {/* Чей список — над всем, а не внутри карточки аптечки. Раньше этот
-          переключатель стоял ниже «Купить», но менял и его: человек листал
-          список покупок и не понимал, откуда там чужие лекарства.
-
-          Каждый человек отдельным чипом, а не «мой / вся семья»: в семье из
-          четверых «мой» не отвечает на вопрос «что купить отцу». */}
-      {семья && (
-        <div className="segmented segmented--chips no-print" role="group" aria-label="Чей список">
-          {people.map((person) => (
-            <button
-              key={person.id}
-              aria-pressed={scope === person.id}
-              onClick={() => setScope(person.id)}
-            >
-              {имя(person.id)}
-            </button>
-          ))}
-          <button aria-pressed={scope === 'family'} onClick={() => setScope('family')}>
-            Вся семья
-          </button>
-        </div>
-      )}
-
       <Restock medicines={видимые} ownerName={имяВладельца} pharmacies={pharmacies} />
 
       <div className="card">
         <div className="card__head">
           <h2>
             Аптечка
-            {семья && scope !== 'family' && <span className="muted"> · {имя(scope)}</span>}
+            {семья && !familyScope && <span className="muted"> · {имя(activePerson)}</span>}
           </h2>
           {видимые.length > 0 && <span className="muted">препаратов: {видимые.length}</span>}
         </div>
@@ -243,7 +218,12 @@ export function Cabinet({
 
         {видимые.length === 0 && (
           <div className="chart__empty">
-            Аптечка пуста. Внесите препараты — приложение предупредит, когда они кончаются или истекает срок.
+            {/* Имя обязательно: пустой экран после переключения человека
+                выглядит поломкой, пока не сказано, чья именно аптечка пуста. */}
+            {/* Имя перед двоеточием, а не «у Лёлечки»: склонять чужие имена
+                приложение не умеет и склонять не должно. */}
+            {семья && !familyScope ? `${имя(activePerson)}: в аптечке пусто. ` : 'Аптечка пуста. '}
+            Внесите препараты — приложение предупредит, когда они кончаются или истекает срок.
           </div>
         )}
 
