@@ -293,47 +293,34 @@ public class SystemSettings extends Plugin {
         }
     }
     /**
-     * Открыть ссылку в браузере, а не в приложении, которое её перехватывает.
+     * Открыть ссылку за пределами приложения — и пусть систему решает, чем.
      *
-     * Проверено на приборе: ссылка на поиск в аптеке уводила в установленное
-     * приложение сети — и оно открывалось на своей главной, потеряв запрос.
-     * Человек нажимал «Аптека.ру» у амлодипина и попадал в каталог «Витамины и
-     * бад», а искать приходилось заново. Поэтому адрес отдаём именно браузеру:
-     * запрос он выполняет как написано.
+     * Раньше здесь адрес принудительно отдавался браузеру: один раз при
+     * проверке ссылка на поиск ушла в установленное приложение аптеки, и оно
+     * открылось на своей главной, потеряв запрос. Вывод оказался поспешным.
+     * Проверка 6 сентября 2026 на четырёх случаях — Аптека.ру и Здравсити, с
+     * холодного старта и с уже запущенного, — показала, что оба приложения
+     * запрос понимают и открывают нужный поиск.
+     *
+     * А приложение аптеки для человека лучше браузера: там он уже вошёл, там
+     * его корзина и адрес доставки. Поэтому решает система: стоит приложение
+     * сети — откроется оно, нет — браузер.
      */
     @PluginMethod
-    public void openInBrowser(PluginCall call) {
+    public void openLink(PluginCall call) {
         String url = call.getString("url");
         if (url == null) {
             call.reject("нет адреса");
             return;
         }
-        Uri uri = Uri.parse(url);
-        Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-        intent.addCategory(Intent.CATEGORY_BROWSABLE);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         try {
-            // Спрашиваем систему, кто у неё браузер по умолчанию, и отдаём
-            // адрес прямо ему. Без этого Android отдал бы ссылку приложению
-            // аптеки: у сетей включены «ссылки приложения» на свой домен.
-            Intent probe = new Intent(Intent.ACTION_VIEW, Uri.parse("http://example.com"));
-            android.content.pm.ResolveInfo browser = getContext()
-                    .getPackageManager()
-                    .resolveActivity(probe, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
-            if (browser != null && browser.activityInfo != null) {
-                intent.setPackage(browser.activityInfo.packageName);
-            }
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                    .addCategory(Intent.CATEGORY_BROWSABLE)
+                    .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             getContext().startActivity(intent);
             call.resolve();
         } catch (Exception error) {
-            // Браузера может не оказаться вовсе. Тогда пусть решает система —
-            // приложение аптеки лучше, чем ничего.
-            try {
-                getContext().startActivity(new Intent(Intent.ACTION_VIEW, uri).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                call.resolve();
-            } catch (Exception second) {
-                call.reject("не удалось открыть ссылку", second);
-            }
+            call.reject("не удалось открыть ссылку", error);
         }
     }
 }
