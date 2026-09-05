@@ -2629,3 +2629,13 @@ kbd {
   color: var(--danger);
   font-weight: 600;
 }
+
+/* Смена дозы по схеме: заметнее обычной подписи, но не тревога — назначение
+   меняется по плану врача, а не потому, что что-то пошло не так. */
+.dose__change {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--fs-1);
+  font-weight: 600;
+  color: var(--accent);
+}

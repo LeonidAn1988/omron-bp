@@ -24,7 +24,7 @@
  * чем промолчать.
  */
 
-import { dosesOn, normalizeTimes, parseTime, perTimeOf } from './medicines'
+import { dosesOn, normalizeTimes, parseTime, perTimeOf, formatCount } from './medicines'
 import type { Reminder } from '../platform/ports'
 import { ownerOf } from './people'
 import type { Person, Medicine } from '../types'
@@ -71,11 +71,13 @@ function partOfDay(minutes: number): string {
  * Одному оно ни к чему — он и так знает, чьи таблетки; а в семье уведомление
  * «Периндоприл, 1 шт.» в восемь утра не говорит главного: кому пить.
  */
-export function doseLine(medicine: Medicine, owner?: string | null): string {
-  const count = perTimeOf(medicine)
+export function doseLine(medicine: Medicine, owner?: string | null, day?: number): string {
+  // Доза берётся на день: со схемой она меняется, и «1 шт.» в уведомлении на
+  // неделе половинок — это прямая инструкция принять лишнее.
+  const count = perTimeOf(medicine, day)
   const имя = [medicine.name, medicine.dose].filter(Boolean).join(' ')
   const голова = owner ? `${owner}: ${имя}` : имя
-  const хвост = [count > 1 ? `${count} шт.` : '', medicine.meal ? MEAL[medicine.meal] ?? '' : '']
+  const хвост = [count !== 1 ? `${formatCount(count)} шт.` : '', medicine.meal ? MEAL[medicine.meal] ?? '' : '']
     .filter(Boolean)
     .join(', ')
   return хвост ? `${голова} — ${хвост}` : голова
@@ -253,7 +255,7 @@ export function buildReminders(
       const естьЧтоОтмечать = ждут.some((medicine) => !medicine.autoDeduct)
       // Имя человека — в заголовке, а не в каждой строке: уведомление теперь
       // одно на человека, и внутри него все таблетки его.
-      const подробно = поПорядку.map((medicine) => doseLine(medicine)).join('\n')
+      const подробно = поПорядку.map((medicine) => doseLine(medicine, null, день)).join('\n')
       const коротко = shortBody(поПорядку.map((medicine) => medicine.name))
       const имя = поЛюдям && персона ? (options.personName?.(персона) ?? null) : null
       const кому = имя ? `${имя} · ` : ''

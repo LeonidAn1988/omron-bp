@@ -119,6 +119,9 @@ export {
   supplyDays,
   trackedSince,
   undoTaken,
+  stageOn,
+  doseChangeOn,
+  formatCount
 } from '../src/logic/medicines'
 
 export {
@@ -192,6 +195,8 @@ export { medicinesForReminder } from '../src/logic/reminders'
  * файл → разбор» в tests/io.test.mjs сверяет каждое поле этой фикстуры.
  */
 export const FULL_MEDICINE: Required<Medicine> = {
+  plan: [{ perTime: 0.5, days: 7 }, { perTime: 1, days: null }],
+  planFrom: Date.UTC(2026, 7, 1),
   id: 'm-full', name: 'Периндоприл', dose: '5 мг', inn: 'Периндоприл', form: 'Таблетки', maker: 'Сервье',
   regNumber: 'ЛП-000001', kind: 1, packSize: 30, left: 12, perDay: 1, expires: Date.UTC(2027, 3, 30),
   note: 'после завтрака', leftAt: 1_700_000_000_000, times: ['08:00', '20:00'], perTime: 1, meal: 'after',

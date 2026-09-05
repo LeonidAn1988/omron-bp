@@ -12,6 +12,9 @@ import {
   type DayPart,
   type DayStatus,
   partWindowOpen,
+  perTimeOf,
+  formatCount,
+  doseChangeOn
 } from '../logic/medicines'
 
 /**
@@ -36,8 +39,9 @@ const FUTURE_DAYS = 7
 const MEAL_LABEL: Record<string, string> = { before: 'до еды', after: 'после еды' }
 
 /** «2 шт., после еды» — то, чего не хватало строке приёма. */
-function doseExtra(medicine: Medicine): string {
-  const штук = medicine.perTime && medicine.perTime > 1 ? `${medicine.perTime} шт.` : ''
+function doseExtra(medicine: Medicine, day: number): string {
+  const доза = perTimeOf(medicine, day)
+  const штук = доза !== 1 ? `${formatCount(доза)} шт.` : ''
   const еда = medicine.meal ? (MEAL_LABEL[medicine.meal] ?? '') : ''
   return [штук, еда].filter(Boolean).join(', ')
 }
@@ -391,7 +395,17 @@ function PartCard({
                   таблетки утром» превращалось в «Лозап 50 мг». Ошибка вдвое по
                   дозе у гипертоника опаснее пропуска. В уведомлении эти данные
                   показывались, а на самом экране — нет. */}
-              {doseExtra(row.medicine) && <span className="dose__extra">{doseExtra(row.medicine)}</span>}
+              {doseExtra(row.medicine, day) && <span className="dose__extra">{doseExtra(row.medicine, day)}</span>}
+              {/* Смена дозы по схеме — молча её проводить нельзя: человек
+                  примет по привычке прежнее число, а назначение уже другое. */}
+              {(() => {
+                const смена = doseChangeOn(row.medicine, day)
+                return смена ? (
+                  <span className="dose__change">
+                    с сегодня по {formatCount(смена.to)} вместо {formatCount(смена.from)}
+                  </span>
+                ) : null
+              })()}
               {/* Отметка и её отмена стоят одной строкой под названием, а не в
                   колонке действий: широкая кнопка выдавливала название в три
                   строки, и отмеченная строка была вдвое выше остальных. */}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { IntakeSlot, Medicine, Person } from '../types'
+import type { DoseStage, IntakeSlot, Medicine, Person } from '../types'
 import { expiryToMonth, formatTime, monthToExpiry, normalizeTimes, parseTime } from '../logic/medicines'
 import { formGroup as formGroupOf, FORM_GROUPS, type Drug, type DrugVariant } from '../logic/drugs'
 import { NumberField } from './NumberField'
@@ -157,6 +157,12 @@ export function MedicineForm({
   const [variants, setVariants] = useState<DrugVariant[]>([])
   const [times, setTimes] = useState<string[]>(normalizeTimes(medicine?.times ?? []))
   const [perTime, setPerTime] = useState(String(medicine?.perTime ?? 1))
+  /**
+   * Схема с меняющейся дозой. Пустой список означает «доза одна и та же» —
+   * так ведёт себя подавляющее большинство коробок, и заводить схему для них
+   * не надо.
+   */
+  const [plan, setPlan] = useState<DoseStage[]>(medicine?.plan ?? [])
   const [meal, setMeal] = useState<Medicine['meal']>(medicine?.meal)
   const [autoDeduct, setAutoDeduct] = useState(medicine?.autoDeduct ?? false)
   const [busy, setBusy] = useState(false)
@@ -194,6 +200,15 @@ export function MedicineForm({
         autoDeduct: autoDeduct || undefined,
         times: times.length > 0 ? times : undefined,
         perTime: times.length > 0 ? Number(perTime) || 1 : undefined,
+        // Схема сохраняется только со своим началом: без даты этапы не с чего
+        // отсчитывать. Начало — день, когда схему завели, если человек не
+        // указал «принимаю с».
+        plan: plan.length > 0 ? plan : undefined,
+        planFrom:
+          plan.length > 0
+            ? (medicine?.planFrom ??
+              (startedMonth ? (monthToExpiry(startedMonth) ?? Date.now()) : Date.now()))
+            : undefined,
         meal: times.length > 0 ? meal : undefined,
         /*
          * Дата подтверждения остатка сбрасывается только когда остаток и
@@ -392,7 +407,13 @@ export function MedicineForm({
           Когда принимать
         </div>
         <TimePicker times={times} presets={presetsOf(intakeSlots)} onChange={setTimes} />
-        {times.length > 0 && (
+        {times.length > 0 && plan.length > 0 && (
+          <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
+            Доза задана схемой ниже — поле «штук за приём» она заменяет.
+          </div>
+        )}
+
+        {times.length > 0 && plan.length === 0 && (
           <div className="row" style={{ marginTop: 'var(--space-3)', alignItems: 'flex-end' }}>
             <div style={{ maxWidth: 150 }}>
               <NumberField
@@ -420,6 +441,75 @@ export function MedicineForm({
           </div>
         )}
       </div>
+
+      {times.length > 0 && (
+        <details open={plan.length > 0}>
+          <summary>Доза меняется — наращивание или отмена</summary>
+          <div className="stack" style={{ gap: 'var(--space-3)', marginTop: 'var(--space-3)' }}>
+            {plan.length === 0 ? (
+              <div className="muted">
+                Например: неделю по половине, потом по целой. Или наоборот — при отмене.
+              </div>
+            ) : (
+              plan.map((этап, i) => (
+                <div className="slotrow" key={i}>
+                  <Field label={`Этап ${i + 1}: штук за приём`}>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="0.5"
+                      min="0"
+                      max="10"
+                      value={String(этап.perTime)}
+                      onChange={(e) =>
+                        setPlan(plan.map((x, j) => (j === i ? { ...x, perTime: Number(e.target.value) || 0 } : x)))
+                      }
+                    />
+                  </Field>
+                  <Field label={этап.days === null ? 'дальше так же' : 'дней'}>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min="1"
+                      max="365"
+                      // Пустое поле у последнего этапа значит «дальше так же»:
+                      // схема наращивания заканчивается поддерживающей дозой.
+                      value={этап.days === null ? '' : String(этап.days)}
+                      placeholder="без конца"
+                      onChange={(e) =>
+                        setPlan(
+                          plan.map((x, j) =>
+                            j === i ? { ...x, days: e.target.value === '' ? null : Number(e.target.value) || 1 } : x,
+                          ),
+                        )
+                      }
+                    />
+                  </Field>
+                  <button type="button" className="btn btn--sm" onClick={() => setPlan(plan.filter((_, j) => j !== i))}>
+                    Убрать
+                  </button>
+                </div>
+              ))
+            )}
+            <div className="row">
+              <button
+                type="button"
+                className="btn btn--sm"
+                onClick={() => setPlan([...plan, { perTime: plan.length ? plan[plan.length - 1].perTime : 0.5, days: 7 }])}
+              >
+                Добавить этап
+              </button>
+            </div>
+            {plan.length > 0 && (
+              <div className="muted">
+                {plan[plan.length - 1].days === null
+                  ? 'Последний этап без срока — приём продолжается с этой дозой.'
+                  : 'У последнего этапа указан срок: когда он выйдет, приём закончится.'}
+              </div>
+            )}
+          </div>
+        </details>
+      )}
 
       {(times.length > 0 || left.trim() !== '') && (
         <div>

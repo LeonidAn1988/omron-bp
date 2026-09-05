@@ -378,6 +378,8 @@ function parseMedicines(raw: unknown): Medicine[] {
       startedAt: optionalNumber(m.startedAt) ?? undefined,
       foldedUntil: optionalNumber(m.foldedUntil) ?? undefined,
       history: history(m.history),
+      plan: plan(m.plan),
+      planFrom: optionalNumber(m.planFrom) ?? undefined,
       // Отметка времени правки переносится как есть: штамповать её «сейчас»
       // при восстановлении нельзя — старая копия выглядела бы свежее местной
       // правки и побеждала бы её при семейном слиянии.
@@ -389,6 +391,22 @@ function parseMedicines(raw: unknown): Medicine[] {
  * Свёрнутая история приёма из файла: только ячейки вида `'2026-07' → { planned, taken }`
  * с конечными числами. Испорченная ячейка отбрасывается, а не тянет NaN в отчёт.
  */
+/**
+ * Схема приёма из файла: только этапы с конечной дозой. Испорченный этап
+ * отбрасывается целиком — принимать «NaN таблеток» человеку не предложишь.
+ */
+function plan(raw: unknown): Medicine['plan'] {
+  if (!Array.isArray(raw)) return undefined
+  const этапы = raw
+    .filter((x): x is { perTime: unknown; days: unknown } => !!x && typeof x === 'object')
+    .map((x) => ({
+      perTime: typeof x.perTime === 'number' && Number.isFinite(x.perTime) && x.perTime >= 0 ? x.perTime : null,
+      days: x.days === null ? null : typeof x.days === 'number' && Number.isFinite(x.days) && x.days > 0 ? x.days : undefined,
+    }))
+    .filter((x): x is { perTime: number; days: number | null } => x.perTime !== null && x.days !== undefined)
+  return этапы.length > 0 ? этапы : undefined
+}
+
 function history(raw: unknown): Medicine['history'] {
   if (!raw || typeof raw !== 'object') return undefined
   const out: NonNullable<Medicine['history']> = {}

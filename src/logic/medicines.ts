@@ -66,8 +66,72 @@ export function expiryToMonth(ts: number): string {
 /** Сколько дней хранить отметки о приёме. История за годы не нужна, а копию раздувает. */
 export const KEEP_INTAKES_DAYS = 60
 
-/** Штук за один приём. По умолчанию одна — так на упаковке и в назначении чаще всего. */
-export const perTimeOf = (medicine: Medicine): number => medicine.perTime ?? 1
+/**
+ * Какой этап схемы действует в этот день.
+ *
+ * `null` — схемы нет или день раньше её начала: тогда работает обычная доза.
+ * `finished` — все этапы прошли, а последний был срочным: курс окончен, и
+ * принимать больше нечего.
+ */
+export function stageOn(
+  medicine: Medicine,
+  day: number,
+): { index: number; perTime: number; endsAt: number | null; finished: boolean } | null {
+  const plan = medicine.plan
+  if (!plan || plan.length === 0) return null
+  const from = startOfDay(medicine.planFrom ?? medicine.startedAt ?? medicine.since ?? 0)
+  if (!from) return null
+  const текущий = startOfDay(day)
+  if (текущий < from) return null
+
+  let начало = from
+  for (let i = 0; i < plan.length; i++) {
+    const этап = plan[i]
+    if (этап.days === null) return { index: i, perTime: этап.perTime, endsAt: null, finished: false }
+    const конец = начало + этап.days * DAY
+    if (текущий < конец) return { index: i, perTime: этап.perTime, endsAt: конец, finished: false }
+    начало = конец
+  }
+  // Этапы кончились, а последний был срочным — курс завершён.
+  return { index: plan.length, perTime: 0, endsAt: null, finished: true }
+}
+
+/**
+ * Штук за один приём. По умолчанию одна — так на упаковке и в назначении чаще
+ * всего. Со схемой доза зависит от дня, и день обязателен: без него вернётся
+ * доза «вообще», а она в схеме бессмысленна.
+ */
+export function perTimeOf(medicine: Medicine, day?: number): number {
+  if (day !== undefined) {
+    const этап = stageOn(medicine, day)
+    if (этап) return этап.perTime
+  }
+  return medicine.perTime ?? 1
+}
+
+/**
+ * Сегодня доза меняется — и об этом надо сказать.
+ *
+ * Молчаливый переход опасен: человек принимает по привычке прежнее число, а
+ * назначение уже другое. Возвращает предыдущую и новую дозу либо `null`.
+ */
+export function doseChangeOn(medicine: Medicine, day: number): { from: number; to: number } | null {
+  if (!medicine.plan?.length) return null
+  const вчера = stageOn(medicine, day - DAY)
+  const сегодня = stageOn(medicine, day)
+  if (!сегодня || !вчера) return null
+  if (вчера.index === сегодня.index) return null
+  return { from: вчера.perTime, to: сегодня.perTime }
+}
+
+/** «½», «1½», «2» — половинки принято писать дробью, а не «0.5». */
+export function formatCount(n: number): string {
+  const целых = Math.floor(n)
+  const остаток = n - целых
+  if (Math.abs(остаток - 0.5) < 1e-9) return целых === 0 ? '½' : `${целых}½`
+  if (остаток === 0) return String(целых)
+  return String(n).replace('.', ',')
+}
 
 /**
  * Сколько уходит в сутки.
@@ -75,9 +139,9 @@ export const perTimeOf = (medicine: Medicine): number => medicine.perTime ?? 1
  * Если задано расписание, суточный расход считается по нему: держать отдельно
  * список времён и число «в день» значит рано или поздно их разойтись.
  */
-export function perDayOf(medicine: Medicine): number | null {
+export function perDayOf(medicine: Medicine, day?: number): number | null {
   const times = medicine.times ?? []
-  if (times.length > 0) return times.length * perTimeOf(medicine)
+  if (times.length > 0) return times.length * perTimeOf(medicine, day)
   return medicine.perDay
 }
 
@@ -109,9 +173,10 @@ export function projectedLeft(medicine: Medicine, now: number): number | null {
   // при подённом счёте отметка приёма сбрасывала точку отсчёта, и показанный
   // остаток подскакивал вверх — человек, не отмечавший неделю, нажимал
   // «принял» и видел, что таблеток стало больше.
-  const per = perTimeOf(medicine)
   let spent = 0
   for (let day = startOfDay(at); day <= startOfDay(now); day += DAY) {
+    // Доза берётся на каждый день отдельно: со схемой она меняется по этапам.
+    const per = perTimeOf(medicine, day)
     for (const slot of dosesOn(medicine, day, now)) {
       const planned = day + parseTime(slot.time)! * 60_000
       // До подтверждения остатка — уже внутри подтверждённого числа.
@@ -425,6 +490,8 @@ export function dosesOn(medicine: Medicine, day: number, now: number): DoseSlot[
   const dayStart = startOfDay(day)
   // До дня заведения расписания не существует.
   if (dayStart < trackedSince(medicine, now)) return []
+  // Перерыв в схеме или конец курса: принимать в этот день нечего.
+  if (perTimeOf(medicine, dayStart) <= 0) return []
   const marks = (medicine.taken ?? []).filter((t) => t >= dayStart && t < dayStart + DAY).sort((a, b) => a - b)
   const planned = times.map((time) => dayStart + parseTime(time)! * 60_000)
 
@@ -515,7 +582,7 @@ export function markTakenAt(medicine: Medicine, plannedTs: number, now: number):
   // прошедший приём после подтверждения он уже учёл, и второе списание было бы
   // двойным.
   const учтено = !!medicine.leftAt && plannedTs > medicine.leftAt && plannedTs <= now
-  const left = base === null ? null : Math.max(0, base - (учтено ? 0 : perTimeOf(medicine)))
+  const left = base === null ? null : Math.max(0, base - (учтено ? 0 : perTimeOf(medicine, plannedTs)))
   return { ...medicine, taken, left, leftAt: now }
 }
 

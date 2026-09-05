@@ -9,6 +9,9 @@ import {
   runsOutAt,
   setLeft,
   supplyDays,
+  stageOn,
+  formatCount,
+  startOfDay
 } from '../logic/medicines'
 import { instructionUrl } from '../logic/drugs'
 import { cleanTradeName, pharmacyLinks, searchEngineUrl } from '../logic/pharmacies'
@@ -69,7 +72,24 @@ export function MedicineCard({
   const supply = supplyDays(medicine, now)
   const left = effectiveLeft(medicine, now)
   const estimated = isEstimated(medicine, now)
-  const perDay = perDayOf(medicine)
+  const perDay = perDayOf(medicine, now)
+
+  /**
+   * Схема с меняющейся дозой — одной строкой: по сколько сейчас и когда
+   * следующая перемена. Без срока человек не знает, что доза скоро изменится,
+   * и держит это в голове сам — ровно то, ради чего схема и заводилась.
+   */
+  const этап = stageOn(medicine, now)
+  const схема = (() => {
+    if (!этап) return null
+    if (этап.finished) return 'курс закончен'
+    const доза = `по ${formatCount(этап.perTime)} за приём`
+    if (этап.endsAt === null) return `${доза}, дальше так же`
+    const дней = Math.max(0, Math.ceil((этап.endsAt - startOfDay(now)) / (24 * 60 * 60 * 1000)))
+    const следующий = medicine.plan?.[этап.index + 1]
+    const дальше = следующий ? `дальше по ${formatCount(следующий.perTime)}` : 'дальше приём заканчивается'
+    return `${доза} ещё ${дней} ${plural(дней, 'день', 'дня', 'дней')}, ${дальше}`
+  })()
 
   const schedule = medicine.times?.length
     ? medicine.times.join(', ')
@@ -168,11 +188,15 @@ export function MedicineCard({
         <dl className="detail">
           <Row
             label="Остаток"
-            value={left === null ? '' : `${estimated ? '≈ ' : ''}${left} шт.`}
+            // Половинки — дробью и с запятой: «55.5 шт.» это машинный вывод.
+            value={left === null ? '' : `${estimated ? '≈ ' : ''}${formatCount(left)} шт.`}
             note={medicine.autoDeduct ? 'отмечать не нужно' : estimated ? 'по расчёту' : undefined}
           />
           <Row label="Приём" value={schedule} note={medicine.meal === 'before' ? 'до еды' : medicine.meal === 'after' ? 'после еды' : undefined} />
-          <Row label="Годен до" value={medicine.expires === null ? '' : monthYear(medicine.expires)} />
+          {схема && <Row label="Схема" value={схема} />}
+          {/* `== null` ловит и `undefined`: у коробки, пришедшей из копии или
+              слияния, поля может не быть вовсе, и `monthYear` печатал «undefined NaN». */}
+          <Row label="Годен до" value={medicine.expires == null ? '' : monthYear(medicine.expires)} />
           <Row label="Форма выпуска" value={medicine.form ?? ''} />
           <Row label={substanceLabel(medicine.kind)} value={medicine.inn ?? ''} />
           <Row label="Производитель" value={medicine.maker ?? ''} />
