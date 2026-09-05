@@ -215,6 +215,15 @@ export default function App() {
 
   /** Снять уровень. `false` — снимать нечего, платформа свернёт приложение. */
   const назад = useCallback(() => {
+    // Открытый лист выбора снимается первым. Пока подписан слушатель
+    // `backButton`, WebView своё поведение не применяет, и системная «Назад»
+    // до `<dialog>` не доходит: без этой строки лист висел бы поверх экрана,
+    // а нажатие уносило человека на уровень выше — проверено на Mate 60 Pro.
+    const лист = document.querySelector('dialog[open]')
+    if (лист instanceof HTMLDialogElement) {
+      лист.close()
+      return true
+    }
     const следующий = pop(stackRef.current)
     if (!следующий) return false
     setStack(следующий)

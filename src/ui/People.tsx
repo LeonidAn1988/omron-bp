@@ -17,6 +17,7 @@ import { freeDeviceUsers, intakeSlotsOf, MAX_PEOPLE, newPersonId, newSlotId, own
 import { describePerson } from '../logic/settings'
 import { plural } from '../logic/plural'
 import { BackBar, Banner, Field, NavRow } from './bits'
+import { FilterButton } from './Picker'
 
 /** Кнопка пользователя на приборе: своя, чужая занятая или никакой. */
 function DeviceMemory({
@@ -295,6 +296,9 @@ export function People({
  * Показывается, только когда людей больше одного. У того, кто ведёт дневник на
  * себя, лишнего элемента на экране не появляется — а таких большинство.
  */
+/** Ключ варианта «все сразу»: людям такой идентификатор не выдаётся. */
+const ВСЕ = '\u0000все'
+
 export function PersonSwitch({
   settings,
   onChange,
@@ -308,35 +312,38 @@ export function PersonSwitch({
    * Он живёт здесь, а не отдельной полосой внутри экрана. Отдельная полоса уже
    * была и оказалась дефектом: на «Аптечке» стояли два одинаковых ряда имён,
    * верхний ничего не менял, а нижний молча уводил в пустой экран. Вопрос
-   * «чей это список» на экране один, и ряд кнопок к нему тоже должен быть один.
+   * «чей это список» на экране один, и кнопка к нему тоже должна быть одна.
    */
   extra?: { title: string; active: boolean; onPick: (active: boolean) => void }
 }) {
+  // Один человек — выбирать не из кого, и «Все» вместе с ним теряет смысл.
   if (settings.people.length <= 1) return null
 
+  const варианты = [
+    ...settings.people.map((person, index) => ({
+      id: person.id,
+      title: person.name || `Человек ${index + 1}`,
+    })),
+    // «Все» — не пятый человек, поэтому отделено чертой.
+    ...(extra ? [{ id: ВСЕ, title: extra.title, apart: true }] : []),
+  ]
   return (
     <div className="personbar no-print">
-      <div className="segmented segmented--fill segmented--chips" role="group" aria-label="Чей дневник">
-        {settings.people.map((person, index) => (
-          <button
-            key={person.id}
-            aria-pressed={!extra?.active && settings.activePerson === person.id}
-            onClick={() => {
-              onChange({ activePerson: person.id })
-              // Выбрали человека — «вся семья» больше не выбрана: иначе нажатая
-              // кнопка не совпадала бы с тем, что показано.
-              extra?.onPick(false)
-            }}
-          >
-            {person.name || `Человек ${index + 1}`}
-          </button>
-        ))}
-        {extra && (
-          <button aria-pressed={extra.active} onClick={() => extra.onPick(true)}>
-            {extra.title}
-          </button>
-        )}
-      </div>
+      <FilterButton
+        label="Чей дневник"
+        selected={extra?.active ? ВСЕ : settings.activePerson}
+        options={варианты}
+        onPick={(id) => {
+          if (id === ВСЕ) {
+            extra?.onPick(true)
+            return
+          }
+          onChange({ activePerson: id })
+          // Выбрали человека — «все» больше не выбрано: иначе на кнопке стояло
+          // бы одно, а на экране лежало другое.
+          extra?.onPick(false)
+        }}
+      />
     </div>
   )
 }

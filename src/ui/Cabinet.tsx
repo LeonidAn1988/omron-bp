@@ -14,6 +14,7 @@ import { buildCalendar, countCalendarEvents } from '../logic/calendar'
 import { download } from '../logic/io'
 
 import { ChevronIcon } from './icons'
+import { FilterButton } from './Picker'
 import { alertText, ALERT_TONE, KindTag, MedicineNudge, Restock, Supply } from './Medicines'
 import { MedicineCard } from './MedicineCard'
 import { ownerOf } from '../logic/people'
@@ -209,12 +210,13 @@ export function Cabinet({
         </div>
 
         {видимые.length > 1 && (
-          <div className="segmented segmented--chips no-print" role="group" aria-label="Что показывать">
-            {FILTERS.map((item) => (
-              <button key={item.key} aria-pressed={filter === item.key} onClick={() => setFilter(item.key)}>
-                {item.title}
-              </button>
-            ))}
+          <div className="no-print">
+            <FilterButton
+              label="Что показывать"
+              selected={filter}
+              options={FILTERS.map((item) => ({ id: item.key, title: item.title }))}
+              onPick={(id) => setFilter(id as Filter)}
+            />
           </div>
         )}
 
