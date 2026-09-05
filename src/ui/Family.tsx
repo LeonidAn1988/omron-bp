@@ -14,9 +14,63 @@
 
 import type { BackupSource } from '../platform/ports'
 import { describeBackupAge } from '../logic/backup'
-import { BackBar, Banner } from './bits'
+import { useState } from 'react'
+import { BackBar, Banner, Field } from './bits'
+import { authUrl } from '../logic/yandex'
 import type { FamilySyncStatus } from './useFamilySync'
 import { describeMerge } from './useFamilySync'
+
+/**
+ * Подключение Яндекс.Диска в два шага.
+ *
+ * Ключ приложение получить само не может: секрета у него нет и быть не должно —
+ * он лежал бы прямо в установленном приложении. Поэтому Яндекс показывает ключ
+ * человеку, а тот его вставляет. Один раз примерно на год.
+ */
+function CloudConnect({ onConnect }: { onConnect: (pasted: string) => Promise<boolean> }) {
+  const [вставлено, setВставлено] = useState('')
+  const [идёт, setИдёт] = useState(false)
+
+  return (
+    <div className="stack" style={{ gap: 'var(--space-3)' }}>
+      <div className="muted">
+        Общая папка семьи заводится сама. Приложение видит только её — остальной Диск ему недоступен.
+      </div>
+      <ol className="steps">
+        <li>
+          <a href={authUrl()} target="_blank" rel="noopener noreferrer">
+            Откройте страницу Яндекса
+          </a>{' '}
+          и разрешите доступ.
+        </li>
+        <li>Скопируйте показанный ключ и вставьте сюда.</li>
+      </ol>
+      <Field label="Ключ доступа">
+        <input
+          value={вставлено}
+          onChange={(event) => setВставлено(event.target.value)}
+          placeholder="вставьте ключ"
+          autoComplete="off"
+        />
+      </Field>
+      <div className="row row--stack">
+        <button
+          className="btn btn--primary"
+          disabled={идёт || вставлено.trim() === ''}
+          onClick={() => {
+            setИдёт(true)
+            void onConnect(вставлено).then((ok) => {
+              setИдёт(false)
+              if (ok) setВставлено('')
+            })
+          }}
+        >
+          {идёт ? 'Проверяю…' : 'Подключить'}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 export function FamilyScreen({
   family,
@@ -43,6 +97,56 @@ export function FamilyScreen({
           <span className="muted">общий дневник на несколько телефонов</span>
         </div>
 
+        {/* Яндекс.Диск — короткий путь: подключил один раз, и приложение само
+            видит дневники всех своих. Файлы вручную остаются запасным путём
+            для тех, у кого другое облако. */}
+        <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>Яндекс.Диск</div>
+        {family.cloud.connected ? (
+          <>
+            <div className="muted">
+              Подключён. {family.cloud.canRead
+                ? 'Дневники семьи читаются и отправляются сами.'
+                : 'В браузере дневник только отправляется — чужие читает приложение на телефоне.'}
+            </div>
+            {family.cloud.files.length > 0 && (
+              <ul className="pills" style={{ marginTop: 'var(--space-3)' }}>
+                {family.cloud.files.map((файл) => (
+                  <li className="pill" key={файл.name}>
+                    <div className="pill__head">
+                      <span className="pill__title">
+                        <span className="pill__name">{файл.name.replace(/^дневник-?/, '').replace(/\.json$/, '') || 'мой дневник'}</span>
+                      </span>
+                    </div>
+                    <div className="muted">
+                      {файл.modified
+                        ? `обновлён ${new Date(файл.modified).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}`
+                        : 'дата неизвестна'}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="row row--stack" style={{ marginTop: 'var(--space-3)' }}>
+              <button className="btn btn--primary" onClick={() => void family.syncNow()} disabled={family.busy}>
+                {family.busy ? 'Обмен идёт…' : 'Обменяться сейчас'}
+              </button>
+              <button className="btn btn--sm" onClick={family.cloud.disconnect}>
+                Отключить Яндекс.Диск
+              </button>
+            </div>
+          </>
+        ) : (
+          <CloudConnect onConnect={family.cloud.connect} />
+        )}
+        {family.cloud.error && (
+          <div style={{ marginTop: 'var(--space-3)' }}>
+            <Banner tone="warning">{family.cloud.error}</Banner>
+          </div>
+        )}
+
+        <div className="tile__label" style={{ margin: 'var(--space-5) 0 var(--space-2)' }}>
+          Обмен файлами
+        </div>
         {!family.supported ? (
           <Banner tone="info">
             <b>Обмен пока только в приложении для Android.</b>

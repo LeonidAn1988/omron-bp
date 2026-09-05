@@ -217,8 +217,10 @@ export function describeReminders(settings: Pick<Settings, 'remindersOn' | 'remi
 }
 
 /** Строка «Семья» в корне: сколько телефонов подключено. */
-export function describeFamily(sources: number, supported: boolean, ownFile = true): string {
-  if (!supported) return 'только в приложении для Android'
+export function describeFamily(sources: number, supported: boolean, ownFile = true, cloud = false): string {
+  // Облако важнее файлов: подключённый Диск — и есть настроенный обмен.
+  if (cloud) return sources > 0 ? `Яндекс.Диск и файлов: ${sources}` : 'через Яндекс.Диск'
+  if (!supported) return 'обмен не настроен'
   if (sources === 0) return 'обмен не настроен'
   // Свой телефон считается, только если его копия куда-то пишется: иначе
   // «телефонов: 3» обещает обмен, которого в одну сторону нет.

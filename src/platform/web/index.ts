@@ -13,9 +13,11 @@ import { webFiles } from './files'
 import { webBackup } from './backup'
 import { webReminders } from './reminders'
 import { webNav, installWebBack } from './nav'
+import { webCloud } from './cloud'
 
 export const webPlatform: Platform = {
   kind: 'web',
+  cloud: webCloud,
   bluetooth: webBluetooth,
   storage: webStorage,
   files: webFiles,

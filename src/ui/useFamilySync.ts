@@ -17,10 +17,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Settings } from '../types'
-import { parseImportFile } from '../logic/io'
+import { parseImportFile, toJson } from '../logic/io'
 import { isEncrypted } from '../logic/crypto'
 import { emptyMergeLog, mergeChangedAnything, mergeDiary, type MergeLog } from '../logic/merge'
 import { platform, type BackupSource } from '../platform/ports'
+import { diskFileName, parseToken, type DiskFile } from '../logic/yandex'
 import {
   deleteMeasurement,
   deleteMedicine,
@@ -45,6 +46,16 @@ export interface FamilySyncStatus {
   unreadable: string[]
   /** Когда в чужом файле сделана самая свежая запись. Ключ — id источника. */
   freshness: Record<string, number | null>
+  /** Обмен через Яндекс.Диск: подключён ли и что там лежит. */
+  cloud: {
+    connected: boolean
+    /** Умеет ли эта платформа читать чужие дневники. В браузере — нет. */
+    canRead: boolean
+    files: DiskFile[]
+    error: string | null
+    connect: (pasted: string) => Promise<boolean>
+    disconnect: () => void
+  }
   addSource: () => Promise<void>
   removeSource: (id: string) => Promise<void>
   /** Прочитать сейчас — кнопкой, не дожидаясь следующего открытия. */
@@ -72,6 +83,10 @@ export function useFamilySync({
   const [lastLog, setLastLog] = useState<MergeLog | null>(null)
   const [unreadable, setUnreadable] = useState<string[]>([])
   const [freshness, setFreshness] = useState<Record<string, number | null>>({})
+  const cloudPort = platform().cloud
+  const [cloudOn, setCloudOn] = useState(() => cloudPort.token() !== null)
+  const [cloudFiles, setCloudFiles] = useState<DiskFile[]>([])
+  const [cloudError, setCloudError] = useState<string | null>(null)
 
   /** Настройки и колбэки читаются из ссылки: слияние не должно перезапускаться от них. */
   const latest = useRef({ settings, onSettings, onChanged })
@@ -80,10 +95,11 @@ export function useFamilySync({
   const идёт = useRef(false)
 
   const прочитать = useCallback(async () => {
-    if (!supported || идёт.current) return
-    const список = await port.sources()
+    if (идёт.current) return
+    const список = supported ? await port.sources() : []
     setSources(список)
-    if (список.length === 0) return
+    const облако = cloudPort.token() !== null
+    if (список.length === 0 && !облако) return
 
     идёт.current = true
     setBusy(true)
@@ -146,6 +162,59 @@ export function useFamilySync({
         свежесть[источник.id] = времена.length ? Math.max(...времена) : null
       }
 
+      // Дневники семьи из папки на Диске. Своё имя пропускаем: сливать файл
+      // сам с собой незачем, а лишний запрос на телефоне — это трафик.
+      if (облако) {
+        try {
+          const моё = diskFileName(latest.current.settings.people.find((p) => p.id === latest.current.settings.activePerson)?.name)
+          const файлы = await cloudPort.list()
+          setCloudFiles(файлы)
+          setCloudError(null)
+          if (cloudPort.canDownload()) {
+            for (const файл of файлы) {
+              if (файл.name === моё) continue
+              const текст = await cloudPort.download(файл.name)
+              if (текст === null) {
+                плохие.push(`${файл.name} (не читается)`)
+                continue
+              }
+              let разобрано
+              try {
+                разобрано = parseImportFile(файл.name, текст)
+              } catch {
+                плохие.push(`${файл.name} (не разбирается)`)
+                continue
+              }
+              const слито = mergeDiary(своё, {
+                measurements: разобрано.measurements,
+                medicines: разобрано.medicines,
+                tombstones: разобрано.tombstones,
+                people: разобрано.settings?.people,
+              })
+              своё = {
+                measurements: слито.measurements,
+                medicines: слито.medicines,
+                tombstones: слито.tombstones,
+                people: слито.people,
+              }
+              итог.addedMeasurements += слито.log.addedMeasurements
+              итог.updatedMeasurements += слито.log.updatedMeasurements
+              итог.addedMedicines += слито.log.addedMedicines
+              итог.updatedMedicines += слито.log.updatedMedicines
+              итог.addedIntakes += слито.log.addedIntakes
+              итог.removed += слито.log.removed
+              итог.addedPeople += слито.log.addedPeople
+              итог.stockConflicts.push(...слито.log.stockConflicts)
+              свежесть[файл.name] = файл.modified
+            }
+          }
+        } catch (error) {
+          // Сеть, просроченный ключ, лимит Диска — обмен через файлы при этом
+          // работает дальше, и валить его из-за облака нельзя.
+          setCloudError(error instanceof Error ? error.message : String(error))
+        }
+      }
+
       if (mergeChangedAnything(итог)) {
         // Пока читались чужие файлы, человек мог что-то внести. Слепок, снятый
         // до чтения, эти правки не содержит — и записанный поверх, затёр бы их.
@@ -183,6 +252,22 @@ export function useFamilySync({
         await latest.current.onChanged()
       }
 
+      // Своё выкладываем всегда, когда облако подключено: даже если чужого не
+      // принесли, наши записи могли измениться с прошлого раза.
+      if (облако) {
+        try {
+          const { settings } = latest.current
+          const моё = diskFileName(settings.people.find((p) => p.id === settings.activePerson)?.name)
+          const { backupLastAt: _at, backupLastCount: _c, backupLastSignature: _s, pairingKey: _k, ...rest } = settings
+          await cloudPort.upload(
+            моё,
+            toJson({ measurements: своё.measurements, medicines: своё.medicines, tombstones: своё.tombstones, settings: rest }),
+          )
+        } catch (error) {
+          setCloudError(error instanceof Error ? error.message : String(error))
+        }
+      }
+
       setLastLog(итог)
       setLastAt(Date.now())
       setUnreadable(плохие)
@@ -201,14 +286,14 @@ export function useFamilySync({
 
   // При запуске и при каждом возвращении на экран.
   useEffect(() => {
-    if (!ready || !supported) return
+    if (!ready || (!supported && !cloudOn)) return
     void прочитать()
     const проснулись = () => {
       if (document.visibilityState === 'visible') void прочитать()
     }
     document.addEventListener('visibilitychange', проснулись)
     return () => document.removeEventListener('visibilitychange', проснулись)
-  }, [ready, supported, прочитать])
+  }, [ready, supported, cloudOn, прочитать])
 
   const addSource = useCallback(async () => {
     let added: BackupSource | null
@@ -253,7 +338,52 @@ export function useFamilySync({
     [port],
   )
 
-  return { supported, sources, busy, lastAt, lastLog, unreadable, freshness, addSource, removeSource, syncNow: прочитать }
+  const connect = useCallback(
+    async (pasted: string) => {
+      const ключ = parseToken(pasted)
+      if (!ключ) {
+        setCloudError('Это не похоже на ключ. Скопируйте его целиком со страницы Яндекса.')
+        return false
+      }
+      cloudPort.setToken(ключ)
+      setCloudOn(true)
+      setCloudError(null)
+      try {
+        // Сразу проверяем ключ делом: молча сохранить неверный значит обещать
+        // обмен, которого не будет.
+        setCloudFiles(await cloudPort.list())
+      } catch (error) {
+        cloudPort.setToken('')
+        setCloudOn(false)
+        setCloudError(error instanceof Error ? error.message : String(error))
+        return false
+      }
+      await прочитать()
+      return true
+    },
+    [cloudPort, прочитать],
+  )
+
+  const disconnect = useCallback(() => {
+    cloudPort.setToken('')
+    setCloudOn(false)
+    setCloudFiles([])
+    setCloudError(null)
+  }, [cloudPort])
+
+  return {
+    supported,
+    sources,
+    busy,
+    lastAt,
+    lastLog,
+    unreadable,
+    freshness,
+    cloud: { connected: cloudOn, canRead: cloudPort.canDownload(), files: cloudFiles, error: cloudError, connect, disconnect },
+    addSource,
+    removeSource,
+    syncNow: прочитать,
+  }
 }
 
 /** Одной строкой: что принесло последнее чтение. */

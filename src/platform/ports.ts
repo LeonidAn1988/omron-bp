@@ -11,6 +11,7 @@
  */
 
 import type { Measurement, Medicine, Settings, Tombstone } from '../types'
+import type { DiskFile } from '../logic/yandex'
 
 // ── Bluetooth ──────────────────────────────────────────────────────────────
 
@@ -291,6 +292,30 @@ export interface BackupPort {
   removeSource(id: string): Promise<void>
 }
 
+/**
+ * Обмен через облако: приложение само ходит в папку семьи.
+ *
+ * Отдельный порт, а не часть `BackupPort`: там долгоживущий файл, выбранный
+ * человеком в системном окне, здесь — сеть и ключ доступа. Скачивание
+ * необязательно: в браузере его запрещает сам Яндекс (тело файла отдаёт другой
+ * хост, и чужому сайту читать ответ он не даёт), поэтому веб отдаёт свой
+ * дневник, но чужие не читает.
+ */
+export interface CloudPort {
+  /** Ключ сохранён — обмен настроен. */
+  token(): string | null
+  /** Запомнить ключ. Пустая строка — отключить обмен. */
+  setToken(value: string): void
+  /** Умеет ли платформа читать чужие файлы. В браузере — нет. */
+  canDownload(): boolean
+  /** Что лежит в папке семьи. Ошибка сети — исключение, вызывающий решает. */
+  list(): Promise<DiskFile[]>
+  /** Записать свой дневник. */
+  upload(name: string, content: string): Promise<void>
+  /** Прочитать чужой. `null` — платформа не умеет или файл недоступен. */
+  download(name: string): Promise<string | null>
+}
+
 /** Чужая копия: `id` — для приложения, `name` — чтобы человек узнал файл. */
 export interface BackupSource {
   id: string
@@ -521,6 +546,8 @@ export interface NavPort {
 }
 
 export interface Platform {
+  /** Обмен через Яндекс.Диск. */
+  cloud: CloudPort
   /**
    * Где приложение выполняется — сайтом в браузере или приложением на телефоне.
    *

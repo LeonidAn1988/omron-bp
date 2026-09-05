@@ -49,6 +49,7 @@ const suites = [
   ['Пороги давления и сахара', await import('./classify.test.mjs')],
   ['Статистика для отчёта', await import('./stats.test.mjs')],
   ['Схема приёма', await import('./plan.test.mjs')],
+  ['Яндекс.Диск', await import('./yandex.test.mjs')],
   ['Следы удалений', await import('./tombstones.test.mjs')],
   ['Свёрнутая история приёма', await import('./history.test.mjs')],
   ['История изменений', await import('./changelog.test.mjs')],

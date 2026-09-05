@@ -150,7 +150,9 @@ export function run() {
 
   check('семья не настроена', describeFamily(0, true) === 'обмен не настроен')
   check('семья из трёх телефонов', describeFamily(2, true) === 'телефонов: 3')
-  check('в браузере обмена нет', describeFamily(0, false).startsWith('только в приложении'))
+  check('без облака и файлов — не настроен', describeFamily(0, false) === 'обмен не настроен')
+  check('подключённый Диск и есть настроенный обмен', describeFamily(0, true, true, true) === 'через Яндекс.Диск')
+  check('Диск и файлы вместе', describeFamily(2, true, true, true) === 'Яндекс.Диск и файлов: 2')
 
   check('скрытого нет', describeSections(БАЗА) === 'показаны все')
   check('скрыт один', describeSections({ sections: { ...БАЗА.sections, overview: false } }) === 'скрыт раздел «Обзор»')

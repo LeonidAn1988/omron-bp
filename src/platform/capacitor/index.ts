@@ -12,6 +12,7 @@ import { capacitorFiles } from './files'
 import { capacitorBackup } from './backup'
 import { capacitorReminders } from './reminders'
 import { capacitorNav, installBackButton } from './nav'
+import { capacitorCloud } from './cloud'
 
 /**
  * Хранилище берём браузерное: IndexedDB внутри WebView работает, и переписывать
@@ -35,6 +36,7 @@ const capacitorStorage: StoragePort = {
 
 export const capacitorPlatform: Platform = {
   kind: 'native',
+  cloud: capacitorCloud,
   bluetooth: capacitorBluetooth,
   storage: capacitorStorage,
   files: capacitorFiles,

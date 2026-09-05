@@ -465,7 +465,7 @@ export function Settings({
           />
           <NavRow
             title={SUBSCREEN_TITLE.family}
-            value={describeFamily(family.sources.length, family.supported, backup.target !== null)}
+            value={describeFamily(family.sources.length, family.supported, backup.target !== null, family.cloud.connected)}
             onOpen={() => onOpen('family')}
           />
           <NavRow title={SUBSCREEN_TITLE.about} value={releases[0]?.version} onOpen={() => onOpen('about')} />
