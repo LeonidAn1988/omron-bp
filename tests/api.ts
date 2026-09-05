@@ -209,4 +209,4 @@ export const FULL_MEDICINE: Required<Medicine> = {
 /** Классификация давления и сахара — пороги, по которым приложение зовёт скорую. */
 export { classify, isWithinTarget, alertFor, glucoseCeiling, ALL_CATEGORIES } from '../src/logic/classify'
 /** Статистика для отчёта врачу. */
-export { describe, summarize, filterByPeriod, dailyAverages, movingAverage, summarizeGlucose } from '../src/logic/stats'
+export { describe, summarize, filterByPeriod, dailyAverages, movingAverage, glucoseMovingAverage, summarizeGlucose } from '../src/logic/stats'

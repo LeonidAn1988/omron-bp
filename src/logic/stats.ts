@@ -152,15 +152,28 @@ export function dailyAverages(readings: BpReading[]): DailyPoint[] {
     .sort((a, b) => a.ts - b.ts)
 }
 
+/**
+ * Окно скользящего среднего: для каждой точки — все точки за последние N дней,
+ * считая её саму. Общее для давления и сахара: считаются они по разным полям,
+ * но окно у них одно, и разъехаться ему нельзя.
+ */
+function slidingWindow<T extends { ts: number }>(points: T[], windowDays: number): { point: T; frame: T[] }[] {
+  const span = windowDays * 86_400_000
+  // Не `window`: имя затеняло бы глобальный объект в файле, который обязан
+  // оставаться переносимым, и путало бы проверку переносимости.
+  return points.map((point) => ({
+    point,
+    frame: points.filter((p) => p.ts <= point.ts && p.ts > point.ts - span),
+  }))
+}
+
 /** Скользящее среднее по дневным точкам, окно в днях. */
 export function movingAverage(points: DailyPoint[], windowDays = 7): { ts: number; sys: number; dia: number }[] {
-  const span = windowDays * 86_400_000
-  return points.map((point) => {
-    // Не `window`: имя затеняло бы глобальный объект в файле, который обязан
-    // оставаться переносимым, и путало бы проверку переносимости.
-    const frame = points.filter((p) => p.ts <= point.ts && p.ts > point.ts - span)
-    return { ts: point.ts, sys: mean(frame.map((p) => p.sys)), dia: mean(frame.map((p) => p.dia)) }
-  })
+  return slidingWindow(points, windowDays).map(({ point, frame }) => ({
+    ts: point.ts,
+    sys: mean(frame.map((p) => p.sys)),
+    dia: mean(frame.map((p) => p.dia)),
+  }))
 }
 
 // ── сахар ──────────────────────────────────────────────────────────────────
@@ -225,9 +238,8 @@ export function dailyGlucose(readings: GlucoseReading[]): DailyGlucosePoint[] {
 }
 
 export function glucoseMovingAverage(points: DailyGlucosePoint[], windowDays = 7): { ts: number; mmol: number }[] {
-  const span = windowDays * 86_400_000
-  return points.map((point) => {
-    const frame = points.filter((p) => p.ts <= point.ts && p.ts > point.ts - span)
-    return { ts: point.ts, mmol: mean(frame.map((p) => p.mmol)) }
-  })
+  return slidingWindow(points, windowDays).map(({ point, frame }) => ({
+    ts: point.ts,
+    mmol: mean(frame.map((p) => p.mmol)),
+  }))
 }

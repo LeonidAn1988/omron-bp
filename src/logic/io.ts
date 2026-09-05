@@ -107,7 +107,6 @@ export function canShareFile(): boolean {
   return platform().files.canShare()
 }
 
-/** Отдать файл системному «поделиться». `false` — пользователь закрыл окно. */
 /** Поделиться текстом: список покупок уходит сообщением, а не вложением. */
 export function shareTextOut(text: string, title: string): Promise<boolean> {
   return platform().files.shareText(text, title)
@@ -118,6 +117,7 @@ export function copyTextOut(text: string): Promise<boolean> {
   return platform().files.copyText(text)
 }
 
+/** Отдать файл системному «поделиться». `false` — пользователь закрыл окно. */
 export function shareFile(filename: string, content: string, mime: string): Promise<boolean> {
   return platform().files.share(filename, content, mime)
 }
@@ -388,10 +388,6 @@ function parseMedicines(raw: unknown): Medicine[] {
 }
 
 /**
- * Свёрнутая история приёма из файла: только ячейки вида `'2026-07' → { planned, taken }`
- * с конечными числами. Испорченная ячейка отбрасывается, а не тянет NaN в отчёт.
- */
-/**
  * Схема приёма из файла: только этапы с конечной дозой. Испорченный этап
  * отбрасывается целиком — принимать «NaN таблеток» человеку не предложишь.
  */
@@ -407,6 +403,10 @@ function plan(raw: unknown): Medicine['plan'] {
   return этапы.length > 0 ? этапы : undefined
 }
 
+/**
+ * Свёрнутая история приёма из файла: только ячейки вида `'2026-07' → { planned, taken }`
+ * с конечными числами. Испорченная ячейка отбрасывается, а не тянет NaN в отчёт.
+ */
 function history(raw: unknown): Medicine['history'] {
   if (!raw || typeof raw !== 'object') return undefined
   const out: NonNullable<Medicine['history']> = {}
@@ -429,7 +429,6 @@ function parseSettings(raw: unknown): Snapshot['settings'] {
   return rest
 }
 
-/** Наш бэкап (v1, v2, v3) и формат ubpm.json из omblepy. */
 /**
  * Надгробия из файла.
  *
@@ -449,6 +448,7 @@ function parseTombstones(raw: unknown): Tombstone[] {
   )
 }
 
+/** Наш бэкап (v1, v2, v3) и формат ubpm.json из omblepy. */
 export function parseJson(text: string): ImportResult {
   const data = JSON.parse(text)
 

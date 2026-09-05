@@ -365,13 +365,6 @@ export function dosesToday(medicine: Medicine, now: number): DoseSlot[] {
 }
 
 /**
- * Приёмы за произвольный день.
- *
- * `day` задаёт сутки, `now` — текущий момент: просроченным приём считается
- * только относительно настоящего времени, иначе вчерашние приёмы выглядели бы
- * просроченными даже там, где отметка стоит.
- */
-/**
  * С какого дня у препарата вообще есть расписание.
  *
  * Расписание не действует задним числом. Препарат, заведённый сегодня, не был
@@ -483,6 +476,13 @@ export function partWindowOpen(day: number, firstTime: string, now: number): boo
   return now >= startOfDay(day) + (minutes - EARLY_WINDOW_MIN) * 60_000
 }
 
+/**
+ * Приёмы за произвольный день.
+ *
+ * `day` задаёт сутки, `now` — текущий момент: просроченным приём считается
+ * только относительно настоящего времени, иначе вчерашние приёмы выглядели бы
+ * просроченными даже там, где отметка стоит.
+ */
 export function dosesOn(medicine: Medicine, day: number, now: number): DoseSlot[] {
   const times = normalizeTimes(medicine.times ?? [])
   if (times.length === 0) return []

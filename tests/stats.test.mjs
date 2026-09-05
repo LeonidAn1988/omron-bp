@@ -5,7 +5,7 @@
  * систолическому 140, по диастолическому 90; выборочное стандартное отклонение
  * систолического — sqrt(1000/4) ≈ 15,81; в цели 135/85 — ровно одно из пяти.
  */
-import { describe, summarize, filterByPeriod, dailyAverages, movingAverage, summarizeGlucose } from './build/api.mjs'
+import { describe, summarize, filterByPeriod, dailyAverages, movingAverage, glucoseMovingAverage, summarizeGlucose } from './build/api.mjs'
 
 const ДЕНЬ = 24 * 60 * 60 * 1000
 const база = Date.UTC(2026, 7, 1, 9, 0, 0)
@@ -47,6 +47,11 @@ export function run() {
   check('по дню на измерение', дни.length === 5)
   const сглаж = movingAverage(дни, 7)
   check('скользящее среднее последней точки — среднее всех', сглаж.length === 5 && сглаж[4].sys === 140)
+  check('первая точка — она сама', сглаж[0].sys === 120 && сглаж[0].dia === 80)
+  // Окно в два дня: последняя точка — среднее двух последних, 155/97,5.
+  const окно2 = movingAverage(дни, 2)
+  check('окно в два дня берёт только две точки', окно2[4].sys === 155 && окно2[4].dia === 97.5)
+  check('окно у сахара работает так же', glucoseMovingAverage([{ ts: база, mmol: 4, count: 1 }, { ts: база + ДЕНЬ, mmol: 6, count: 1 }], 7)[1].mmol === 5)
 
   const g = summarizeGlucose(
     [
