@@ -321,7 +321,7 @@ export function DrugPicker({
           Полосу показываем сразу, не дожидаясь ввода: файл справочника весит
           мегабайты, и на мобильной сети ожидание заметное. Молчащее поле в это
           время выглядит сломанным, а оно просто ещё не готово подсказывать. */}
-      <Working label={!book && !bookFailed ? 'Загружаю справочник лекарств…' : null} />
+      <Working label={!book && !bookFailed ? 'Загружается справочник лекарств…' : null} />
       {!book && !bookFailed && touched && value.trim().length >= 2 && (
         <div className="muted" style={{ marginTop: 'var(--space-1)' }}>
           Название можно вписать руками, так тоже правильно.

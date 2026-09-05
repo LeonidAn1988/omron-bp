@@ -52,11 +52,11 @@ export function BackupScreen({
     try {
       const parsed = parseImportFile(name, text)
       const { added, medicines, settingsRestored } = await onRestore(parsed)
-      const parts = [`Разобрано записей: ${parsed.measurements.length}, добавлено новых: ${added}.`]
+      const parts = [`Прочитано записей: ${parsed.measurements.length}, добавлено новых: ${added}.`]
       if (medicines > 0) parts.push(`Добавлено препаратов в аптечку: ${medicines}.`)
       if (settingsRestored) parts.push('Настройки восстановлены.')
       else if (parsed.settings) parts.push('Люди, цели и часы приёма оставлены свои: в файле не все здешние люди.')
-      if (parsed.skipped) parts.push(`Пропущено нечитаемых строк: ${parsed.skipped}.`)
+      if (parsed.skipped) parts.push(`Не удалось прочитать строк: ${parsed.skipped}.`)
       setMessage({ tone: 'good', text: parts.join(' ') })
       setЗакрытый(null)
       setПароль('')
@@ -207,23 +207,18 @@ export function BackupScreen({
               onClick={() => download(`dnevnik-${today()}.csv`, toCsv(measurements), 'text/csv')}
               disabled={!measurements.length}
             >
-              Таблица CSV
+              Таблица для Excel
             </button>
             <button
               className="btn"
               onClick={() => download(`dnevnik-${today()}.json`, toJson(measurements), 'application/json')}
               disabled={!measurements.length}
             >
-              Только измерения, JSON
+              Файл с измерениями
             </button>
           </div>
           <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
-            Здесь только измерения — без аптечки, расписания и настроек. Целиком дневник переносит копия, кнопкой
-            «Сохранить копию» выше.
-            <div style={{ marginTop: 6 }}>
-              Восстановление понимает и копию, и эти файлы, и CSV с русскими или английскими заголовками, и{' '}
-              <kbd>ubpm.json</kbd> с <kbd>user1.csv</kbd> от omblepy.
-            </div>
+            Здесь только измерения. Дневник целиком переносит копия.
           </div>
         </details>
       </div>

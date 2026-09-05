@@ -159,10 +159,7 @@ export function Reminders({
         <div style={{ paddingTop: 'var(--space-4)' }}>
           <Banner tone="info">
             <b>Напоминать пока не о чем</b>
-            <div style={{ marginTop: 4 }}>
-              Откройте аптечку, выберите препарат и укажите часы приёма — например 08:00 и 20:00. Напоминания появятся
-              сами.
-            </div>
+            <div style={{ marginTop: 4 }}>Укажите часы приёма у препарата в аптечке.</div>
           </Banner>
         </div>
       </Reveal>
@@ -175,9 +172,7 @@ export function Reminders({
         <div style={{ paddingTop: 'var(--space-4)' }}>
           <Banner tone="warning">
             <b>Напоминания выключены телефоном</b>
-            <div style={{ marginTop: 4 }}>
-              Разрешение показывать уведомления отозвано в настройках, и напоминания приходить не будут.
-            </div>
+            <div style={{ marginTop: 4 }}>Разрешение на уведомления отозвано в настройках.</div>
             <button
               className="btn btn--sm"
               style={{ marginTop: 'var(--space-3)' }}
@@ -198,9 +193,7 @@ export function Reminders({
         <div style={{ paddingTop: 'var(--space-4)' }}>
           <Banner tone="warning">
             <b>Телефон не открыл нужный экран</b>
-            <div style={{ marginTop: 4 }}>
-              Откройте его сами: настройки телефона → «Приложения» → «Дневник здоровья». Там и уведомления, и батарея.
-            </div>
+            <div style={{ marginTop: 4 }}>Настройки телефона → «Приложения» → «Дневник здоровья».</div>
           </Banner>
         </div>
       </Reveal>
@@ -301,9 +294,7 @@ export function Reminders({
           {health?.channelOff && (
             <Banner tone="critical">
               <b>Напоминания выключены в настройках телефона</b>
-              <div style={{ marginTop: 4 }}>
-                Уведомления этого приложения отключены — расписание стоит, но ни одно напоминание не появится.
-              </div>
+              <div style={{ marginTop: 4 }}>Расписание стоит, но ни одно напоминание не появится.</div>
               <button
                 className="btn btn--sm"
                 style={{ marginTop: 'var(--space-3)' }}
@@ -322,10 +313,7 @@ export function Reminders({
           {quiet === true && canBypass !== true && (
             <Banner tone="warning">
               <b>Сейчас включён режим «Не беспокоить»</b>
-              <div style={{ marginTop: 4 }}>
-                Напоминание придёт, но без звука — его легко не заметить. Разрешите приложению звучать и в тихом режиме:
-                в открывшемся списке найдите «Дневник здоровья» и включите его.
-              </div>
+              <div style={{ marginTop: 4 }}>Напоминание придёт без звука — его легко не заметить.</div>
               <button
                 className="btn btn--sm"
                 style={{ marginTop: 'var(--space-3)' }}
@@ -334,11 +322,6 @@ export function Reminders({
                 Разрешить звучать в тихом режиме
               </button>
             </Banner>
-          )}
-          {quiet === true && canBypass === true && (
-            <div className="muted">
-              Сейчас включён режим «Не беспокоить», но напоминаниям о приёме разрешено звучать и в нём.
-            </div>
           )}
 
           {/*
@@ -353,10 +336,7 @@ export function Reminders({
           {exact === false && (
             <Banner tone="warning">
               <b>Напоминания приходят не вовремя</b>
-              <div style={{ marginTop: 4 }}>
-                Телефон откладывает их на десять–двадцать минут, чтобы сэкономить батарею. Разрешите точное время — и
-                напоминание придёт в тот час, который вы назначили.
-              </div>
+              <div style={{ marginTop: 4 }}>Телефон откладывает их на десять–двадцать минут.</div>
               <button
                 className="btn btn--sm"
                 style={{ marginTop: 'var(--space-3)' }}
@@ -365,9 +345,6 @@ export function Reminders({
                 Разрешить точное время
               </button>
             </Banner>
-          )}
-          {exact === true && (
-            <div className="muted">Точное время разрешено — напоминание придёт минута в минуту.</div>
           )}
 
           {/*
@@ -382,10 +359,7 @@ export function Reminders({
           {batteryRestricted !== false && (
             <Banner tone={batteryRestricted ? 'warning' : 'info'}>
               <b>{batteryRestricted ? 'Телефон может не дать напоминаниям прийти' : 'Если напоминания перестанут приходить'}</b>
-              <div style={{ marginTop: 4 }}>
-                Ради экономии батареи телефон «усыпляет» приложения, и тогда напоминание не приходит вовсе. Разрешите
-                приложению работать без ограничений — это делается один раз.
-              </div>
+              <div style={{ marginTop: 4 }}>Телефон «усыпляет» приложение, и напоминание не приходит вовсе.</div>
               <button
                 className="btn btn--sm"
                 style={{ marginTop: 'var(--space-3)' }}
@@ -394,8 +368,7 @@ export function Reminders({
                 Разрешить работу без ограничений
               </button>
               <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
-                На телефонах Huawei, Xiaomi и Samsung есть ещё свой список: настройки телефона → «Батарея» → «Запуск
-                приложений». Там приложение тоже нужно разрешить — система об этом списке не сообщает.
+                На Huawei, Xiaomi и Samsung разрешите ещё и в «Батарея» → «Запуск приложений».
               </div>
             </Banner>
           )}

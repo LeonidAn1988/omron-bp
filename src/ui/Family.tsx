@@ -21,14 +21,17 @@ import { describeMerge } from './useFamilySync'
 export function FamilyScreen({
   family,
   target,
+  onChooseTarget,
+  busy,
   onBack,
-  onOpenBackup,
 }: {
   family: FamilySyncStatus
   /** Свой файл копий: без него делиться нечем. */
   target: string | null
+  /** Выбрать свой файл прямо здесь — раньше за этим отправляли на другой экран. */
+  onChooseTarget: () => void
+  busy: boolean
   onBack: () => void
-  onOpenBackup: () => void
 }) {
   return (
     <div className="stack">
@@ -42,48 +45,39 @@ export function FamilyScreen({
 
         {!family.supported ? (
           <Banner tone="info">
-            <b>Здесь обмен не работает.</b>
-            <div style={{ marginTop: 4 }}>
-              Браузер разрешает читать чужой файл только сразу после выбора, а обмен должен идти сам. В приложении для
-              Android он работает.
-            </div>
+            <b>Обмен пока только в приложении для Android.</b>
+            <div style={{ marginTop: 4 }}>В браузере он появится позже.</div>
           </Banner>
         ) : (
           <>
             {/* Пошагово, потому что порядок неочевиден: сначала общая папка,
                 потом свой файл в ней, и только потом чужие. Без первых двух
                 шагов «Добавить телефон» не к чему приложить. */}
-            <ol className="steps">
-              <li>
-                На каждом телефоне заведите <b>одну общую папку в облаке</b> — например, в Яндекс.Диске или
-                Облаке Mail.ru — и откройте к ней доступ всем своим.
-              </li>
-              <li>
-                На каждом телефоне в «Копии дневника» нажмите <b>«Выбрать файл для автокопий»</b> и создайте файл
-                в этой папке. Имя лучше своё: «дневник-отца», «дневник-жены».
-              </li>
-              <li>
-                Дождитесь, пока облако разнесёт файлы по телефонам, и здесь нажмите <b>«Добавить телефон»</b>,
-                указав файл другого человека.
-              </li>
-            </ol>
-            <p className="muted">
-              Дальше приложение читает эти файлы каждый раз, когда вы его открываете, и добавляет из них новое.
-              Ваши записи уходят туда же — обычной копией.
-            </p>
+            {/* Инструкция открыта, пока обмен не настроен, и сворачивается,
+                когда он заработал: перечитывать её незачем. */}
+            <details open={!target || family.sources.length === 0}>
+              <summary>Как настроить</summary>
+              <ol className="steps" style={{ marginTop: 'var(--space-3)' }}>
+                <li>Заведите общую папку в облаке и откройте к ней доступ своим.</li>
+                <li>Создайте в ней свой файл кнопкой ниже — на каждом телефоне свой.</li>
+                <li>Когда облако разнесёт файлы, добавьте сюда файлы остальных.</li>
+              </ol>
+            </details>
 
-            {!target && (
-              <Banner tone="warning">
-                <b>Сначала выберите файл для своих копий.</b>
-                <div style={{ marginTop: 4 }}>
-                  Иначе делиться нечем: остальные телефоны будут читать пустоту.
-                </div>
-                <div className="row" style={{ marginTop: 'var(--space-3)' }}>
-                  <button className="btn" onClick={onOpenBackup}>
-                    К копии дневника
+            <div className="tile__label" style={{ margin: 'var(--space-5) 0 var(--space-2)' }}>
+              Ваш файл
+            </div>
+            {target ? (
+              <div className="muted">{target}</div>
+            ) : (
+              <>
+                <div className="muted">Не выбран — остальные телефоны прочитают пустоту.</div>
+                <div className="row row--stack" style={{ marginTop: 'var(--space-3)' }}>
+                  <button className="btn btn--primary" onClick={onChooseTarget} disabled={busy}>
+                    Выбрать свой файл
                   </button>
                 </div>
-              </Banner>
+              </>
             )}
 
             <div className="tile__label" style={{ margin: 'var(--space-5) 0 var(--space-2)' }}>
@@ -101,6 +95,13 @@ export function FamilyScreen({
                         <span className="pill__name">{source.name}</span>
                       </span>
                     </div>
+                    {/* Дата последней записи в файле: «облако не донесло» и
+                        «человек ничего не вносил» снаружи неотличимы без неё. */}
+                    <div className="muted">
+                      {family.freshness[source.id]
+                        ? `записи по ${new Date(family.freshness[source.id]!).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}`
+                        : 'записей пока нет'}
+                    </div>
                     <div className="row" style={{ marginTop: 'var(--space-2)' }}>
                       <button className="btn btn--sm" onClick={() => void family.removeSource(source.id)}>
                         Отключить
@@ -117,7 +118,7 @@ export function FamilyScreen({
               </button>
               {family.sources.length > 0 && (
                 <button className="btn" onClick={() => void family.syncNow()} disabled={family.busy}>
-                  {family.busy ? 'Читаю…' : 'Прочитать сейчас'}
+                  {family.busy ? 'Чтение…' : 'Прочитать сейчас'}
                 </button>
               )}
             </div>

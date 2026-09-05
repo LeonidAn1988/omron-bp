@@ -369,9 +369,6 @@ export function MedicineForm({
             size="compact"
           />
         </div>
-        <p className="muted" style={{ margin: 'var(--space-2) 0 0' }}>
-          Нужно кнопке «Купил упаковку» и списку покупок: в аптеке спрашивают пачками, а не таблетками.
-        </p>
       </div>
 
       <div className="grid grid--two">
@@ -447,7 +444,7 @@ export function MedicineForm({
           способ получить выдуманное число. Отвечает на вопрос врача «как
           давно принимаете», на который дневник иначе ответить не может: он
           знает только, когда завели карточку. */}
-      <Field label="Принимаю с — если помните, месяц и год">
+      <Field label="Принимаю с">
         <input type="month" value={startedMonth} onChange={(e) => setStartedMonth(e.target.value)} />
       </Field>
 

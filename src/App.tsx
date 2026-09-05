@@ -583,9 +583,9 @@ export default function App() {
    * должно — мелькание хуже молчания.
    */
   const занятость = family.busy
-    ? 'Читаю записи семьи…'
+    ? 'Идёт чтение записей семьи…'
     : backup.busy
-      ? 'Сохраняю копию дневника…'
+      ? 'Сохраняется копия дневника…'
       : null
   /** Копия просрочена — точка на «Настройках» горит и после «Понятно». */
   const settingsMark = backup.warning !== null
@@ -1149,26 +1149,6 @@ export default function App() {
             <Readings readings={bpScoped} onDelete={handleDelete} onUpdate={handleUpdate} />
           </div>
 
-          {!showGlucose && settings.sections.glucose && (
-            <div className="card no-print">
-              <div className="card__head">
-                <h2>Ведёте ещё и сахар?</h2>
-              </div>
-              <p style={{ margin: '0 0 var(--space-4)', color: 'var(--text-secondary)' }}>
-                Дневник глюкозы живёт рядом с дневником давления: те же графики, тот же отчёт для врача, общая шкала
-                времени. Включается одной кнопкой и так же выключается.
-              </p>
-              <button
-                className="btn btn--primary"
-                onClick={() => {
-                  updateSettings({ ...settings, trackGlucose: true })
-                  setTab('glucose')
-                }}
-              >
-                Включить дневник сахара
-              </button>
-            </div>
-          )}
         </div>
       )}
 

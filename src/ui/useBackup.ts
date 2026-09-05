@@ -264,7 +264,7 @@ export function useBackup(
   const chooseTarget = useCallback(async () => {
     setBusy(true)
     try {
-      const name = await backupTarget.choose(backupFilename(Date.now()))
+      const name = await backupTarget.choose(backupFilename(Date.now(), latest.current.settings.people.find((p) => p.id === latest.current.settings.activePerson)?.name))
       if (name) {
         setTarget(name)
         setFailed(false)

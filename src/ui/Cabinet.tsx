@@ -1,4 +1,3 @@
-import { platform } from '../platform/ports'
 import { useEffect, useRef, useState } from 'react'
 import type { IntakeSlot, Medicine, Person } from '../types'
 import {
@@ -13,7 +12,7 @@ import {
 } from '../logic/medicines'
 import { buildCalendar, countCalendarEvents } from '../logic/calendar'
 import { download } from '../logic/io'
-import { Banner } from './bits'
+
 import { ChevronIcon } from './icons'
 import { alertText, ALERT_TONE, KindTag, MedicineNudge, Restock, Supply } from './Medicines'
 import { MedicineCard } from './MedicineCard'
@@ -267,28 +266,6 @@ export function Cabinet({
           )}
         </div>
 
-        {events > 0 && (
-          <Banner tone="info">
-            {platform().reminders.isSupported() ? (
-              <>
-                <b>Приложение напоминает само.</b>
-                <div style={{ marginTop: 4 }}>
-                  Уведомления со звуком приходят по расписанию из аптечки — включаются в настройках. Выгрузка в
-                  календарь остаётся на случай, если удобнее видеть приёмы вместе с остальными делами: событий
-                  получится {events}, и после правки расписания её нужно повторить.
-                </div>
-              </>
-            ) : (
-              <>
-                <b>Напоминает календарь телефона, а не дневник.</b>
-                <div style={{ marginTop: 4 }}>
-                  Браузер не умеет будить приложение по расписанию, поэтому приёмы выгружаются файлом в календарь — он и
-                  звонит. Событий получится {events}. Если поменяете расписание, выгрузите заново.
-                </div>
-              </>
-            )}
-          </Banner>
-        )}
       </div>
     </div>
   )

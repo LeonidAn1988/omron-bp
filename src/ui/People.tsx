@@ -55,8 +55,8 @@ function DeviceMemory({
       </div>
       <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
         {person.deviceUser === undefined
-          ? 'Дневник давления будет пустым — прибор помнит только двоих. Лекарства и приём работают как у всех.'
-          : 'На корпусе прибора две кнопки с цифрами: измерение ложится тому, чья кнопка нажата.'}
+          ? 'Дневник давления будет пустым — прибор помнит только двоих.'
+          : 'Измерение ложится тому, чья кнопка нажата на приборе.'}
       </div>
     </div>
   )
@@ -128,7 +128,7 @@ export function PersonScreen({
               Кнопки приёма
             </div>
             <div className="muted" style={{ marginBottom: 'var(--space-3)' }}>
-              Это готовые кнопки в форме препарата: нажал — и время подставилось. Их может быть сколько нужно.
+              Подставляются в форме препарата.
             </div>
 
             <div className="stack" style={{ gap: 'var(--space-4)' }}>
@@ -167,9 +167,6 @@ export function PersonScreen({
               </button>
             </div>
 
-            <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
-              Заведённые препараты не меняются: у них своё время, и переписывать его за человека нельзя.
-            </div>
           </div>
         </div>
       </div>
@@ -278,7 +275,7 @@ export function People({
         </div>
         {people.length >= MAX_PEOPLE ? (
           <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
-            В одном дневнике помещается {MAX_PEOPLE} человек — столько различают напоминания.
+            Больше {MAX_PEOPLE} человек нельзя.
           </div>
         ) : (
           people.length === 1 && (

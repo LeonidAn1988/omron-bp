@@ -418,23 +418,27 @@ export function Sync({
           </Reveal>
         </div>
 
-        <ol className="steps" style={{ marginTop: 'var(--space-5)' }}>
-          <li>Нажмите кнопку Bluetooth на тонометре — замигает значок связи. Прибор ждёт около минуты.</li>
-          <li>
-            Нажмите <b>«Подключить и выгрузить»</b> и выберите прибор в списке — он называется{' '}
-            <kbd>BLEsmart_…</kbd>
-          </li>
-        </ol>
+        {/* Пока прибор не выбран, инструкция открыта: без неё непонятно, что
+            нажимать на самом тонометре. Дальше она сворачивается — человек уже
+            знает, а место на экране нужнее кнопкам. */}
+        <details open={device === null} style={{ marginTop: 'var(--space-5)' }}>
+          <summary>Как выгрузить</summary>
+          <ol className="steps" style={{ marginTop: 'var(--space-3)' }}>
+            <li>Нажмите кнопку Bluetooth на тонометре — замигает значок связи.</li>
+            <li>
+              Нажмите <b>«Подключить и выгрузить»</b> и выберите прибор — он называется <kbd>BLEsmart_…</kbd>
+            </li>
+          </ol>
+        </details>
       </div>
 
       {outcome?.clockSkewMs != null && Math.abs(outcome.clockSkewMs) > DAY && (
         <Banner tone="warning">
           <b>Часы тонометра сбиты</b>
           <div style={{ marginTop: 4 }}>
-            Последнее измерение датировано {FULL_DATE.format(outcome.newestTs!)} — это на {Math.abs(skewDays)}{' '}
-            {plural(Math.abs(skewDays), 'день', 'дня', 'дней')} {skewDays > 0 ? 'раньше' : 'позже'} сегодняшней даты. Даты
-            берутся из самого прибора, поэтому история приехала со сдвигом. Поправьте дату и время кнопками на
-            тонометре — приложение их намеренно не трогает.
+            Последнее измерение датировано {FULL_DATE.format(outcome.newestTs!)} — на {Math.abs(skewDays)}{' '}
+            {plural(Math.abs(skewDays), 'день', 'дня', 'дней')} {skewDays > 0 ? 'раньше' : 'позже'} сегодняшней даты.
+            Поправьте дату и время кнопками на тонометре.
           </div>
         </Banner>
       )}

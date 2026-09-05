@@ -43,6 +43,8 @@ export interface FamilySyncStatus {
   lastLog: MergeLog | null
   /** Файлы, которые не прочитались: удалены, переименованы, отозван доступ. */
   unreadable: string[]
+  /** Когда в чужом файле сделана самая свежая запись. Ключ — id источника. */
+  freshness: Record<string, number | null>
   addSource: () => Promise<void>
   removeSource: (id: string) => Promise<void>
   /** Прочитать сейчас — кнопкой, не дожидаясь следующего открытия. */
@@ -69,6 +71,7 @@ export function useFamilySync({
   const [lastAt, setLastAt] = useState<number | null>(null)
   const [lastLog, setLastLog] = useState<MergeLog | null>(null)
   const [unreadable, setUnreadable] = useState<string[]>([])
+  const [freshness, setFreshness] = useState<Record<string, number | null>>({})
 
   /** Настройки и колбэки читаются из ссылки: слияние не должно перезапускаться от них. */
   const latest = useRef({ settings, onSettings, onChanged })
@@ -85,6 +88,7 @@ export function useFamilySync({
     идёт.current = true
     setBusy(true)
     const плохие: string[] = []
+    const свежесть: Record<string, number | null> = {}
     try {
       const [measurements, medicines, tombstones] = await Promise.all([
         getAllMeasurements(),
@@ -133,6 +137,13 @@ export function useFamilySync({
         итог.removed += слито.log.removed
         итог.addedPeople += слито.log.addedPeople
         итог.stockConflicts.push(...слито.log.stockConflicts)
+        // Свежесть — по самой поздней записи в файле. Отличает «облако не
+        // донесло» от «человек ничего не вносил»: снаружи это одно и то же.
+        const времена = [
+          ...разобрано.measurements.map((m) => m.updatedAt ?? m.ts),
+          ...разобрано.medicines.map((m) => m.updatedAt ?? 0),
+        ]
+        свежесть[источник.id] = времена.length ? Math.max(...времена) : null
       }
 
       if (mergeChangedAnything(итог)) {
@@ -175,6 +186,7 @@ export function useFamilySync({
       setLastLog(итог)
       setLastAt(Date.now())
       setUnreadable(плохие)
+      setFreshness(свежесть)
     } finally {
       идёт.current = false
       setBusy(false)
@@ -207,6 +219,27 @@ export function useFamilySync({
       return
     }
     if (!added) return
+    // Проверяем сразу: непригодный файл иначе навсегда останется в списке
+    // «телефоны семьи», а человек будет ждать от него записей.
+    const текст = await port.readSource(added.id)
+    const беда =
+      текст === null
+        ? 'файл не читается'
+        : isEncrypted(текст)
+          ? 'файл закрыт паролем — телефоны семьи его не прочтут'
+          : (() => {
+              try {
+                parseImportFile(added.name.endsWith('.json') ? added.name : `${added.name}.json`, текст)
+                return null
+              } catch {
+                return 'это не копия дневника'
+              }
+            })()
+    if (беда) {
+      await port.removeSource(added.id)
+      setUnreadable([`${added.name}: ${беда}`])
+      return
+    }
     setSources(await port.sources())
     await прочитать()
   }, [port, прочитать])
@@ -220,7 +253,7 @@ export function useFamilySync({
     [port],
   )
 
-  return { supported, sources, busy, lastAt, lastLog, unreadable, addSource, removeSource, syncNow: прочитать }
+  return { supported, sources, busy, lastAt, lastLog, unreadable, freshness, addSource, removeSource, syncNow: прочитать }
 }
 
 /** Одной строкой: что принесло последнее чтение. */

@@ -130,8 +130,12 @@ export function describeBackupAge(lastAt: number | null, now: number): string {
 }
 
 /** Имя файла копии. Дата в начале, чтобы копии сортировались по порядку. */
-export function backupFilename(now: number): string {
+export function backupFilename(now: number, personName?: string): string {
   const d = new Date(now)
   const pad = (n: number) => String(n).padStart(2, '0')
-  return `дневник-здоровья-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`
+  // Имя человека в названии: в общей папке семьи лежит несколько копий, и
+  // «дневник-здоровья-2026-09-05.json» у всех одинаковый — не разобрать, чей.
+  const чей = (personName ?? '').trim().replace(/[\\/:*?"<>|]/g, '')
+  const кто = чей && чей !== 'Я' ? `-${чей}` : ''
+  return `дневник${кто}-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`
 }

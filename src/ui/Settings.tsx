@@ -122,9 +122,6 @@ function DisplayScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
             </button>
           ))}
         </div>
-        <p className="muted" style={{ marginTop: 'var(--space-3)', marginBottom: 0 }}>
-          Плотность меняет расстояния между блоками. Кнопки при этом не уменьшаются.
-        </p>
       </div>
 
       <div className="card">
@@ -209,8 +206,7 @@ function PharmaciesScreen({ settings, onPatch, onBack }: Общее & { onBack: 
         </div>
 
         <p className="muted" style={{ margin: 'var(--space-4) 0 0' }}>
-          У препарата и в списке покупок появятся кнопки выбранных аптек — каждая открывает поиск сразу по названию и
-          дозировке. Наличие и цену приложение не знает: это видно уже на сайте аптеки.
+          Кнопки выбранных аптек появятся у препарата и в списке покупок. Наличие и цену приложение не знает.
         </p>
       </div>
     </div>
@@ -421,8 +417,9 @@ export function Settings({
       <FamilyScreen
         family={family}
         target={backup.target}
+        busy={backup.busy}
+        onChooseTarget={() => void backup.chooseTarget()}
         onBack={onBack}
-        onOpenBackup={() => onOpen('backup')}
       />
     )
   }
@@ -468,7 +465,7 @@ export function Settings({
           />
           <NavRow
             title={SUBSCREEN_TITLE.family}
-            value={describeFamily(family.sources.length, family.supported)}
+            value={describeFamily(family.sources.length, family.supported, backup.target !== null)}
             onOpen={() => onOpen('family')}
           />
           <NavRow title={SUBSCREEN_TITLE.about} value={releases[0]?.version} onOpen={() => onOpen('about')} />
