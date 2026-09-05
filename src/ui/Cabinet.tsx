@@ -42,7 +42,9 @@ type Filter = 'all' | 'week' | 'two-weeks' | 'month' | 'expired'
  * кто выбирает «на месяц», хочет видеть и то, что кончается завтра.
  */
 const FILTERS: { key: Filter; title: string; days?: number }[] = [
-  { key: 'all', title: 'Все' },
+  // «Вся аптечка», а не «Все»: рядом, на том же экране, «Все» уже значит «все
+  // люди сразу». Два одинаковых слова про разное сбивают.
+  { key: 'all', title: 'Все сроки' },
   { key: 'week', title: 'На неделю', days: 7 },
   { key: 'two-weeks', title: 'На 2 недели', days: 14 },
   { key: 'month', title: 'На месяц', days: 30 },

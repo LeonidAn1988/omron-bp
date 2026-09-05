@@ -961,9 +961,9 @@ export default function App() {
         <PersonSwitch
           settings={settings}
           onChange={(fields) => updateSettings({ ...settingsRef.current, ...fields })}
-          // «Вся семья» — только в аптечке: сводный список нужен, чтобы одним
+          // «Все» — только в аптечке: сводный список нужен, чтобы одним
           // походом купить всё, а приём и давление общими быть не могут.
-          extra={tab === 'cabinet' ? { title: 'Вся семья', active: своднаяАптечка, onPick: setСводнаяАптечка } : undefined}
+          extra={tab === 'cabinet' ? { title: 'Все', active: своднаяАптечка, onPick: setСводнаяАптечка } : undefined}
         />
       )}
 

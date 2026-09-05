@@ -766,7 +766,10 @@ input[type='radio'] {
 .segmented.segmented--chips button,
 .segmented.segmented--chips button + button {
   flex: 0 1 auto;
-  min-width: 10ch;
+  /* 7ch, а не 10: короткое слово вроде «Все» раздувалось до ширины имени, и
+     ряд из трёх имён с ним переносился на вторую строку из-за нескольких
+     лишних пикселей. 7ch — это ещё около 60 px, палец попадает. */
+  min-width: 7ch;
   border: 1px solid var(--border-strong);
   border-radius: 7px;
 }
