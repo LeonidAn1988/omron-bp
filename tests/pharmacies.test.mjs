@@ -62,6 +62,10 @@ export function run() {
   check('Аптека.ру', адреса['apteka-ru'] === 'https://apteka.ru/search/?q={q}')
   check('ЕАптека', адреса['eapteka'] === 'https://www.eapteka.ru/search/?q={q}')
   check('Мегаптека', адреса['megapteka'] === 'https://megapteka.ru/search?q={q}')
+  check('Здравсити — параметр what, а не q', адреса['zdravcity'] === 'https://zdravcity.ru/search/?what={q}')
+  check('Ютека — параметр query', адреса['uteka'] === 'https://uteka.ru/search/?query={q}')
+  check('Планета Здоровья', адреса['planeta'] === 'https://planetazdorovo.ru/search/?q={q}')
+  check('сетей шесть', PHARMACIES.length === 6)
 
   return failures
 }

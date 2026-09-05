@@ -310,7 +310,12 @@ export const capacitorReminders: RemindersPort = {
       // Отложенное живёт в своём диапазоне, но просьба «напомни позже» теряет
       // смысл, когда приём уже отмечен: снимаем те, чьей пары «день + время +
       // человек» в новом наборе нет.
-      const живыеПриёмы = new Set(reminders.map((item) => `${item.day}|${item.slot}|${item.person ?? ''}`))
+      // Только те приёмы, где человеку есть что отметить: слот, в котором
+      // остался лишь автосписываемый препарат, ждать нечего — и отложенное по
+      // нему держать незачем.
+      const живыеПриёмы = new Set(
+        reminders.filter((item) => item.markable).map((item) => `${item.day}|${item.slot}|${item.person ?? ''}`),
+      )
       const лишние = ожидают.filter(({ id, extra }) => {
         if (id >= PREVIEW_ID) return false
         if (id >= SNOOZE_BASE) {

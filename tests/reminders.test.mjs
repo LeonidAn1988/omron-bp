@@ -335,5 +335,15 @@ export function run() {
   check('предел людей вмещается в разряд номера', MAX_PEOPLE <= 8)
   check('внутри предела номера людей не совпадают', пл_номера.size === MAX_PEOPLE)
   check('за пределом номер повторяется — потому предел и нужен', reminderId(пл_день, 3, 2, MAX_PEOPLE) === reminderId(пл_день, 3, 2, 0))
+
+  // ── что отмечать руками ──────────────────────────────────────────────────
+  const мк_день = Date.UTC(2026, 8, 5)
+  const мк_авто = { id: 'a', name: 'Витамин D3', times: ['08:00'], perTime: 1, left: 30, perDay: 1, autoDeduct: true }
+  const мк_руками = { id: 'b', name: 'Метформин', times: ['08:00'], perTime: 1, left: 30, perDay: 1 }
+  const мк_только = buildReminders([мк_авто], мк_день - 3600_000, { repeat: false, horizonDays: 1 })
+  check('приём из одного автосписываемого отмечать нечем', мк_только.every((r) => r.markable === false))
+  const мк_оба = buildReminders([мк_авто, мк_руками], мк_день - 3600_000, { repeat: false, horizonDays: 1 })
+  check('приём, где есть ручной препарат, отмечается', мк_оба.every((r) => r.markable === true))
+
   return failures
 }

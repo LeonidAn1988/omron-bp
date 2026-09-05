@@ -248,6 +248,9 @@ export function buildReminders(
       if (!ждут.length) return
 
       const поПорядку = [...ждут].sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+      // Отмечать руками нужно не всё: автосписываемое уходит из остатка по
+      // расписанию, и кнопки «Принял» у него нет.
+      const естьЧтоОтмечать = ждут.some((medicine) => !medicine.autoDeduct)
       // Имя человека — в заголовке, а не в каждой строке: уведомление теперь
       // одно на человека, и внутри него все таблетки его.
       const подробно = поПорядку.map((medicine) => doseLine(medicine)).join('\n')
@@ -263,6 +266,7 @@ export function buildReminders(
         набор.push({
           id: reminderId(день, slotIndex, step, personIndex),
           person: персона ?? undefined,
+          markable: естьЧтоОтмечать,
           // Повтор говорит по-человечески, а не служебным «не отмечен»: слово
           // «отметить» — из устройства приложения, а человеку нужно про
           // таблетки.
