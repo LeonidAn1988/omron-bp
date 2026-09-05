@@ -11,7 +11,6 @@ import {
   lockedSection,
   toggleSection,
   setTrackGlucose,
-  setIntakeTime,
   describeDisplay,
   describePeople,
   describeTargets,
@@ -85,20 +84,10 @@ export function run() {
   )
   check('без сахара стартом становится оставшийся раздел', дс_только.startTab === 'cabinet', дс_только.startTab)
 
-  // ── часы приёма ──────────────────────────────────────────────────────────
-  const чп_один = setIntakeTime(БАЗА, 'p1', 'morning', '06:30')
-  check('при одном человеке часы общие', чп_один.intakeTimes.morning === '06:30' && !чп_один.people)
   const чп_семья = {
     ...БАЗА,
     people: [{ id: 'p1', name: 'Я', deviceUser: 1 }, { id: 'p-dad', name: 'Отец', deviceUser: 2 }],
   }
-  const чп_отцу = setIntakeTime(чп_семья, 'p-dad', 'morning', '09:00')
-  check('в семье часы личные', чп_отцу.people[1].intakeTimes.morning === '09:00' && !чп_отцу.intakeTimes)
-  check('чужие часы не тронуты', чп_отцу.people[0].intakeTimes === undefined)
-  const чп_пусто = setIntakeTime(чп_семья, 'p-dad', 'morning', '')
-  check('пустое значение оставляет прежнее время', чп_пусто.people[1].intakeTimes.morning === '08:00')
-  const чп_нет = setIntakeTime(чп_семья, 'p-нет', 'morning', '07:00')
-  check('человек не найден — правим общие, а не чужие', чп_нет.intakeTimes.morning === '07:00')
 
   // ── личные цели ──────────────────────────────────────────────────────────
   const лц_семья = {

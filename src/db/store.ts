@@ -6,7 +6,7 @@
  * `src/platform/`, поэтому этот файл переезжает на нативные платформы без правок.
  */
 
-import type { BpReading, GlucoseReading, Measurement, Medicine, Settings, Tombstone } from '../types'
+import type {Measurement, Medicine, Settings, Tombstone } from '../types'
 import { firstPerson } from '../logic/people'
 import { platform } from '../platform/ports'
 import { DEFAULT_PAIRING_KEY } from '../ble/protocol'
@@ -55,8 +55,6 @@ export function deviceMeasurementId(kind: Measurement['kind'], user: number, ts:
 /** Совместимость: идентификаторы давления, выданные до появления сахара, выглядели так же. */
 export const readingId = (user: number, ts: number) => deviceMeasurementId('bp', user, ts)
 
-export const isBpReading = (m: Measurement): m is BpReading => m.kind === 'bp'
-export const isGlucoseReading = (m: Measurement): m is GlucoseReading => m.kind === 'glucose'
 
 export function getAllMeasurements(): Promise<Measurement[]> {
   return platform().storage.allMeasurements()

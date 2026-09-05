@@ -16,33 +16,6 @@ export function CategoryBadge({ sys, dia, solid = false }: { sys: number; dia: n
   )
 }
 
-export function Tile({
-  label,
-  value,
-  unit,
-  note,
-  children,
-}: {
-  label: string
-  value?: ReactNode
-  unit?: string
-  note?: ReactNode
-  children?: ReactNode
-}) {
-  return (
-    <div className="card">
-      <div className="tile__label">{label}</div>
-      {value !== undefined && (
-        <div className="tile__value">
-          {value}
-          {unit && <span className="tile__unit">{unit}</span>}
-        </div>
-      )}
-      {children}
-      {note && <div className="tile__note">{note}</div>}
-    </div>
-  )
-}
 
 export type BannerTone = 'critical' | 'warning' | 'info' | 'good'
 

@@ -6,7 +6,11 @@
  * появились; если при этом его аптечка окажется ничьей или дневник давления
  * опустеет, это будет выглядеть как потеря данных, а не как новая возможность.
  */
-import { firstPerson, activePersonOf, ownerOf, medicinesOf, deviceUserOf, freeDeviceUsers, newPersonId, intakeTimesOf, ПЕРВЫЙ } from './build/api.mjs'
+import { firstPerson, activePersonOf, ownerOf, medicinesOf, deviceUserOf, freeDeviceUsers, newPersonId, intakeTimesOf, ПЕРВЫЙ,
+  intakeSlotsOf,
+  setIntakeSlots,
+  newSlotId
+} from './build/api.mjs'
 
 export function run() {
   let failures = 0
@@ -89,6 +93,21 @@ export function run() {
   check('без человека тоже общие', intakeTimesOf(null, общие).night === '22:00')
 
   check('идентификаторы разные', newPersonId(1) !== newPersonId(2))
+
+
+  // ── кнопки приёма ────────────────────────────────────────────────────────
+  const сл_часы = { morning: '08:00', day: '13:00', evening: '19:00', night: '22:00' }
+  const сл_один = { people: [{ id: 'p1', name: 'Я', deviceUser: 1 }], intakeTimes: сл_часы }
+  check('без своих кнопок — четыре исходных из часов', intakeSlotsOf(null, сл_один).map((x) => x.time).join() === '08:00,13:00,19:00,22:00')
+  const сл_правка = setIntakeSlots(сл_один, 'p1', [{ id: 'morning', title: 'Утром', time: '07:00' }])
+  check('одиночке кнопки пишутся в общие настройки', сл_правка.intakeSlots?.length === 1 && сл_правка.intakeTimes?.morning === '07:00')
+  check('удалённая кнопка не сдвигает старое время', сл_правка.intakeTimes?.day === '13:00')
+  const сл_семья = { people: [{ id: 'p1', name: 'Я', deviceUser: 1 }, { id: 'p-dad', name: 'Отец', deviceUser: 2 }], intakeTimes: сл_часы }
+  const сл_отцу = setIntakeSlots(сл_семья, 'p-dad', [{ id: 'morning', title: 'Утром', time: '06:30' }])
+  check('в семье правка отцу не трогает общие часы', сл_отцу.intakeTimes === undefined)
+  check('и пишется самому отцу', сл_отцу.people?.find((p) => p.id === 'p-dad')?.intakeTimes?.morning === '06:30')
+  check('у «Я» часы прежние', intakeSlotsOf(сл_отцу.people?.find((p) => p.id === 'p1') ?? null, { ...сл_семья, ...сл_отцу })[0].time === '08:00')
+  check('новый ключ кнопки уникален во времени', newSlotId(1000) !== newSlotId(1001))
 
   return failures
 }

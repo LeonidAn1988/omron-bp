@@ -266,6 +266,10 @@ export function run() {
   check('свой файл дописывает людей', слито3.people.length === 3)
   check('битый activePerson заменяется первым из файла', слито3.activePerson === 'p1')
   check('личное из своего файла берётся', слито3.targetSys === 130)
+  const своиСлоты = mergeRestoredSettings({ ...семейное, activePerson: 'p1' }, { ...свой, intakeSlots: [{ id: 'morning', title: 'Утром', time: '07:30' }], pharmacies: ['megapteka'] })
+  check('свой файл переносит кнопки приёма', своиСлоты.intakeSlots?.[0]?.time === '07:30')
+  check('и выбранные аптеки', (своиСлоты.pharmacies ?? []).join() === 'megapteka')
+  check('чужой файл слоты не трогает', mergeRestoredSettings(семейное, { ...изФайла, intakeSlots: [{ id: 'x', title: 'Чужое', time: '01:00' }] }).intakeSlots === семейное.intakeSlots)
 
   // То же условие наружу — для сообщения после восстановления.
   check('личное не берётся: чужой файл при заведённой семье', takesPersonalFrom(семейное, изФайла) === false)

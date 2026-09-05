@@ -620,25 +620,7 @@ export function pendingToday(items: Medicine[], now: number): number {
   return items.reduce((sum, m) => sum + dosesToday(m, now).filter((d) => d.takenAt === null).length, 0)
 }
 
-/**
- * Отметить приём: списать штуки с остатка и запомнить время.
- *
- * Возвращает новый препарат — исходный не меняется, чтобы React увидел
- * изменение, а вызывающий код сам решил, сохранять его или нет.
- */
-export function markTaken(medicine: Medicine, now: number): Medicine {
-  const folded = foldHistory(medicine, now)
-  medicine = folded
-  const taken = [...(folded.taken ?? []), now].sort((a, b) => a - b)
-  // При автосписании расписание уже списало эту дозу: отметка её только
-  // фиксирует, иначе одна таблетка ушла бы из остатка дважды.
-  if (medicine.autoDeduct) return { ...medicine, taken }
-  const left = medicine.left === null ? null : Math.max(0, medicine.left - perTimeOf(medicine))
-  // Остаток пересчитан только что — расчётной поправке не с чего начинать заново.
-  return { ...medicine, taken, left, leftAt: now }
-}
 
-/** Снять ошибочную отметку и вернуть штуки в остаток. */
 /**
  * Снять отметку о приёме.
  *

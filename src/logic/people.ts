@@ -175,9 +175,11 @@ export function setIntakeSlots(
   if (settings.people.length <= 1 || !personId) {
     return { intakeSlots: slots, intakeTimes: совместимость }
   }
+  // В семье совместимые часы пишутся человеку, а не в общие настройки: иначе
+  // правка кнопок отцу сдвигала бы часы жене — ровно то, чего личные кнопки и
+  // должны были избежать.
   return {
-    people: settings.people.map((p) => (p.id === personId ? { ...p, intakeSlots: slots } : p)),
-    intakeTimes: совместимость,
+    people: settings.people.map((p) => (p.id === personId ? { ...p, intakeSlots: slots, intakeTimes: совместимость } : p)),
   }
 }
 

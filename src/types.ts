@@ -75,6 +75,18 @@ export const GLUCOSE_CONTEXT_LABELS: Record<GlucoseContext, string> = {
   night: 'Ночью',
 }
 
+/** Порядок чипов момента замера — как идёт день. */
+export const GLUCOSE_CONTEXT_ORDER: GlucoseContext[] = ['fasting', 'before-meal', 'after-meal', 'bedtime', 'night']
+
+/** Короткие подписи для чипов — полные не помещаются на 360 px. */
+export const GLUCOSE_CONTEXT_SHORT: Record<GlucoseContext, string> = {
+  fasting: 'Натощак',
+  'before-meal': 'До еды',
+  'after-meal': 'После еды',
+  bedtime: 'Перед сном',
+  night: 'Ночью',
+}
+
 export interface GlucoseReading extends MeasurementBase {
   kind: 'glucose'
   /** Концентрация глюкозы, ммоль/л — единица, принятая в России и Европе. */

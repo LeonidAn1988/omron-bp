@@ -6,7 +6,7 @@
  * ведёт человека на пустую страницу в магазине лекарств — и он решит, что
  * препарата нет в продаже.
  */
-import { PHARMACIES, pharmacyQuery, pharmacyLinks, describePharmacies, searchEngineUrl } from './build/api.mjs'
+import { PHARMACIES, pharmacyQuery, pharmacyQueries, pharmacyLinks, cleanTradeName, describePharmacies, searchEngineUrl } from './build/api.mjs'
 
 export function run() {
   let failures = 0
@@ -40,6 +40,22 @@ export function run() {
   check('чужой ключ в подпись не попадает', describePharmacies(['неизвестная']) === 'не выбраны')
 
   check('общий поиск ищет по веществу', searchEngineUrl(конкор).includes(encodeURIComponent('Бисопролол')))
+
+  // Имя из реестра — со знаком ® и хвостом формы. В аптеку оно уходит чистым.
+  const реестр = { name: 'Конкор® Кор', dose: '2,5 мг', inn: 'Бисопролол' }
+  check('знак ® вычищается', cleanTradeName('Конкор® Кор') === 'Конкор Кор')
+  check('знак без пробела не склеивает слова', cleanTradeName('СЛАБИДОЛ®КАПС') === 'СЛАБИДОЛ КАПС')
+  check('хвост формы отрезается', cleanTradeName('Амлодипин таблетки 5 мг') === 'Амлодипин')
+  check('скобки отрезаются', cleanTradeName('Магний B6 (форте)') === 'Магний B6')
+  const лестница = pharmacyQueries(реестр)
+  check('лестница: пять ступеней от точного к широкому', лестница.join(' | ') === 'Конкор Кор 2,5 мг | Конкор Кор | Конкор | Бисопролол 2,5 мг | Бисопролол', лестница.join(' | '))
+  check('дубли и пустые ступени выпадают', pharmacyQueries({ name: 'Конкор', dose: '' }).join(' | ') === 'Конкор')
+  const ссылки = pharmacyLinks(реестр, ['megapteka'])
+  check('в адресе нет ®', !ссылки[0].href.includes('%C2%AE'))
+  check('первая ступень — в кнопку сети', decodeURIComponent(ссылки[0].href).endsWith('Конкор Кор 2,5 мг'))
+  check('по веществу — второй адрес той же сети', decodeURIComponent(ссылки[0].innHref ?? '').endsWith('Бисопролол 2,5 мг'))
+  check('без вещества второго адреса нет', pharmacyLinks({ name: 'Конкор', dose: '5 мг' }, ['megapteka'])[0].innHref === null)
+  check('вещество, совпадающее с именем, второй адрес не даёт', pharmacyLinks({ name: 'Бисопролол', dose: '5 мг', inn: 'Бисопролол' }, ['megapteka'])[0].innHref === null)
 
   // Адреса проверены вручную 2 сентября 2026 — тест сторожит опечатку в них.
   const адреса = Object.fromEntries(PHARMACIES.map((p) => [p.id, p.search]))

@@ -5,13 +5,17 @@ import {
   packsNeeded,
   restockList,
   restockText,
-  shortForm,
   RESTOCK_DAYS,
   SUPPLY_SOON_DAYS,
   type MedicineAlert,
+  dosesToday,
+  sortMedicines,
 } from '../logic/medicines'
 import { KIND_LABEL } from '../logic/drugs'
-import { plural } from '../logic/plural'
+import { monthYear, plural } from '../logic/plural'
+
+// Наружу — для карточки препарата: ей нужен тот же падеж.
+export { monthYear }
 import { pharmacyLinks } from '../logic/pharmacies'
 import { platform } from '../platform/ports'
 import { canShareFile, copyTextOut, shareTextOut } from '../logic/io'
@@ -44,13 +48,7 @@ const MONTHS_GENITIVE = [
   'декабря',
 ]
 
-export const monthYear = (ts: number): string => {
-  const d = new Date(ts)
-  return `${MONTHS_GENITIVE[d.getMonth()]} ${d.getFullYear()}`
-}
 
-/** Форма коротко: в списке нужно одно слово — таблетки это, капли или гель. */
-export const shortFormOf = shortForm
 
 /**
  * Пометка «БАД» или «гомеопатия».
@@ -162,6 +160,87 @@ const REASON_LABEL: Record<'out' | 'low' | 'expired' | 'expiring', string> = {
  * отдаётся простым текстом — его вставляют в мессенджер, диктуют по телефону
  * и читают с экрана у прилавка.
  */
+/**
+ * «Сегодня» на «Обзоре»: что принять и сколько уже отмечено.
+ *
+ * Строки без кнопок — отмечают на «Приёме». Здесь только ответ на вопрос
+ * «что мне сегодня», ради которого человек и открывает приложение утром.
+ */
+export function TodayCard({ medicines, onOpen }: { medicines: Medicine[]; onOpen: () => void }) {
+  const now = Date.now()
+  const rows = medicines
+    .flatMap((medicine) => dosesToday(medicine, now).map((slot) => ({ medicine, slot })))
+    .sort((a, b) => a.slot.time.localeCompare(b.slot.time))
+  if (rows.length === 0) return null
+  const left = rows.filter((r) => r.slot.takenAt === null).length
+
+  return (
+    <div className="card">
+      <div className="card__head">
+        <h2>Сегодня</h2>
+        <span className="muted">{left === 0 ? 'всё отмечено' : `осталось отметить: ${left}`}</span>
+      </div>
+      <ul className="today">
+        {rows.map(({ medicine, slot }) => (
+          <li key={`${medicine.id}-${slot.time}`} className="today__row" data-done={slot.takenAt !== null} data-overdue={slot.overdue}>
+            <span className="today__time">{slot.time}</span>
+            <span className="today__name">
+              {medicine.name}
+              {medicine.dose && <span className="today__dose"> {medicine.dose}</span>}
+            </span>
+            <span className="today__mark" aria-label={slot.takenAt !== null ? 'принято' : slot.overdue ? 'пропущено' : 'ещё не время'}>
+              {slot.takenAt !== null ? '✓' : slot.overdue ? '!' : ''}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {left > 0 && (
+        <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+          <button className="btn btn--primary" onClick={onOpen}>
+            Отметить приём
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * «Заканчивается» на «Обзоре»: названия и сроки, а не «что-то заканчивается».
+ * Пусто — карточки нет: спокойствие не нуждается в подтверждении.
+ */
+export function ShortageCard({ medicines, onOpen }: { medicines: Medicine[]; onOpen: () => void }) {
+  const now = Date.now()
+  const rows = sortMedicines(medicines, now)
+    .map((medicine) => ({ medicine, alert: medicineAlert(medicine, now) }))
+    .filter((r): r is { medicine: Medicine; alert: MedicineAlert } => r.alert !== null)
+  if (rows.length === 0) return null
+
+  return (
+    <div className="card">
+      <div className="card__head">
+        <h2>Заканчивается</h2>
+        <span className="muted">
+          {rows.length} {plural(rows.length, 'препарат', 'препарата', 'препаратов')}
+        </span>
+      </div>
+      <ul className="shortage">
+        {rows.map(({ medicine, alert }) => (
+          <li key={medicine.id} className="shortage__row" data-tone={ALERT_TONE[alert.kind]}>
+            <span className="shortage__name">{medicine.name}</span>
+            <span className="shortage__why">{alertText(alert, medicine)}</span>
+          </li>
+        ))}
+      </ul>
+      <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+        <button className="btn" onClick={onOpen}>
+          В аптечку
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function Restock({
   medicines,
   ownerName,
@@ -240,6 +319,19 @@ export function Restock({
                     {аптека.name}
                   </a>
                 ))}
+                {pharmacyLinks(medicine, pharmacies).find((a) => a.innHref) && (
+                  <a
+                    href={pharmacyLinks(medicine, pharmacies).find((a) => a.innHref)!.innHref!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      void platform().files.openExternal(pharmacyLinks(medicine, pharmacies).find((a) => a.innHref)!.innHref!)
+                    }}
+                  >
+                    по веществу
+                  </a>
+                )}
               </span>
             )}
             {need !== null && (

@@ -219,9 +219,11 @@ export function DrugPicker({
       event.preventDefault()
       const step = event.key === 'ArrowDown' ? 1 : -1
       setActive((prev) => (prev + step + found.length) % found.length)
-    } else if (event.key === 'Enter' && active >= 0) {
+    } else if (event.key === 'Enter') {
+      // Перехватываем всегда, пока список открыт: без подсвеченного пункта
+      // Enter уходил в форму и сохранял препарат с недописанным названием.
       event.preventDefault()
-      choose(found[active])
+      if (active >= 0) choose(found[active])
     } else if (event.key === 'Escape') {
       setOpen(false)
       setActive(-1)

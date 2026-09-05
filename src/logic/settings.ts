@@ -58,12 +58,6 @@ export const DENSITIES: { key: Settings['density']; title: string }[] = [
   { key: 'roomy', title: 'Просторно' },
 ]
 
-export const INTAKE_SLOTS: { key: keyof Settings['intakeTimes']; title: string }[] = [
-  { key: 'morning', title: 'Утром' },
-  { key: 'day', title: 'Днём' },
-  { key: 'evening', title: 'Вечером' },
-  { key: 'night', title: 'На ночь' },
-]
 
 /** Подэкраны настроек. Порядок тот же, что в корне: частое выше редкого. */
 export const SUBSCREENS = ['display', 'people', 'targets', 'pharmacies', 'reminders', 'backup', 'family', 'about'] as const
@@ -135,26 +129,6 @@ export function setTrackGlucose(
   return { sections, trackGlucose: on, startTab: поправитьСтарт(sections, on, settings.startTab) }
 }
 
-/**
- * Поменять час приёма.
- *
- * Пока человек один, часы остаются общей настройкой: заводить ему личные —
- * значит развести два места, где лежит одно и то же. Когда людей несколько,
- * часы правятся тому, чей экран открыт, а не тому, кто выбран сверху: человек
- * пришёл на экран отца и меняет отцовские часы.
- */
-export function setIntakeTime(
-  settings: Pick<Settings, 'people' | 'intakeTimes'>,
-  personId: string | null,
-  slot: keyof Settings['intakeTimes'],
-  value: string,
-): Partial<Settings> {
-  const человек = settings.people.find((p) => p.id === personId) ?? null
-  const часы = intakeTimesOf(человек, settings.intakeTimes)
-  const next = { ...часы, [slot]: value || часы[slot] }
-  if (settings.people.length <= 1 || !человек) return { intakeTimes: next }
-  return { people: settings.people.map((p) => (p.id === человек.id ? { ...p, intakeTimes: next } : p)) }
-}
 
 /**
  * Поменять целевое давление.

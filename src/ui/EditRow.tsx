@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { GLUCOSE_CONTEXT_LABELS, type BpReading, type GlucoseContext, type GlucoseReading } from '../types'
+import { GLUCOSE_CONTEXT_LABELS, type BpReading, type GlucoseContext, type GlucoseReading, GLUCOSE_CONTEXT_ORDER, GLUCOSE_CONTEXT_SHORT } from '../types'
 import { NumberField } from './NumberField'
 import { Banner } from './bits'
+import { toLocalInput } from '../logic/when'
 
 /**
  * Правка записи прямо в списке.
@@ -11,21 +12,6 @@ import { Banner } from './bits'
  * месте, окружение остаётся видимым, отмена возвращает всё как было.
  */
 
-const CONTEXTS: GlucoseContext[] = ['fasting', 'before-meal', 'after-meal', 'bedtime', 'night']
-
-const SHORT_CONTEXT: Record<GlucoseContext, string> = {
-  fasting: 'Натощак',
-  'before-meal': 'До еды',
-  'after-meal': 'После еды',
-  bedtime: 'Перед сном',
-  night: 'Ночью',
-}
-
-function toLocalInput(ts: number): string {
-  const d = new Date(ts)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
 
 function Actions({ onCancel, busy }: { onCancel: () => void; busy: boolean }) {
   return (
@@ -185,9 +171,9 @@ export function GlucoseEditor({
 
       <fieldset className="chips" style={{ marginTop: 'var(--space-3)' }}>
         <legend>Момент замера — от него зависит норма</legend>
-        {CONTEXTS.map((item) => (
+        {GLUCOSE_CONTEXT_ORDER.map((item) => (
           <button key={item} type="button" className="chip" aria-pressed={context === item} onClick={() => setContext(item)}>
-            {SHORT_CONTEXT[item]}
+            {GLUCOSE_CONTEXT_SHORT[item]}
           </button>
         ))}
       </fieldset>

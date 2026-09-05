@@ -100,6 +100,8 @@ const SNOOZE_MIN = 15
  */
 const REMINDER_ID_MAX = (2047 * 8 + 7) * 1024 + 127 * 8 + 7
 const SNOOZE_BASE = 20_000_000
+/** Пробное — выше обоих диапазонов: уборка «лишних» смотрит только ниже SNOOZE_BASE. */
+const PREVIEW_ID = SNOOZE_BASE * 2 + 1
 
 /**
  * Мелодия, выбранная в последний раз. Нужна отложенному напоминанию: оно
@@ -184,8 +186,9 @@ export const capacitorReminders: RemindersPort = {
 
   async preview(soundId: string) {
     try {
-      await ensureChannel(soundId)
-      lastSound = soundId
+      // Без уборки каналов и без смены `lastSound`: это только проба звука,
+      // выбранной мелодией она не становится.
+      await ensureChannel(soundId, false)
       await registerActions()
       await LocalNotifications.schedule({
         notifications: [
@@ -193,7 +196,7 @@ export const capacitorReminders: RemindersPort = {
             // Свой идентификатор вне обоих рабочих диапазонов: пробное
             // напоминание не должно ни затирать расписание, ни попадать под
             // его пересборку.
-            id: 990_001,
+            id: PREVIEW_ID,
             title: 'Так будет звучать напоминание',
             body: 'Это проверка звука — принимать ничего не нужно',
             channelId: channelId(soundId),
@@ -304,7 +307,18 @@ export const capacitorReminders: RemindersPort = {
     try {
       const { notifications: ожидают } = await LocalNotifications.getPending()
       const нужные = new Set(reminders.map((item) => item.id))
-      const лишние = ожидают.filter(({ id }) => id < SNOOZE_BASE && !нужные.has(id))
+      // Отложенное живёт в своём диапазоне, но просьба «напомни позже» теряет
+      // смысл, когда приём уже отмечен: снимаем те, чьей пары «день + время +
+      // человек» в новом наборе нет.
+      const живыеПриёмы = new Set(reminders.map((item) => `${item.day}|${item.slot}|${item.person ?? ''}`))
+      const лишние = ожидают.filter(({ id, extra }) => {
+        if (id >= PREVIEW_ID) return false
+        if (id >= SNOOZE_BASE) {
+          const e = (extra ?? {}) as { day?: number; slot?: string; person?: string }
+          return e.day !== undefined && e.slot !== undefined && !живыеПриёмы.has(`${e.day}|${e.slot}|${e.person ?? ''}`)
+        }
+        return !нужные.has(id)
+      })
       if (лишние.length) await LocalNotifications.cancel({ notifications: лишние.map(({ id }) => ({ id })) })
     } catch {
       // Лишнее напоминание переживаемо; уронить постановку из-за уборки — нет.
@@ -381,6 +395,21 @@ export const capacitorReminders: RemindersPort = {
               },
             ],
           }),
+        ).catch(() =>
+          // Канал или планировщик отказали. Хоть без своей мелодии, но напомнить
+          // обязаны: просьба человека не должна пропасть молча.
+          LocalNotifications.schedule({
+            notifications: [
+              {
+                id: SNOOZE_BASE + (event.notification.id % (REMINDER_ID_MAX + 1)),
+                title: event.notification.title,
+                body: event.notification.body ?? '',
+                actionTypeId: ACTION_TYPE,
+                extra: event.notification.extra,
+                schedule: { at: new Date(Date.now() + SNOOZE_MIN * 60_000), allowWhileIdle: true },
+              },
+            ],
+          }).catch(() => undefined),
         )
         return
       }

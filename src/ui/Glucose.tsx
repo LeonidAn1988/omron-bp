@@ -1,7 +1,8 @@
 import { Fragment, useRef, useState } from 'react'
-import { GLUCOSE_CONTEXT_LABELS, type GlucoseContext, type GlucoseReading } from '../types'
+import { GLUCOSE_CONTEXT_LABELS, type GlucoseContext, type GlucoseReading, GLUCOSE_CONTEXT_ORDER, GLUCOSE_CONTEXT_SHORT } from '../types'
 import { classifyGlucose, glucoseAlertFor, glucoseCeiling, type GlucoseTargets } from '../logic/classify'
 import type { GlucoseSummary } from '../logic/stats'
+import { describeWhen, toLocalInput } from '../logic/when'
 import { Banner, Reveal } from './bits'
 import { ValueField } from './ValueField'
 import { GlucoseEditor } from './EditRow'
@@ -14,31 +15,7 @@ const DATE_TIME = new Intl.DateTimeFormat('ru-RU', {
   hour: '2-digit',
   minute: '2-digit',
 })
-const TIME_FMT = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' })
-const DATE_FMT = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' })
 
-const CONTEXTS: GlucoseContext[] = ['fasting', 'before-meal', 'after-meal', 'bedtime', 'night']
-
-/** Короткие подписи для чипов — полные не помещаются на 360px. */
-const SHORT_CONTEXT: Record<GlucoseContext, string> = {
-  fasting: 'Натощак',
-  'before-meal': 'До еды',
-  'after-meal': 'После еды',
-  bedtime: 'Перед сном',
-  night: 'Ночью',
-}
-
-function toLocalInput(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-function describeWhen(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'выбрать время'
-  const sameDay = date.toDateString() === new Date().toDateString()
-  return `${sameDay ? 'сегодня' : DATE_FMT.format(date)}, ${TIME_FMT.format(date)}`
-}
 
 /**
  * Предполагаемый момент замера по времени суток. Поле обязательное и влияет на
@@ -69,6 +46,7 @@ export function GlucoseEntry({
   const [when, setWhen] = useState(() => toLocalInput(new Date()))
   const [editingWhen, setEditingWhen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState<GlucoseReading | null>(null)
   const valueRef = useRef<HTMLInputElement>(null)
 
@@ -80,6 +58,8 @@ export function GlucoseEntry({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
+    // Второе нажатие, пока первое ещё пишется, заводило два одинаковых замера.
+    if (busy) return
     if (!complete) {
       valueRef.current?.focus()
       return setError('Введите значение в ммоль/л — обычно это число от 2 до 25')
@@ -96,7 +76,12 @@ export function GlucoseEntry({
       user,
       source: 'manual',
     }
-    await onAdd(reading)
+    setBusy(true)
+    try {
+      await onAdd(reading)
+    } finally {
+      setBusy(false)
+    }
 
     setError(null)
     setSaved(reading)
@@ -151,7 +136,7 @@ export function GlucoseEntry({
 
       <fieldset className="chips" style={{ marginTop: 'var(--space-4)' }}>
         <legend>Момент замера — от него зависит норма</legend>
-        {CONTEXTS.map((item) => (
+        {GLUCOSE_CONTEXT_ORDER.map((item) => (
           <button
             key={item}
             type="button"
@@ -159,7 +144,7 @@ export function GlucoseEntry({
             aria-pressed={context === item}
             onClick={() => setContext(item)}
           >
-            {SHORT_CONTEXT[item]}
+            {GLUCOSE_CONTEXT_SHORT[item]}
           </button>
         ))}
       </fieldset>
@@ -270,7 +255,7 @@ export function GlucoseList({
                     {category.label}
                   </span>
                 </td>
-                <td data-col="bpm">{SHORT_CONTEXT[reading.context]}</td>
+                <td data-col="bpm">{GLUCOSE_CONTEXT_SHORT[reading.context]}</td>
                 <td data-col="note" className="wrap">
                   {reading.note ? `${reading.note} · ` : ''}
                   <span className="muted">{SOURCE_LABELS[reading.source]}</span>

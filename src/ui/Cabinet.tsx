@@ -9,12 +9,13 @@ import {
   runsOutAt,
   sortMedicines,
   supplyDays,
+  shortForm,
 } from '../logic/medicines'
 import { buildCalendar, countCalendarEvents } from '../logic/calendar'
 import { download } from '../logic/io'
 import { Banner } from './bits'
 import { ChevronIcon } from './icons'
-import { alertText, ALERT_TONE, KindTag, MedicineNudge, Restock, shortFormOf, Supply } from './Medicines'
+import { alertText, ALERT_TONE, KindTag, MedicineNudge, Restock, Supply } from './Medicines'
 import { MedicineCard } from './MedicineCard'
 import { ownerOf } from '../logic/people'
 import { MedicineForm } from './MedicineForm'
@@ -259,7 +260,7 @@ export function Cabinet({
           {events > 0 && (
             <button
               className="btn"
-              onClick={() => void download('приём-лекарств.ics', buildCalendar(medicines, Date.now()), 'text/calendar')}
+              onClick={() => void download('приём-лекарств.ics', buildCalendar(видимые, Date.now()), 'text/calendar')}
             >
               Напоминания в календарь
             </button>
@@ -332,7 +333,7 @@ function CabinetRow({
         <span className="pill__sub">
           {[
             owner ?? '',
-            shortFormOf(medicine.form),
+            shortForm(medicine.form),
             left === null ? '' : `${estimated ? '≈ ' : ''}${left} шт.`,
             estimated ? (medicine.autoDeduct ? 'отмечать не нужно' : 'по расчёту') : '',
           ]

@@ -73,8 +73,17 @@ function tx<T>(store: string, mode: IDBTransactionMode, run: (s: IDBObjectStore)
       new Promise<T>((resolve, reject) => {
         const transaction = db.transaction(store, mode)
         const request = run(transaction.objectStore(store))
-        request.onsuccess = () => resolve(request.result)
+        // Ответ — по завершении транзакции, а не по успеху запроса: запрос
+        // успевает отработать до фиксации, и «сохранено» уходило раньше, чем
+        // данные оказывались на диске. Настройки так терялись молча.
+        let result: T
+        request.onsuccess = () => {
+          result = request.result
+        }
         request.onerror = () => reject(request.error)
+        transaction.oncomplete = () => resolve(result)
+        transaction.onerror = () => reject(transaction.error)
+        transaction.onabort = () => reject(transaction.error ?? new Error('транзакция прервана'))
       }),
   )
 }

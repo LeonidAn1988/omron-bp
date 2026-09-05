@@ -11,7 +11,7 @@ import {
   supplyDays,
 } from '../logic/medicines'
 import { instructionUrl } from '../logic/drugs'
-import { pharmacyLinks, searchEngineUrl } from '../logic/pharmacies'
+import { cleanTradeName, pharmacyLinks, searchEngineUrl } from '../logic/pharmacies'
 import { platform } from '../platform/ports'
 import { plural } from '../logic/plural'
 import { NumberField } from './NumberField'
@@ -112,7 +112,15 @@ export function MedicineCard({
               Купил упаковку — {medicine.packSize} шт.
             </button>
           ) : null}
-          <button className="btn" onClick={() => setEditingLeft((open) => !open)}>
+          <button
+            className="btn"
+            onClick={() => {
+              // Поле заполняется при открытии редактора, а не при показе
+              // карточки: остаток к этому моменту мог списаться расписанием.
+              if (!editingLeft) setLeftValue(String(effectiveLeft(medicine, Date.now()) ?? ''))
+              setEditingLeft((open) => !open)
+            }}
+          >
             Поправить остаток
           </button>
         </div>
@@ -229,6 +237,22 @@ export function MedicineCard({
           ) : (
             <a className="btn" href={searchEngineUrl(medicine)} target="_blank" rel="noopener noreferrer">
               Найти в аптеке
+            </a>
+          )}
+          {аптеки.some((a) => a.innHref) && (
+            // Запасной путь, когда торговое имя не находится: та же сеть, но
+            // по действующему веществу. Одна ссылка, не по одной на сеть.
+            <a
+              className="btn btn--sm"
+              href={аптеки.find((a) => a.innHref)!.innHref!}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => {
+                event.preventDefault()
+                void platform().files.openExternal(аптеки.find((a) => a.innHref)!.innHref!)
+              }}
+            >
+              По веществу: {cleanTradeName(medicine.inn ?? '')}
             </a>
           )}
           {confirming ? (

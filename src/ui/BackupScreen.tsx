@@ -28,6 +28,7 @@ export function BackupScreen({
   onRestore,
   onClearAll,
   backup,
+  familyPhones = 0,
   onBack,
 }: {
   settings: SettingsData
@@ -36,6 +37,8 @@ export function BackupScreen({
   onRestore: (incoming: ImportResult) => Promise<{ added: number; medicines: number; settingsRestored: boolean }>
   onClearAll: () => Promise<void>
   backup: BackupStatus
+  /** Сколько телефонов семьи читают копию — пароль их отрежет. */
+  familyPhones?: number
   onBack: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
@@ -117,7 +120,7 @@ export function BackupScreen({
     <div className="stack">
       <BackBar onBack={onBack} />
 
-      <DataSafety
+      <DataSafety familyPhones={familyPhones}
         status={backup}
         encrypt={settings.backupEncrypt}
         onEncryptChange={(next) => onPatch({ backupEncrypt: next })}

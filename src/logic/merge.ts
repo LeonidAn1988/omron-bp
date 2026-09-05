@@ -76,6 +76,11 @@ export interface MergeLog {
   stockConflicts: string[]
 }
 
+/** Пустой журнал — для накопления по нескольким файлам. Массив каждый раз свой. */
+export function emptyMergeLog(): MergeLog {
+  return { ...ПУСТОЙ_ЖУРНАЛ, stockConflicts: [] }
+}
+
 const ПУСТОЙ_ЖУРНАЛ: MergeLog = {
   addedMeasurements: 0,
   updatedMeasurements: 0,

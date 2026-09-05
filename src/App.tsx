@@ -22,7 +22,7 @@ import { DayPartChart, GlucoseChart, PulseChart, TrendChart } from './ui/Charts'
 import { LatestAlert, SummaryTiles } from './ui/Summary'
 import { GlucoseEntry, GlucoseList, GlucoseTiles } from './ui/Glucose'
 import { Readings } from './ui/Readings'
-import { MedicineNudge } from './ui/Medicines'
+import { Restock, ShortageCard, TodayCard } from './ui/Medicines'
 import { DeviceIcon, ReportIcon, SettingsIcon } from './ui/icons'
 import { fillMissingFromCopy, mergeRestoredSettings, takesPersonalFrom } from './logic/io'
 import { depthOf, pathOf, pop, prune, push, rootStack, tabOf, tapTab, toTab, type Node, type Stack } from './logic/nav'
@@ -162,9 +162,12 @@ export default function App() {
    * настройках, потому что на подэкран ведут глубокие ссылки с «Обзора», где
    * настройки ещё не отрисованы.
    */
-  const узелПодэкрана = stack.find(
-    (node, index) => node.kind === 'sub' && index > 0 && !ИНСТРУМЕНТЫ.has(node.sub),
-  )
+  // С конца, а не с начала: на стеке может лежать «settings/family/backup», и
+  // первый найденный подэкран — это тот, с которого ушли, а не тот, что открыт.
+  // Кнопка «К копии дневника» на экране «Семья» из-за этого не открывала ничего.
+  const узелПодэкрана = [...stack]
+    .reverse()
+    .find((node, i, arr) => node.kind === 'sub' && arr.length - 1 - i > 0 && !ИНСТРУМЕНТЫ.has(node.sub))
   const подэкранНастроек =
     узелПодэкрана && узелПодэкрана.kind === 'sub' && (SUBSCREENS as readonly string[]).includes(узелПодэкрана.sub)
       ? (узелПодэкрана.sub as Subscreen)
@@ -323,7 +326,15 @@ export default function App() {
       // Записанное руками принадлежит тому, чей дневник открыт: кнопка прибора
       // здесь ни при чём, её могли и не назначать вовсе.
       const кто = activePersonOf(settingsRef.current)
-      await putMeasurements([кто ? { ...item, person: кто.id } : item])
+      // Отказ хранилища здесь показывался только для лекарств; измерение
+      // молча пропадало, а экран показывал старое. Тот же баннер и здесь.
+      try {
+        await putMeasurements([кто ? { ...item, person: кто.id } : item])
+        setSaveFailed(null)
+      } catch (caught) {
+        setSaveFailed(caught instanceof Error ? caught.message : String(caught))
+        throw caught
+      }
       await refresh()
     },
     [refresh],
@@ -341,7 +352,13 @@ export default function App() {
   const handleDelete = useCallback(
     async (id: string) => {
       const victim = measurements.find((m) => m.id === id) ?? null
-      await deleteMeasurement(id)
+      try {
+        await deleteMeasurement(id)
+        setSaveFailed(null)
+      } catch (caught) {
+        setSaveFailed(caught instanceof Error ? caught.message : String(caught))
+        throw caught
+      }
       await refresh()
       setUndo(victim)
       clearTimeout(undoTimer.current)
@@ -357,7 +374,13 @@ export default function App() {
    */
   const handleUpdate = useCallback(
     async (next: Measurement) => {
-      await putMeasurements([next])
+      try {
+        await putMeasurements([next])
+        setSaveFailed(null)
+      } catch (caught) {
+        setSaveFailed(caught instanceof Error ? caught.message : String(caught))
+        throw caught
+      }
       await refresh()
     },
     [refresh],
@@ -422,9 +445,10 @@ export default function App() {
         const mine = known.get(item.id)
         if (!mine) continue
         const filled = fillMissingFromCopy(mine, item)
-        // Дописали недостающее — это правка, сделанная здесь и сейчас, поэтому
-        // отметку времени ставим свою.
-        if (filled !== mine) await putMedicine(filled)
+        // Без свежего штампа: дописанные поля пришли из копии со своим временем,
+        // и пометить коробку «сейчас» значило бы сделать её свежее любой чужой
+        // правки при следующем семейном обмене.
+        if (filled !== mine) await putMedicine(filled, false)
       }
 
       let settingsRestored = false
@@ -981,59 +1005,61 @@ export default function App() {
         <div className="stack">
           <LatestAlert latest={latestBp} />
 
-          {measurements.length === 0 ? (
-            <Banner tone="info">
-              <b>Дневник пока пуст.</b>
-              <div style={{ marginTop: 4 }}>
-                Откройте «Прибор», чтобы выгрузить историю прямо из тонометра, либо внесите измерение вручную во
-                вкладке «Давление».
+          {/* Сначала то, что не зависит от давления: приём на сегодня, что
+              кончается, что купить, копия. Раньше всё это стояло внутри
+              условия «есть измерения», и человек, который ведёт только
+              аптечку, видел пустой экран с советом открыть тонометр. */}
+          <TodayCard medicines={myMedicines} onOpen={() => setTab('intake')} />
+
+          <ShortageCard medicines={myMedicines} onOpen={() => setTab('cabinet')} />
+
+          <Restock medicines={myMedicines} pharmacies={settings.pharmacies ?? []} />
+
+          {!nudgeHidden.backup && (
+            <BackupNudge
+              status={backup}
+              // Открываем сразу «Копию дневника»: баннер говорит про копию, и
+              // высаживать человека в корень настроек значит заставлять искать
+              // то, о чём его только что спросили.
+              onOpenSettings={() =>
+                setStack([
+                  ...rootStack(tabOf(stackRef.current)),
+                  { kind: 'sub', sub: 'settings' },
+                  { kind: 'sub', sub: 'backup' },
+                ])
+              }
+              onDismiss={() => snoozeNudge('backup')}
+            />
+          )}
+
+          {bpAll.length + glucoseAll.length === 0 ? (
+            <div className="card">
+              <div className="card__head">
+                <h2>Измерений пока нет</h2>
               </div>
-            </Banner>
+              {/* Кнопки, а не описание маршрута: человек нажимает, а не ищет. */}
+              <div className="row row--stack">
+                {deviceUser !== null && (
+                  <button className="btn btn--primary" onClick={() => setTab('sync')}>
+                    Выгрузить с прибора
+                  </button>
+                )}
+                <button className={deviceUser !== null ? 'btn' : 'btn btn--primary'} onClick={() => setTab('bp')}>
+                  Записать давление
+                </button>
+              </div>
+            </div>
           ) : (
             <>
-              <div className="row no-print">
-                <PeriodPicker value={period} onChange={setPeriod} />
-              </div>
+              {(summary || glucoseSummary) && (
+                <div className="row no-print">
+                  <PeriodPicker value={period} onChange={setPeriod} />
+                </div>
+              )}
 
               {summary && (
                 <>
                   <SummaryTiles summary={summary} targetSys={targets.sys} targetDia={targets.dia} />
-
-                  {/*
-                    Просьбы стоят после данных, а не перед ними.
-                    Раньше два жёлтых баннера занимали весь первый экран, и
-                    цифра давления — единственное, ради чего этот экран
-                    существует, — оказывалась за кромкой; на крупном тексте её
-                    не было видно вовсе. Медицинское предупреждение остаётся
-                    первым: оно про здоровье, а не про порядок в приложении.
-                    Сигнал при этом никуда не делся — точки на кнопках горят
-                    всегда, даже когда баннер спрятан.
-                  */}
-                  {!nudgeHidden.backup && (
-                    <BackupNudge
-                      status={backup}
-                      // Открываем сразу «Копию дневника»: баннер говорит про
-                      // копию, и высаживать человека в корень настроек значит
-                      // заставлять искать то, о чём его только что спросили.
-                      onOpenSettings={() =>
-                        setStack([
-                          ...rootStack(tabOf(stackRef.current)),
-                          { kind: 'sub', sub: 'settings' },
-                          { kind: 'sub', sub: 'backup' },
-                        ])
-                      }
-                      onDismiss={() => snoozeNudge('backup')}
-                    />
-                  )}
-
-                  {!nudgeHidden.cabinet && (
-                    <MedicineNudge
-                      count={medicineAlerts}
-                      items={myMedicines}
-                      onOpen={() => setTab('cabinet')}
-                      onDismiss={() => snoozeNudge('cabinet')}
-                    />
-                  )}
 
                   <div className="card">
                     <div className="card__head">
@@ -1075,9 +1101,16 @@ export default function App() {
               )}
 
               {!summary && !glucoseSummary && (
-                <Banner tone="info">
-                  За выбранный период записей нет. Возьмите период пошире — например, «Всё время».
-                </Banner>
+                <div className="card">
+                  <div className="card__head">
+                    <h2>За этот период записей нет</h2>
+                  </div>
+                  <div className="row">
+                    <button className="btn" onClick={() => setPeriod('all')}>
+                      Показать всё время
+                    </button>
+                  </div>
+                </div>
               )}
             </>
           )}

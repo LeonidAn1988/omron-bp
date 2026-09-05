@@ -111,7 +111,12 @@ export const capacitorBackup: BackupPort = {
   },
 
   async choose(suggestedName) {
-    const result = await BackupFile.choose({ suggestedName })
+    let result: { cancelled: boolean; uri?: string; name?: string }
+    try {
+      result = await BackupFile.choose({ suggestedName })
+    } catch {
+      return null
+    }
     // Закрытое окно — это отказ, а не ошибка: интерфейс на нём молчит.
     if (result.cancelled || !result.uri) return null
     const name = result.name ?? suggestedName
@@ -178,8 +183,18 @@ export const capacitorBackup: BackupPort = {
   },
 
   async addSource(): Promise<BackupSource | null> {
-    const result = await BackupFile.openSource()
+    let result: { cancelled: boolean; uri?: string; name?: string }
+    try {
+      result = await BackupFile.openSource()
+    } catch {
+      // Система не выдала долгоживущий доступ — снаружи это тот же отказ, что
+      // и закрытое окно. Веб-версия ведёт себя так же; падать на кнопке нельзя.
+      return null
+    }
     if (result.cancelled || !result.uri) return null
+    // Свой файл копий — не «телефон семьи». Иначе его отключение отозвало бы
+    // и право записи, и автокопии молча остановились бы.
+    if (result.uri === stored().uri) throw new Error('Это ваш собственный файл копий — его добавлять не нужно.')
     const было = сохранённыеИсточники().filter((item) => item.uri !== result.uri)
     const item = { uri: result.uri, name: result.name ?? 'копия' }
     записатьИсточники([...было, item])

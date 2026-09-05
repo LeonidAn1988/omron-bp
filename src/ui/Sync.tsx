@@ -19,6 +19,7 @@ import { BleLog, logToText, useBleLog } from './BleLog'
 import { Banner, Field, Reveal } from './bits'
 import { GlucoseSync } from './GlucoseSync'
 import { download } from '../logic/io'
+import { platform } from '../platform/ports'
 import { plural } from '../logic/plural'
 
 const FULL_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
@@ -136,6 +137,8 @@ export function Sync({
   const [showAll, setShowAll] = useState(false)
   const [showDebug, setShowDebug] = useState(false)
   const [radioOff, setRadioOff] = useState(false)
+  /** На Android поиск прибора молчит, пока выключена геолокация, — и об этом никто не догадается. */
+  const [locationOff, setLocationOff] = useState(false)
 
   const resultRef = useRef<HTMLDivElement>(null)
   const supported = isBluetoothSupported()
@@ -144,6 +147,7 @@ export function Sync({
     if (!supported) return
     const check = () => {
       void isBluetoothEnabled().then((enabled) => setRadioOff(enabled === false))
+      void platform().bluetooth.isLocationBlockingScan?.().then((blocked) => setLocationOff(blocked === true))
     }
     check()
     getKnownDevices().then((known) => {
@@ -272,6 +276,17 @@ export function Sync({
     <div className="stack">
       {radioOff && (
         <Banner tone="warning">Bluetooth выключен. Включите его — приложение заметит это само.</Banner>
+      )}
+      {locationOff && !radioOff && (
+        <Banner tone="warning">
+          <b>Поиск прибора не работает: выключена геолокация.</b>
+          <div style={{ marginTop: 4 }}>Android не ищет устройства рядом без неё — так устроена система.</div>
+          <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+            <button className="btn btn--sm" onClick={() => void platform().bluetooth.openLocationSettings?.()}>
+              Включить геолокацию
+            </button>
+          </div>
+        </Banner>
       )}
 
       <div className="card">

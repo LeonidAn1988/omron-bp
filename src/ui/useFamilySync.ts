@@ -19,9 +19,18 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Settings } from '../types'
 import { parseImportFile } from '../logic/io'
 import { isEncrypted } from '../logic/crypto'
-import { mergeChangedAnything, mergeDiary, type MergeLog } from '../logic/merge'
+import { emptyMergeLog, mergeChangedAnything, mergeDiary, type MergeLog } from '../logic/merge'
 import { platform, type BackupSource } from '../platform/ports'
-import { getAllMedicines, getAllMeasurements, getAllTombstones, putMedicine, putMeasurements, saveTombstones } from '../db/store'
+import {
+  deleteMeasurement,
+  deleteMedicine,
+  getAllMedicines,
+  getAllMeasurements,
+  getAllTombstones,
+  putMedicine,
+  putMeasurements,
+  saveTombstones,
+} from '../db/store'
 
 export interface FamilySyncStatus {
   /** Держит ли платформа чужие файлы между запусками. В браузере — нет. */
@@ -83,16 +92,7 @@ export function useFamilySync({
         getAllTombstones(),
       ])
       let своё = { measurements, medicines, tombstones, people: latest.current.settings.people }
-      const итог: MergeLog = {
-        addedMeasurements: 0,
-        updatedMeasurements: 0,
-        addedMedicines: 0,
-        updatedMedicines: 0,
-        addedIntakes: 0,
-        removed: 0,
-        addedPeople: 0,
-        stockConflicts: [],
-      }
+      const итог: MergeLog = emptyMergeLog()
 
       for (const источник of список) {
         const текст = await port.readSource(источник.id)
@@ -136,14 +136,38 @@ export function useFamilySync({
       }
 
       if (mergeChangedAnything(итог)) {
-        // Отметку времени правки не переставляем: пришедшее сюда уже имеет
-        // свою, и пометить его «сейчас» значит сделать чужую правку свежее
-        // местной при следующем обмене.
-        await saveTombstones(своё.tombstones)
-        await putMeasurements(своё.measurements, false)
-        for (const item of своё.medicines) await putMedicine(item, false)
-        if (итог.addedPeople > 0) {
-          latest.current.onSettings({ ...latest.current.settings, people: своё.people })
+        // Пока читались чужие файлы, человек мог что-то внести. Слепок, снятый
+        // до чтения, эти правки не содержит — и записанный поверх, затёр бы их.
+        // Поэтому перед записью сливаем результат ещё раз с тем, что в базе сейчас.
+        const [сейчасИзм, сейчасЛек, сейчасНадгр] = await Promise.all([
+          getAllMeasurements(),
+          getAllMedicines(),
+          getAllTombstones(),
+        ])
+        const финал = mergeDiary(
+          { measurements: сейчасИзм, medicines: сейчасЛек, tombstones: сейчасНадгр, people: latest.current.settings.people },
+          { measurements: своё.measurements, medicines: своё.medicines, tombstones: своё.tombstones, people: своё.people },
+        )
+        try {
+          // Отметку времени правки не переставляем: пришедшее сюда уже имеет
+          // свою, и пометить его «сейчас» значит сделать чужую правку свежее
+          // местной при следующем обмене.
+          await saveTombstones(финал.tombstones)
+          // Надгробия — не только сохранить, но и применить: слияние выбросило
+          // убитые записи из своего списка, а в хранилище они лежали и дальше,
+          // и «удалено: 1» в журнале ничего не удаляло.
+          const убитые = new Set(финал.tombstones.map((t) => t.id))
+          for (const item of сейчасИзм) if (убитые.has(item.id)) await deleteMeasurement(item.id)
+          for (const item of сейчасЛек) if (убитые.has(item.id)) await deleteMedicine(item.id)
+          await putMeasurements(финал.measurements, false)
+          for (const item of финал.medicines) await putMedicine(item, false)
+          if (финал.people.length > latest.current.settings.people.length) {
+            latest.current.onSettings({ ...latest.current.settings, people: финал.people })
+          }
+        } catch (error) {
+          // Запись сорвалась на полпути — молчать нельзя: человек считает, что
+          // обмен прошёл. Сообщаем как о нечитаемом источнике, тем же местом.
+          плохие.push(`запись не удалась: ${error instanceof Error ? error.message : String(error)}`)
         }
         await latest.current.onChanged()
       }
@@ -175,7 +199,13 @@ export function useFamilySync({
   }, [ready, supported, прочитать])
 
   const addSource = useCallback(async () => {
-    const added = await port.addSource()
+    let added: BackupSource | null
+    try {
+      added = await port.addSource()
+    } catch (error) {
+      setUnreadable([error instanceof Error ? error.message : String(error)])
+      return
+    }
     if (!added) return
     setSources(await port.sources())
     await прочитать()
@@ -185,6 +215,7 @@ export function useFamilySync({
     async (id: string) => {
       await port.removeSource(id)
       setSources(await port.sources())
+      setUnreadable([])
     },
     [port],
   )

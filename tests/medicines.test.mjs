@@ -16,7 +16,6 @@ import {
   expiryToMonth,
   formatTime,
   isEstimated,
-  markTaken,
   markTakenAt,
   medicineAlert,
   monthToExpiry,
@@ -179,7 +178,7 @@ export function run() {
   check('утренний просрочен, вечерний ещё нет', слоты[0].overdue === true && слоты[1].overdue === false)
   check('без расписания приёмов нет', dosesToday(med({ left: 10 }), полдень).length === 0)
 
-  const принят = markTaken(расписание, утро + 600000)
+  const принят = markTakenAt(расписание, утро + 600000, утро + 600000)
   слоты = dosesToday(принят, полдень)
   check('утренний приём отмечен', слоты[0].takenAt !== null && слоты[1].takenAt === null)
   check('отметка не просрочена', слоты[0].overdue === false)
@@ -187,7 +186,7 @@ export function run() {
   check('дата подтверждения обновилась', принят.leftAt === утро + 600000)
   check('исходный препарат не изменён', расписание.left === 30 && !расписание.taken)
 
-  const оба = markTaken(принят, вечер)
+  const оба = markTakenAt(принят, вечер, вечер)
   const слоты2 = dosesToday(оба, вечер + 60000)
   check('обе отметки разошлись по приёмам', слоты2[0].takenAt !== null && слоты2[1].takenAt !== null)
   check('остаток списался дважды', оба.left === 28)
@@ -205,15 +204,15 @@ export function run() {
       'а завышенный остаток отодвигает предупреждение «пора заказывать»',
   )
 
-  const давний = markTaken(med({ left: 10, taken: [now - (KEEP_INTAKES_DAYS + 5) * DAY] }), now)
+  const давний = markTakenAt(med({ left: 10, taken: [now - (KEEP_INTAKES_DAYS + 5) * DAY] }), now, now)
   check(
     'старые отметки не копятся',
     (давний.taken ?? []).length === 1,
     'история за годы раздувает резервную копию и никому не нужна',
   )
 
-  check('две штуки за приём списываются вместе', markTaken(med({ left: 10, perTime: 2 }), now).left === 8)
-  check('остаток без счёта не ломает отметку', markTaken(med({ left: null }), now).left === null)
+  check('две штуки за приём списываются вместе', markTakenAt(med({ left: 10, perTime: 2 }), now, now).left === 8)
+  check('остаток без счёта не ломает отметку', markTakenAt(med({ left: null }), now, now).left === null)
 
   // ── автосписание ─────────────────────────────────────────────────────────
   const вручную = med({ left: 30, perDay: 1, leftAt: now - 10 * DAY })
@@ -231,7 +230,7 @@ export function run() {
   )
   check('свежий остаток оценкой не считается', isEstimated(med({ left: 30, perDay: 1, leftAt: now, autoDeduct: true }), now) === false)
 
-  const автоОтмечен = markTaken(авто, now)
+  const автоОтмечен = markTakenAt(авто, now, now)
   check(
     'при автосписании отметка не списывает второй раз',
     автоОтмечен.left === 30 && автоОтмечен.leftAt === авто.leftAt,
@@ -649,12 +648,6 @@ export function run() {
 
     // Как было: обе отметки от одного и того же исходного объекта.
     const изСлепка = markTakenAt(markTakenAt(два, первый, сейчас), второй, сейчас)
-    const изСлепкаПлохо = markTakenAt(два, второй, сейчас)
-    check(
-      'сборка от слепка теряет первую отметку',
-      (изСлепкаПлохо.taken ?? []).length === 1,
-      'вторая отметка строится на препарате без первой — это и есть дефект',
-    )
 
     // Как стало: каждая следующая отметка собирается от результата предыдущей.
     check(

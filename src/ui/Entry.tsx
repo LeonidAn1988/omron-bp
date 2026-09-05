@@ -2,24 +2,9 @@ import { useRef, useState } from 'react'
 import type { BpReading } from '../types'
 import { alertFor, classify } from '../logic/classify'
 import { Banner, Field, Reveal } from './bits'
+import { describeWhen, toLocalInput } from '../logic/when'
 import { ValueField, useCoarsePointer } from './ValueField'
 
-/** Значение для input[type=datetime-local] — он работает в локальном времени без зоны. */
-function toLocalInput(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-const TIME_FMT = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' })
-const DATE_FMT = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' })
-
-function describeWhen(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'выбрать время'
-  const today = new Date()
-  const sameDay = date.toDateString() === today.toDateString()
-  return `${sameDay ? 'сегодня' : DATE_FMT.format(date)}, ${TIME_FMT.format(date)}`
-}
 
 const SAVED_AT = new Intl.DateTimeFormat('ru-RU', {
   day: 'numeric',

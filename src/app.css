@@ -780,15 +780,6 @@ input[type='radio'] {
 .segmented button {
   position: relative;
 }
-.segmented__mark {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-left: var(--space-2);
-  border-radius: 50%;
-  background: var(--warning);
-  vertical-align: middle;
-}
 
 .segmented button[aria-pressed='true'] {
   background: var(--accent);
@@ -1458,16 +1449,6 @@ tbody tr:hover {
   font-size: var(--fs-1);
   color: var(--text-secondary);
 }
-.pill__inn {
-  margin-top: 2px;
-  font-size: var(--fs-1);
-  color: var(--text-secondary);
-}
-.pill__note {
-  margin-top: var(--space-2);
-  font-size: var(--fs-1);
-  color: var(--text-muted);
-}
 
 /* ── прогноз запаса ─────────────────────────────────────────────────────── */
 
@@ -1552,36 +1533,6 @@ tbody tr:hover {
   font-weight: 400;
 }
 
-/* Значение поля — само по себе кнопка правки: отдельная кнопка «изменить»
-   рядом с каждым читалась бы как ещё одно действие в списке, где их и так два. */
-.fact__edit {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--tap);
-  margin: -10px -8px;
-  padding: 0 8px;
-  text-align: left;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background var(--dur-fast) var(--ease);
-}
-.fact__edit svg {
-  width: 15px;
-  height: 15px;
-  color: var(--text-muted);
-}
-.fact__edit:hover {
-  background: var(--hover);
-}
-.fact__edit:hover svg {
-  color: var(--accent);
-}
 
 .pill__left-edit {
   display: flex;
@@ -1592,9 +1543,6 @@ tbody tr:hover {
   padding: var(--space-3);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--accent) 5%, var(--surface));
-}
-.pill__note {
-  font-style: italic;
 }
 
 /* Цвет несёт точка, а не текст: жёлтый предупреждения на светлой поверхности
@@ -1626,27 +1574,7 @@ tbody tr:hover {
   --dot: var(--warning);
 }
 
-.pill__actions {
-  display: flex;
-  gap: var(--space-1);
-  flex: 0 0 auto;
-  /* Подтверждение занимает больше места, чем две иконки: на узком экране ему
-     разрешено перенестись, иначе оно вытолкнет название препарата. */
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
 
-/* Форма правки подсвечена: на длинном списке иначе непонятно, к чему она. */
-.pills__edit {
-  padding: var(--space-4);
-  margin-top: var(--space-3);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
-  border: 1px solid var(--border);
-}
-.pills__edit--new {
-  margin-top: var(--space-4);
-}
 
 /* Сводные таблицы отчёта. Ширина задавалась только максимумом в 560px, и на
    узком экране таблица распиралась содержимым за пределы карточки — страница
@@ -2565,9 +2493,6 @@ kbd {
 
 /* ── печать ─────────────────────────────────────────────────────────────── */
 
-.print-only {
-  display: none;
-}
 
 @media print {
   /* Печать из тёмной темы иначе уходит белым по чёрному. */
@@ -2599,10 +2524,7 @@ kbd {
   .no-print {
     display: none !important;
   }
-  .print-only {
-    display: block;
-  }
-  .app {
+    .app {
     max-width: none;
     padding: 0;
   }
@@ -2653,4 +2575,57 @@ kbd {
   .reveal {
     grid-template-rows: 1fr !important;
   }
+}
+
+/* «Сегодня» и «Заканчивается» на обзоре: строки-значения, без кнопок в ряду. */
+.today,
+.shortage {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.today__row,
+.shortage__row {
+  display: grid;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0;
+  border-top: 1px solid var(--border);
+}
+.today__row:first-child,
+.shortage__row:first-child {
+  border-top: 0;
+}
+.today__row {
+  grid-template-columns: auto 1fr auto;
+}
+.today__time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+.today__dose {
+  color: var(--text-muted);
+}
+.today__mark {
+  min-width: 1.5em;
+  text-align: right;
+  font-weight: 700;
+  color: var(--good);
+}
+.today__row[data-overdue='true'] .today__mark {
+  color: var(--warning);
+}
+.today__row[data-done='true'] .today__name {
+  color: var(--text-muted);
+}
+.shortage__row {
+  grid-template-columns: 1fr auto;
+}
+.shortage__why {
+  color: var(--text-secondary);
+  text-align: right;
+}
+.shortage__row[data-tone='critical'] .shortage__why {
+  color: var(--danger);
+  font-weight: 600;
 }

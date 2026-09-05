@@ -45,7 +45,7 @@ export {
   freeDeviceUsers,
   newPersonId,
   intakeTimesOf,
-  ПЕРВЫЙ, MAX_PEOPLE, targetsOf, glucoseTargetsOf } from '../src/logic/people'
+  ПЕРВЫЙ, MAX_PEOPLE, targetsOf, glucoseTargetsOf, intakeSlotsOf, setIntakeSlots, newSlotId } from '../src/logic/people'
 
 export {
   normalize,
@@ -57,7 +57,6 @@ export {
   formGroup,
   filterByForm,
   instructionUrl,
-  pharmacyUrl,
   mergeBooks,
   FORM_GROUPS,
   KIND_LABEL,
@@ -100,7 +99,6 @@ export {
   expiryToMonth,
   formatTime,
   isEstimated,
-  markTaken,
   markTakenAt,
   medicineAlert,
   monthToExpiry,
@@ -158,14 +156,12 @@ export {
   THEMES,
   TEXT_SCALES,
   DENSITIES,
-  INTAKE_SLOTS,
   SUBSCREENS,
   SUBSCREEN_TITLE,
   visibleSections,
   lockedSection,
   toggleSection,
   setTrackGlucose,
-  setIntakeTime,
   describeDisplay,
   describePeople,
   describeTargets,
@@ -182,7 +178,7 @@ export {
 export { mergeDiary, mergeMedicine, mergeChangedAnything, diarySignature } from '../src/logic/merge'
 
 /** Аптеки: ссылки на поиск, без сети и без обещаний про наличие. */
-export { PHARMACIES, pharmacyQuery, pharmacyLinks, describePharmacies, searchEngineUrl } from '../src/logic/pharmacies'
+export { PHARMACIES, pharmacyQuery, pharmacyQueries, pharmacyLinks, cleanTradeName, describePharmacies, searchEngineUrl } from '../src/logic/pharmacies'
 export type { Diary, Incoming, MergeResult, MergeLog } from '../src/logic/merge'
 
 export { installWebPlatform, useIndexedDbFactory } from '../src/platform/web'
@@ -204,3 +200,8 @@ export const FULL_MEDICINE: Required<Medicine> = {
   history: { '2025-07': { planned: 62, taken: 58 }, '2025-08': { planned: 62, taken: 60 } },
   updatedAt: 1_700_100_000_000,
 }
+
+/** Классификация давления и сахара — пороги, по которым приложение зовёт скорую. */
+export { classify, isWithinTarget, alertFor, glucoseCeiling, ALL_CATEGORIES } from '../src/logic/classify'
+/** Статистика для отчёта врачу. */
+export { describe, summarize, filterByPeriod, dailyAverages, movingAverage, summarizeGlucose } from '../src/logic/stats'

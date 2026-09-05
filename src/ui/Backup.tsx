@@ -28,11 +28,14 @@ export function DataSafety({
   status,
   encrypt,
   onEncryptChange,
+  familyPhones = 0,
 }: {
   status: BackupStatus
   /** Шифровать ли копию паролем. */
   encrypt: boolean
   onEncryptChange: (next: boolean) => void
+  /** Сколько телефонов семьи читают эту копию. Закрытую паролем они не прочтут. */
+  familyPhones?: number
 }) {
   const { supported, target, durable, lastAt, count, busy, failed, stalled, password, locked } = status
   const [показать, setПоказать] = useState(false)
@@ -167,7 +170,9 @@ export function DataSafety({
             <span className="optrow__title">
               Закрыть копию паролем
               <span className="fact__note">
-                тогда её не прочитает и облако: состав аптечки восстанавливает диагноз однозначно
+                {familyPhones
+                  ? 'закрытую паролем копию телефоны семьи не прочитают — обмен остановится'
+                  : 'тогда её не прочитает и облако'}
               </span>
             </span>
           </label>

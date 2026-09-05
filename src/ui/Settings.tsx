@@ -410,6 +410,7 @@ export function Settings({
         onRestore={onRestore}
         onClearAll={onClearAll}
         backup={backup}
+        familyPhones={family.sources.length}
         onBack={onBack}
       />
     )

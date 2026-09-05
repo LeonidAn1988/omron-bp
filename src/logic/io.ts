@@ -439,7 +439,9 @@ export function parseJson(text: string): ImportResult {
   const own = data?.measurements ?? data?.readings
   if (Array.isArray(own)) {
     const measurements = (own as Partial<Measurement>[])
-      .filter((m) => m && typeof m.ts === 'number')
+      // Без идентификатора запись не сольётся ни с чем и не удалится ни по
+      // какому надгробию — такой её лучше не пускать, чем копить дубли.
+      .filter((m) => m && typeof m.ts === 'number' && typeof m.id === 'string' && m.id !== '')
       .map((m) => (m.kind ? m : { ...m, kind: 'bp' as const }))
       .filter((m) => (m.kind === 'glucose' ? Number.isFinite((m as never)['mmol']) : Number.isFinite((m as never)['sys'])))
     return {
@@ -534,6 +536,9 @@ export function mergeRestoredSettings(local: Settings, incoming: NonNullable<Sna
         glucoseLow: incoming.glucoseLow ?? local.glucoseLow,
         trackGlucose: incoming.trackGlucose ?? local.trackGlucose,
         intakeTimes: incoming.intakeTimes ?? local.intakeTimes,
+        intakeSlots: incoming.intakeSlots ?? local.intakeSlots,
+        // Аптеки — тоже личное: человек выбрал, где ему удобно покупать.
+        pharmacies: incoming.pharmacies ?? local.pharmacies,
         userNames: incoming.userNames ?? local.userNames,
         activeUser: incoming.activeUser ?? local.activeUser,
       }
