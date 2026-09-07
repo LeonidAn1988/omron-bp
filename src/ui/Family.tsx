@@ -17,6 +17,7 @@ import { describeBackupAge } from '../logic/backup'
 import { useState } from 'react'
 import { BackBar, Banner, Field } from './bits'
 import { authUrl } from '../logic/yandex'
+import { canShareFile, copyTextOut, shareTextOut } from '../logic/io'
 import type { FamilySyncStatus } from './useFamilySync'
 import { describeMerge } from './useFamilySync'
 
@@ -27,31 +28,72 @@ import { describeMerge } from './useFamilySync'
  * он лежал бы прямо в установленном приложении. Поэтому Яндекс показывает ключ
  * человеку, а тот его вставляет. Один раз примерно на год.
  */
+/**
+ * Передать ключ на второй телефон.
+ *
+ * Без этого настройка обрывалась на середине: ключ Яндекс показывает один раз
+ * на своей странице, в приложении он дальше не виден, а нужен на каждом
+ * телефоне семьи. Переписывать шестьдесят знаков с экрана на экран человек не
+ * станет — и правильно сделает.
+ */
+function KeyHandoff({ ключ }: { ключ: string }) {
+  const [видно, setВидно] = useState(false)
+  const [что, setЧто] = useState<'copied' | 'failed' | null>(null)
+
+  return (
+    <div style={{ marginTop: 'var(--space-4)' }}>
+      <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
+        Подключить ещё телефон
+      </div>
+      <div className="muted">Вставьте на нём этот же ключ — там, где вы вставляли его здесь.</div>
+      <div className="row" style={{ marginTop: 'var(--space-3)' }}>
+        <button
+          className="btn"
+          onClick={() => {
+            void copyTextOut(ключ).then((ok) => {
+              setЧто(ok ? 'copied' : 'failed')
+              setTimeout(() => setЧто(null), 2500)
+            })
+          }}
+        >
+          Скопировать ключ
+        </button>
+        {canShareFile() && (
+          <button className="btn" onClick={() => void shareTextOut(ключ, 'Ключ дневника здоровья')}>
+            Отправить
+          </button>
+        )}
+        <button className="btn btn--sm" onClick={() => setВидно((v) => !v)}>
+          {видно ? 'Скрыть' : 'Показать'}
+        </button>
+      </div>
+      {что === 'copied' && <div className="muted" style={{ marginTop: 'var(--space-2)' }}>Ключ скопирован.</div>}
+      {что === 'failed' && (
+        <div className="muted" style={{ marginTop: 'var(--space-2)' }}>Скопировать не вышло — нажмите «Показать».</div>
+      )}
+      {видно && <div className="keyline">{ключ}</div>}
+      <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
+        Ключ открывает папку с дневниками семьи. Отправляйте только своим.
+      </div>
+    </div>
+  )
+}
+
 function CloudConnect({ onConnect }: { onConnect: (pasted: string) => Promise<boolean> }) {
   const [вставлено, setВставлено] = useState('')
   const [идёт, setИдёт] = useState(false)
 
   return (
     <div className="stack" style={{ gap: 'var(--space-3)' }}>
-      <div className="muted">
-        Ключ один на семью: получите его в одном аккаунте Яндекса и вставьте на каждом телефоне. Папка заводится сама,
-        приложение видит только её. Дальше каждый телефон сам кладёт туда свой дневник и сам читает остальные.
-      </div>
-      <ol className="steps">
-        <li>
-          <a href={authUrl()} target="_blank" rel="noopener noreferrer">
-            Откройте страницу Яндекса
-          </a>{' '}
-          и разрешите доступ.
-        </li>
-        <li>Скопируйте показанный ключ и вставьте сюда.</li>
-        <li>Тот же ключ вставьте на других телефонах семьи.</li>
-      </ol>
-      <div className="muted">
-        Доступ выдаётся приложению, а не папке: делиться папкой в Яндексе не нужно и бесполезно — чужую папку
-        приложение не увидит. Аккаунт лучше завести отдельный, не тот, где почта.
-      </div>
-      <Field label="Ключ доступа">
+      <div className="muted">Один ключ на все телефоны семьи.</div>
+
+      {/* Кнопка, поле, кнопка — по порядку действий. Объяснение, почему это
+          устроено именно так, лежит под «Как это работает»: человек, который
+          пришёл настраивать, читать про папки приложения не собирался. */}
+      <a className="btn btn--primary" href={authUrl()} target="_blank" rel="noopener noreferrer">
+        1. Получить ключ на Яндексе
+      </a>
+      <Field label="2. Вставьте сюда ключ, который покажет Яндекс">
         <input
           value={вставлено}
           onChange={(event) => setВставлено(event.target.value)}
@@ -59,21 +101,29 @@ function CloudConnect({ onConnect }: { onConnect: (pasted: string) => Promise<bo
           autoComplete="off"
         />
       </Field>
-      <div className="row row--stack">
-        <button
-          className="btn btn--primary"
-          disabled={идёт || вставлено.trim() === ''}
-          onClick={() => {
-            setИдёт(true)
-            void onConnect(вставлено).then((ok) => {
-              setИдёт(false)
-              if (ok) setВставлено('')
-            })
-          }}
-        >
-          {идёт ? 'Проверяю…' : 'Подключить'}
-        </button>
-      </div>
+      <button
+        className="btn btn--primary"
+        disabled={идёт || вставлено.trim() === ''}
+        onClick={() => {
+          setИдёт(true)
+          void onConnect(вставлено).finally(() => {
+            setИдёт(false)
+            setВставлено('')
+          })
+        }}
+      >
+        {идёт ? 'Подключаю…' : '3. Подключить'}
+      </button>
+
+      <details>
+        <summary>Как это работает</summary>
+        <div className="muted" style={{ marginTop: 'var(--space-2)' }}>
+          Ключ открывает приложению одну папку на Диске — ту, что оно само и заведёт. Остального Диска оно не видит.
+          Папка принадлежит аккаунту, чей ключ вставлен, поэтому ключ у семьи один: с разными аккаунтами у каждого будет
+          своя папка, и друг друга вы не увидите. Отдельный аккаунт под это удобнее, чем тот, где ваша почта. Делиться
+          папкой средствами Яндекса не нужно и бесполезно — приложению доступна только своя.
+        </div>
+      </details>
     </div>
   )
 }
@@ -141,6 +191,11 @@ export function FamilyScreen({
                 ))}
               </ul>
             )}
+            {/* Второй телефон подключается тем же ключом — и это ровно то
+                место, где настройка встала: ключ показали один раз на странице
+                Яндекса, а перенести его было нечем. */}
+            {family.cloud.key && <KeyHandoff ключ={family.cloud.key} />}
+
             <div className="row row--stack" style={{ marginTop: 'var(--space-3)' }}>
               <button className="btn btn--primary" onClick={() => void family.syncNow()} disabled={family.busy}>
                 {family.busy ? 'Обмен идёт…' : 'Обменяться сейчас'}

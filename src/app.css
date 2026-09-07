@@ -498,6 +498,20 @@ a {
   width: 100%;
 }
 
+/* Ключ обмена целиком, когда его показывают глазами: моноширинный, с
+   переносом в любом месте — это не слово, а шестьдесят знаков подряд. */
+.keyline {
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--page);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--fs-1);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sheet[open] {
     animation: none;

@@ -52,6 +52,8 @@ export interface FamilySyncStatus {
     /** Умеет ли эта платформа читать чужие дневники. В браузере — нет. */
     canRead: boolean
     files: DiskFile[]
+    /** Ключ, которым подключён этот телефон: его же вставляют на остальных. */
+    key: string | null
     error: string | null
     connect: (pasted: string) => Promise<boolean>
     disconnect: () => void
@@ -379,7 +381,15 @@ export function useFamilySync({
     lastLog,
     unreadable,
     freshness,
-    cloud: { connected: cloudOn, canRead: cloudPort.canDownload(), files: cloudFiles, error: cloudError, connect, disconnect },
+    cloud: {
+      connected: cloudOn,
+      canRead: cloudPort.canDownload(),
+      files: cloudFiles,
+      key: cloudPort.token(),
+      error: cloudError,
+      connect,
+      disconnect,
+    },
     addSource,
     removeSource,
     syncNow: прочитать,
