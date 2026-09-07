@@ -194,7 +194,8 @@ export default function App() {
   /** Что открыто поверх аптечки. Форма выше карточки: из неё возвращаются в карточку. */
   const узелКарточки = stack.find((node) => node.kind === 'card')
   const узелФормы = stack.find((node) => node.kind === 'form')
-  const открытаяКоробка = узелКарточки && узелКарточки.kind === 'card' ? узелКарточки.id : null
+  const открытаяКоробка =
+    узелКарточки && узелКарточки.kind === 'card' ? { id: узелКарточки.id, edit: узелКарточки.edit } : null
   const открытаяФорма = узелФормы && узелФормы.kind === 'form' ? { id: узелФормы.id } : null
 
   /**
@@ -212,6 +213,18 @@ export default function App() {
 
   /** Открыть что-то поверх текущего экрана: карточку, форму, подэкран. */
   const открыть = useCallback((node: Node) => setStack((текущий) => push(текущий, node)), [])
+
+  /**
+   * Коробка из другого раздела: с «Обзора» и из списка покупок.
+   *
+   * Стек собирается целиком, а не кладётся поверх текущего: «Назад» из карточки
+   * обязана вернуть в аптечку, где эта коробка лежит, а не на «Обзор», где её
+   * уже нет в списке — она же только что перестала заканчиваться.
+   */
+  const открытьКоробку = useCallback(
+    (id: string) => setStack([...rootStack('cabinet'), { kind: 'card', id, edit: 'left' }]),
+    [],
+  )
 
   /** Снять уровень. `false` — снимать нечего, платформа свернёт приложение. */
   const назад = useCallback(() => {
@@ -1020,9 +1033,9 @@ export default function App() {
               аптечку, видел пустой экран с советом открыть тонометр. */}
           <TodayCard medicines={myMedicines} onOpen={() => setTab('intake')} />
 
-          <ShortageCard medicines={myMedicines} onOpen={() => setTab('cabinet')} />
+          <ShortageCard medicines={myMedicines} onOpen={() => setTab('cabinet')} onPick={открытьКоробку} />
 
-          <Restock medicines={myMedicines} pharmacies={settings.pharmacies ?? []} />
+          <Restock medicines={myMedicines} pharmacies={settings.pharmacies ?? []} onPick={открытьКоробку} />
 
           {!nudgeHidden.backup && (
             <BackupNudge
@@ -1224,7 +1237,7 @@ export default function App() {
             pharmacies={settings.pharmacies ?? []}
             card={открытаяКоробка}
             form={открытаяФорма}
-            onOpenCard={(id) => открыть({ kind: 'card', id })}
+            onOpenCard={(id, edit) => открыть({ kind: 'card', id, edit })}
             onEditCard={(id) => открыть({ kind: 'form', id })}
             onAdd={() => открыть({ kind: 'form', id: null })}
             onBack={назад}

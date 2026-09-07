@@ -18,6 +18,7 @@ import { cleanTradeName, pharmacyLinks, searchEngineUrl } from '../logic/pharmac
 import { platform } from '../platform/ports'
 import { plural } from '../logic/plural'
 import { NumberField } from './NumberField'
+import { MenuButton } from './Picker'
 import { Banner, BackBar } from './bits'
 import { PencilIcon, TrashIcon } from './icons'
 import { alertText, ALERT_TONE, KindTag, monthYear, substanceLabel, Supply } from './Medicines'
@@ -52,6 +53,7 @@ export function MedicineCard({
   onEdit,
   owner,
   pharmacies = [],
+  editLeft = false,
 }: {
   medicine: Medicine
   onBack: () => void
@@ -62,9 +64,19 @@ export function MedicineCard({
   owner?: string | null
   /** Выбранные аптеки: по кнопке на каждую. */
   pharmacies?: readonly string[]
+  /**
+   * Открыть сразу с полем остатка.
+   *
+   * Из «Заканчивается» и «Купить» приходят с одним намерением — вписать новое
+   * число. Показывать им карточку и заставлять искать кнопку значит вернуть то
+   * самое лишнее касание, ради которого строка и сделана нажимаемой.
+   */
+  editLeft?: boolean
 }) {
-  const [editingLeft, setEditingLeft] = useState(false)
-  const [leftValue, setLeftValue] = useState(String(medicine.left ?? ''))
+  const [editingLeft, setEditingLeft] = useState(editLeft)
+  const [leftValue, setLeftValue] = useState(
+    editLeft ? String(effectiveLeft(medicine, Date.now()) ?? '') : String(medicine.left ?? ''),
+  )
   const [confirming, setConfirming] = useState(false)
 
   const now = Date.now()
@@ -98,6 +110,7 @@ export function MedicineCard({
       : ''
 
   const аптеки = pharmacyLinks(medicine, pharmacies)
+  const поВеществу = аптеки.filter((а) => а.innHref)
 
   return (
     <div className="stack">
@@ -263,21 +276,21 @@ export function MedicineCard({
               Найти в аптеке
             </a>
           )}
-          {аптеки.some((a) => a.innHref) && (
+          {поВеществу.length > 0 && (
             // Запасной путь, когда торговое имя не находится: та же сеть, но
-            // по действующему веществу. Одна ссылка, не по одной на сеть.
-            <a
+            // по действующему веществу. Одной кнопкой, а не по кнопке на сеть:
+            // рядом уже стоит ряд аптек, и второй такой же ряд не читается.
+            // Куда идти, спрашиваем — молча вести в первую попавшуюся нельзя.
+            <MenuButton
               className="btn btn--sm"
-              href={аптеки.find((a) => a.innHref)!.innHref!}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(event) => {
-                event.preventDefault()
-                void platform().files.openExternal(аптеки.find((a) => a.innHref)!.innHref!)
+              title={`По веществу: ${cleanTradeName(medicine.inn ?? '')}`}
+              label="В какой аптеке искать"
+              options={поВеществу.map((а) => ({ id: а.id, title: а.name }))}
+              onPick={(id) => {
+                const сеть = поВеществу.find((а) => а.id === id)
+                if (сеть) void platform().files.openExternal(сеть.innHref!)
               }}
-            >
-              По веществу: {cleanTradeName(medicine.inn ?? '')}
-            </a>
+            />
           )}
           {confirming ? (
             <>

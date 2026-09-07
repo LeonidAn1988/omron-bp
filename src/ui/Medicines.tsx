@@ -17,6 +17,8 @@ import { monthYear, plural } from '../logic/plural'
 // Наружу — для карточки препарата: ей нужен тот же падеж.
 export { monthYear }
 import { pharmacyLinks } from '../logic/pharmacies'
+import { ChevronIcon } from './icons'
+import { MenuButton } from './Picker'
 import { platform } from '../platform/ports'
 import { canShareFile, copyTextOut, shareTextOut } from '../logic/io'
 import { Banner } from './bits'
@@ -201,7 +203,16 @@ export function TodayCard({ medicines, onOpen }: { medicines: Medicine[]; onOpen
  * «Заканчивается» на «Обзоре»: названия и сроки, а не «что-то заканчивается».
  * Пусто — карточки нет: спокойствие не нуждается в подтверждении.
  */
-export function ShortageCard({ medicines, onOpen }: { medicines: Medicine[]; onOpen: () => void }) {
+export function ShortageCard({
+  medicines,
+  onOpen,
+  onPick,
+}: {
+  medicines: Medicine[]
+  onOpen: () => void
+  /** Нажали на строку: открыть коробку сразу с полем остатка. */
+  onPick: (id: string) => void
+}) {
   const now = Date.now()
   const rows = sortMedicines(medicines, now)
     .map((medicine) => ({ medicine, alert: medicineAlert(medicine, now) }))
@@ -218,9 +229,20 @@ export function ShortageCard({ medicines, onOpen }: { medicines: Medicine[]; onO
       </div>
       <ul className="shortage">
         {rows.map(({ medicine, alert }) => (
-          <li key={medicine.id} className="shortage__row" data-tone={ALERT_TONE[alert.kind]}>
-            <span className="shortage__name">{medicine.name}</span>
-            <span className="shortage__why">{alertText(alert, medicine)}</span>
+          <li key={medicine.id}>
+            {/* Строка нажимается целиком: за пометкой «закончился» стоит одно
+                действие — вписать, сколько на самом деле осталось. Искать для
+                этого коробку в аптечке человек не должен. */}
+            <button
+              type="button"
+              className="shortage__row"
+              data-tone={ALERT_TONE[alert.kind]}
+              onClick={() => onPick(medicine.id)}
+            >
+              <span className="shortage__name">{medicine.name}</span>
+              <span className="shortage__why">{alertText(alert, medicine)}</span>
+              <ChevronIcon />
+            </button>
           </li>
         ))}
       </ul>
@@ -245,12 +267,15 @@ export function Restock({
   medicines,
   ownerName,
   pharmacies = [],
+  onPick,
 }: {
   medicines: Medicine[]
   /** Чья коробка — в сводном списке семьи. Пусто, когда человек один. */
   ownerName?: (medicine: Medicine) => string | null
   /** Выбранные аптеки: под каждой строкой появятся ссылки на поиск. */
   pharmacies?: readonly string[]
+  /** Нажали на название: открыть коробку сразу с полем остатка. */
+  onPick: (id: string) => void
 }) {
   // Все состояния объявлены до единственного выхода ниже. Иначе при пустом
   // списке покупок React насчитывает меньше хуков, чем в прошлый раз, и роняет
@@ -286,7 +311,11 @@ export function Restock({
         {list.map(({ medicine, reason, need }) => (
           <li key={medicine.id} className="buy__row">
             <span className="buy__body">
-              <span className="buy__name">{medicine.name}</span>
+              {/* Нажимается имя, а не вся строка: внутри уже лежат ссылки на
+                  аптеки, а кнопка внутри кнопки — сломанная разметка. */}
+              <button type="button" className="buy__name buy__name--link" onClick={() => onPick(medicine.id)}>
+                {medicine.name}
+              </button>
               {/* Имя владельца в строке покупок: без него список «что купить»
                   на всю семью не говорит, кому именно, а в аптеке это и есть
                   главный вопрос — брать одну пачку или две. */}
@@ -319,18 +348,19 @@ export function Restock({
                     {аптека.name}
                   </a>
                 ))}
-                {pharmacyLinks(medicine, pharmacies).find((a) => a.innHref) && (
-                  <a
-                    href={pharmacyLinks(medicine, pharmacies).find((a) => a.innHref)!.innHref!}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(event) => {
-                      event.preventDefault()
-                      void platform().files.openExternal(pharmacyLinks(medicine, pharmacies).find((a) => a.innHref)!.innHref!)
+                {pharmacyLinks(medicine, pharmacies).some((a) => a.innHref) && (
+                  <MenuButton
+                    className="buy__inn-link"
+                    title="по веществу"
+                    label="В какой аптеке искать"
+                    options={pharmacyLinks(medicine, pharmacies)
+                      .filter((a) => a.innHref)
+                      .map((a) => ({ id: a.id, title: a.name }))}
+                    onPick={(id) => {
+                      const сеть = pharmacyLinks(medicine, pharmacies).find((a) => a.id === id)
+                      if (сеть?.innHref) void platform().files.openExternal(сеть.innHref)
                     }}
-                  >
-                    по веществу
-                  </a>
+                  />
                 )}
               </span>
             )}

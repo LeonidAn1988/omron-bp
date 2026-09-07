@@ -9,6 +9,16 @@ import { useId } from 'react'
  *
  * Десятичный разделитель принимается любой: на русской раскладке набирают запятую.
  */
+/**
+ * Убрать ведущие нули: «028» — это 28, а не «ноль двадцать восемь».
+ *
+ * Режем только перед цифрой, иначе пропадёт «0» в «0,5» и сам одиночный ноль,
+ * который человек, может быть, как раз и вводит.
+ */
+function вычистить(raw: string): string {
+  return raw.replace(/^(\s*)0+(?=\d)/, '$1')
+}
+
 export function NumberField({
   label,
   value,
@@ -51,6 +61,8 @@ export function NumberField({
   const id = useId()
   const parsed = Number(value.replace(',', '.'))
   const known = Number.isFinite(parsed) && value.trim() !== ''
+  /** Ноль — «пусто», а не число: дописывать к нему нечего. */
+  const пустышка = value.trim() === '0' || value.trim() === '0,0' || value.trim() === '0.0'
 
   const nudge = (direction: 1 | -1) => {
     onChange((prev) => {
@@ -87,7 +99,14 @@ export function NumberField({
           inputMode={decimals > 0 ? 'decimal' : 'numeric'}
           autoComplete="off"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => onChange(вычистить(e.target.value))}
+          onFocus={(e) => {
+            // Поле остатка почти всегда открывают на нуле: коробка кончилась, и
+            // человек вводит новое число. Курсор вставал в конец, «28» давало
+            // «028». Ноль выделяем — первая же цифра его затирает. У обычного
+            // числа выделять нельзя: там как раз правят одну цифру.
+            if (пустышка) e.currentTarget.select()
+          }}
           placeholder={placeholder}
           required={required}
           autoFocus={autoFocus}

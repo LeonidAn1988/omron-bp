@@ -90,10 +90,11 @@ export function Cabinet({
    * место, где живёт вся глубина. Заодно уход на другую вкладку и обратно
    * больше не теряет открытую коробку — раньше её стирало размонтирование.
    */
-  card?: string | null
+  card?: { id: string; edit?: 'left' } | null
   /** Открытая форма: `id` — правка коробки, `null` внутри объекта — новая. */
   form?: { id: string | null } | null
-  onOpenCard: (id: string) => void
+  /** `edit: 'left'` — открыть карточку сразу с полем остатка. */
+  onOpenCard: (id: string, edit?: 'left') => void
   onEditCard: (id: string) => void
   onAdd: () => void
   onBack: () => void
@@ -137,7 +138,8 @@ export function Cabinet({
   }
 
   const now = Date.now()
-  const opened = видимые.find((item) => item.id === card) ?? allMedicines.find((item) => item.id === card) ?? null
+  const opened =
+    видимые.find((item) => item.id === card?.id) ?? allMedicines.find((item) => item.id === card?.id) ?? null
 
   if (form) {
     const item = allMedicines.find((m) => m.id === form.id)
@@ -169,6 +171,7 @@ export function Cabinet({
         pharmacies={pharmacies}
         onBack={onBack}
         onSave={onSave}
+        editLeft={card?.edit === 'left'}
         onEdit={() => onEditCard(opened.id)}
         onDelete={async () => {
           await onDelete(opened.id)
@@ -198,7 +201,12 @@ export function Cabinet({
 
   return (
     <div className="stack">
-      <Restock medicines={видимые} ownerName={имяВладельца} pharmacies={pharmacies} />
+      <Restock
+        medicines={видимые}
+        ownerName={имяВладельца}
+        pharmacies={pharmacies}
+        onPick={(id) => onOpenCard(id, 'left')}
+      />
 
       <div className="card">
         <div className="card__head">

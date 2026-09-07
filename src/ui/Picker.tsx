@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode, type RefObject } from 'react'
 import { FunnelIcon } from './icons'
 
 /**
- * Фильтр одной кнопкой: воронка, выбранное значение, лист со списком.
+ * Выбор списком снизу: фильтр с видимым значением и меню без него.
  *
  * Раньше на месте фильтра стоял ряд кнопок — по кнопке на человека и по кнопке
  * на срок запаса. Ряд честно показывал все варианты сразу, но рос вместе с
@@ -21,6 +21,85 @@ import { FunnelIcon } from './icons'
  * ширину экрана, строки в нём по 44 пикселя, и системный `<dialog>` сам даёт
  * Esc, возврат фокуса и затемнение позади.
  */
+
+/** Один вариант в листе. */
+export interface PickOption {
+  id: string
+  title: string
+  /** Пояснение второй строкой — когда одного названия мало. */
+  hint?: string
+  /** Отделить чертой: вариант не из того же ряда, что соседи. */
+  apart?: boolean
+}
+
+/**
+ * Сам лист. Общий для обеих кнопок: поведение у них обязано быть одинаковым,
+ * а различаются они только тем, что нарисовано на кнопке и в строках.
+ */
+function Sheet({
+  dialogRef,
+  label,
+  children,
+}: {
+  dialogRef: RefObject<HTMLDialogElement | null>
+  label: string
+  children: ReactNode
+}) {
+  // Приложение ведёт свою историю экранов, и аппаратная «Назад» на телефоне
+  // может снять экран из-под открытого листа. Тогда лист закрываем сами —
+  // иначе он повиснет над разделом, к которому уже не относится.
+  useEffect(() => {
+    const el = dialogRef.current
+    if (!el) return
+    const закрыть = () => el.close()
+    window.addEventListener('popstate', закрыть)
+    return () => window.removeEventListener('popstate', закрыть)
+  }, [dialogRef])
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="sheet"
+      aria-label={label}
+      // Клик мимо списка — по самому `<dialog>`, а не по его содержимому:
+      // затемнение и есть элемент, лист внутри перехватывает своё.
+      onClick={(event) => {
+        if (event.target === dialogRef.current) dialogRef.current?.close()
+      }}
+    >
+      <div className="sheet__body">
+        <p className="sheet__title">{label}</p>
+        <div className="sheet__list">{children}</div>
+        <button type="button" className="btn sheet__close" onClick={() => dialogRef.current?.close()}>
+          Закрыть
+        </button>
+      </div>
+    </dialog>
+  )
+}
+
+/** Строка листа. Место под галочку держится всегда, чтобы подписи не съезжали. */
+function Row({ option, chosen, onPick }: { option: PickOption; chosen: boolean | null; onPick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="sheet__row"
+      data-apart={option.apart ? '' : undefined}
+      aria-pressed={chosen === null ? undefined : chosen}
+      onClick={onPick}
+    >
+      <span className="sheet__mark" aria-hidden="true">
+        {chosen ? '✓' : ''}
+      </span>
+      <span className="sheet__name">
+        {option.title}
+        {option.hint && <span className="sheet__hint">{option.hint}</span>}
+      </span>
+    </button>
+  )
+}
+
+/** Фильтр: воронка, выбранное значение и список, где оно отмечено. */
 export function FilterButton({
   label,
   selected,
@@ -31,23 +110,10 @@ export function FilterButton({
   label: string
   /** Что выбрано — по ключу, а не по подписи: двух Саш в семье не запретишь. */
   selected: string
-  /** `apart` отделяет вариант чертой: он не из того же ряда, что соседи. */
-  options: { id: string; title: string; hint?: string; apart?: boolean }[]
+  options: PickOption[]
   onPick: (id: string) => void
 }) {
   const лист = useRef<HTMLDialogElement>(null)
-
-  // Приложение ведёт свою историю экранов, и аппаратная «Назад» на телефоне
-  // может снять экран из-под открытого листа. Тогда лист закрываем сами —
-  // иначе он повиснет над разделом, к которому уже не относится.
-  useEffect(() => {
-    const el = лист.current
-    if (!el) return
-    const закрыть = () => el.close()
-    window.addEventListener('popstate', закрыть)
-    return () => window.removeEventListener('popstate', закрыть)
-  }, [])
-
   const выбран = options.find((item) => item.id === selected) ?? options[0]
   const value = выбран?.title ?? ''
 
@@ -67,46 +133,75 @@ export function FilterButton({
         <span className="filterbtn__value">{value}</span>
       </button>
 
-      <dialog
-        ref={лист}
-        className="sheet"
-        aria-label={label}
-        // Клик мимо списка — по самому `<dialog>`, а не по его содержимому:
-        // затемнение и есть элемент, лист внутри перехватывает своё.
-        onClick={(event) => {
-          if (event.target === лист.current) лист.current?.close()
-        }}
+      <Sheet dialogRef={лист} label={label}>
+        {options.map((item) => (
+          <Row
+            key={item.id}
+            option={item}
+            chosen={item.id === выбран?.id}
+            onPick={() => {
+              onPick(item.id)
+              лист.current?.close()
+            }}
+          />
+        ))}
+      </Sheet>
+    </>
+  )
+}
+
+/**
+ * Кнопка со списком, куда пойти: выбранного значения у неё нет.
+ *
+ * Нужна там, где вариантов несколько, а «текущего» среди них не бывает: поиск
+ * по действующему веществу в одной из подключённых аптек. Раньше такая ссылка
+ * молча вела в первую попавшуюся сеть — человек с двумя аптеками всегда
+ * попадал в одну и ту же и не понимал, почему во вторую не попасть.
+ */
+export function MenuButton({
+  title,
+  label,
+  className = 'btn',
+  options,
+  onPick,
+}: {
+  /** Надпись на кнопке. */
+  title: string
+  /** Заголовок листа: чем этот список отличается от соседнего. */
+  label: string
+  className?: string
+  options: PickOption[]
+  onPick: (id: string) => void
+}) {
+  const лист = useRef<HTMLDialogElement>(null)
+  // Один вариант — выбирать не из чего, и лист был бы лишним касанием.
+  const одна = options.length <= 1
+
+  return (
+    <>
+      <button
+        type="button"
+        className={className}
+        aria-haspopup={одна ? undefined : 'dialog'}
+        onClick={() => (одна ? options[0] && onPick(options[0].id) : лист.current?.showModal())}
       >
-        <div className="sheet__body">
-          <p className="sheet__title">{label}</p>
-          <div className="sheet__list">
-            {options.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="sheet__row"
-                data-apart={item.apart ? '' : undefined}
-                aria-pressed={item.id === выбран?.id}
-                onClick={() => {
-                  onPick(item.id)
-                  лист.current?.close()
-                }}
-              >
-                <span className="sheet__mark" aria-hidden="true">
-                  {item.id === выбран?.id ? '✓' : ''}
-                </span>
-                <span className="sheet__name">
-                  {item.title}
-                  {item.hint && <span className="sheet__hint">{item.hint}</span>}
-                </span>
-              </button>
-            ))}
-          </div>
-          <button type="button" className="btn sheet__close" onClick={() => лист.current?.close()}>
-            Закрыть
-          </button>
-        </div>
-      </dialog>
+        {title}
+      </button>
+      {!одна && (
+        <Sheet dialogRef={лист} label={label}>
+          {options.map((item) => (
+            <Row
+              key={item.id}
+              option={item}
+              chosen={null}
+              onPick={() => {
+                onPick(item.id)
+                лист.current?.close()
+              }}
+            />
+          ))}
+        </Sheet>
+      )}
     </>
   )
 }

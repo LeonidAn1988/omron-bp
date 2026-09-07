@@ -1940,6 +1940,20 @@ tbody tr:hover {
 .buy__name {
   font-weight: 600;
 }
+/* Название в списке покупок ведёт в коробку. Подчёркиванием, а не кнопкой:
+   рядом в той же строке лежат ссылки аптек, и второй прямоугольник рядом с
+   ними читался бы как ещё одна аптека. */
+.buy__name--link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .buy__dose {
   font-size: var(--fs-1);
   color: var(--text-secondary);
@@ -1977,11 +1991,24 @@ tbody tr:hover {
   flex-wrap: wrap;
   gap: 0 var(--space-4);
 }
-.buy__where a {
+.buy__where a,
+.buy__inn-link {
   min-height: var(--tap);
   display: inline-flex;
   align-items: center;
   font-size: var(--fs-1);
+}
+/* «по веществу» стоит в одном ряду со ссылками аптек и обязано выглядеть так
+   же: это тоже переход в аптеку, только другим запросом. Что за ним список, а
+   не одна сеть, человек узнаёт по листу — обещать это подписью незачем. */
+.buy__inn-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-family: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .buy__need {
@@ -2753,7 +2780,34 @@ kbd {
   color: var(--text-muted);
 }
 .shortage__row {
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
+  /* Строка стала кнопкой: сбрасываем всё, что браузер даёт кнопке по
+     умолчанию, и оставляем цель для пальца во всю ширину карточки. */
+  width: 100%;
+  border-left: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  min-height: var(--tap);
+}
+.shortage__row:hover {
+  background: var(--hover);
+}
+.shortage__row svg {
+  /* Размер явно: `ChevronIcon` своих не имеет и без правила схлопывается в
+     ноль — ровно то, что уже чинили у кнопки «Назад». */
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+  align-self: center;
+}
+.shortage__row:hover svg {
+  color: var(--accent);
 }
 .shortage__why {
   color: var(--text-secondary);
