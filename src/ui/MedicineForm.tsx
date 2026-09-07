@@ -300,12 +300,11 @@ export function MedicineForm({
         value={name}
         onChange={(next) => {
           setName(next)
-          // Правка названия руками отвязывает карточку от реестра: форма и
-          // варианты могли относиться к другому препарату. Вещество остаётся:
-          // опечатку в названии правят чаще, чем меняют сам препарат, а без
-          // вещества поиск в аптеке теряет запасной путь «по бисопрололу».
-          setForm('')
-          setMaker('')
+          // Правка названия руками отвязывает карточку от реестра: варианты
+          // могли относиться к другому препарату. Сами поля не трогаем —
+          // теперь они видимые и заполнены человеком либо справочником, и
+          // стирать их за спиной нельзя: опечатку в названии правят чаще, чем
+          // меняют сам препарат.
           setKind(undefined)
           setVariants([])
           setPacks([])
@@ -328,12 +327,6 @@ export function MedicineForm({
         }}
       />
 
-      {inn && inn.toLowerCase() !== name.trim().toLowerCase() && (
-        <div className="muted" style={{ marginTop: 'calc(-1 * var(--space-2))' }}>
-          {substanceLabel(kind)}: <b>{inn}</b>
-        </div>
-      )}
-
       <VariantPicker
         variants={variants}
         form={form}
@@ -352,7 +345,24 @@ export function MedicineForm({
         <input value={dose} onChange={(e) => setDose(e.target.value)} placeholder="50 мг" />
       </Field>
 
-      {form && <div className="muted" style={{ marginTop: 'calc(-1 * var(--space-2))' }}>Форма: {form}</div>}
+      {/* Форма, вещество и производитель — обычные поля, а не подписи.
+          Подписью они были потому, что приходили из справочника; но справочник
+          знает не всё, и препарат, заведённый руками или привезённый из-за
+          границы, оставался без формы навсегда: в правке этих строк просто не
+          было. Чипы из справочника выше никуда не делись — они заполняют поле,
+          а не заменяют его. */}
+      <Field label="Форма выпуска">
+        <input value={form} onChange={(e) => setForm(e.target.value)} placeholder="Таблетки" />
+      </Field>
+
+      <div className="grid grid--two">
+        <Field label={substanceLabel(kind)}>
+          <input value={inn} onChange={(e) => setInn(e.target.value)} placeholder="Бисопролол" />
+        </Field>
+        <Field label="Производитель">
+          <input value={maker} onChange={(e) => setMaker(e.target.value)} placeholder="не указан" />
+        </Field>
+      </div>
 
       <div>
         <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>

@@ -819,11 +819,27 @@ export function restockText(
  * Прибавить упаковку к остатку.
  *
  * Пересчитывать пачку в уме и набирать число после каждой покупки человек не
- * станет, а несписанный остаток врёт. Размер упаковки берётся из справочника.
+ * станет, а несписанный остаток врёт. Размер по умолчанию — из справочника,
+ * но купить можно и другую пачку: в аптеке берут то, что есть.
+ *
+ * Складываем с расчётным остатком, а не с подтверждённым. Подтверждённый —
+ * это снимок на дату `leftAt`, и всё выпитое с тех пор в нём не учтено: пачка,
+ * купленная через неделю после последней правки, добавляла бы себе ещё и эти
+ * семь дней. Та же причина, по которой расчётный остаток берёт отметка приёма.
  */
-export function addPack(medicine: Medicine, now: number): Medicine {
-  if (!medicine.packSize) return medicine
-  return { ...medicine, left: (medicine.left ?? 0) + medicine.packSize, leftAt: now }
+export function addPack(medicine: Medicine, now: number, size?: number): Medicine {
+  const pack = size ?? medicine.packSize
+  if (!pack || pack <= 0) return medicine
+  const base = projectedLeft(medicine, now) ?? 0
+  return {
+    ...medicine,
+    left: base + Math.round(pack),
+    leftAt: now,
+    // Купленная пачка становится обычной: и кнопка, и список покупок должны
+    // говорить о той упаковке, которую человек берёт сейчас, а не о той,
+    // которую однажды подсказал справочник.
+    packSize: Math.round(pack),
+  }
 }
 
 /** Сколько упаковок купить: в аптеке спрашивают пачками, а не таблетками. */

@@ -73,6 +73,8 @@ export function MedicineCard({
    */
   editLeft?: boolean
 }) {
+  const [addingPack, setAddingPack] = useState(false)
+  const [packValue, setPackValue] = useState(String(medicine.packSize ?? ''))
   const [editingLeft, setEditingLeft] = useState(editLeft)
   const [leftValue, setLeftValue] = useState(
     editLeft ? String(effectiveLeft(medicine, Date.now()) ?? '') : String(medicine.left ?? ''),
@@ -138,25 +140,75 @@ export function MedicineCard({
 
         {showSupply && <Supply days={supply!} until={runsOutAt(medicine, now)} />}
 
-        {/* Обе кнопки про остаток, и выглядеть они должны одинаково. */}
+        {/* Все кнопки про остаток, и выглядеть они должны одинаково. */}
         <div className="row row--stack" style={{ marginTop: 'var(--space-4)' }}>
           {medicine.packSize ? (
             <button className="btn btn--primary" onClick={() => void onSave(addPack(medicine, Date.now()))}>
               Купил упаковку — {medicine.packSize} шт.
             </button>
           ) : null}
+          {/* Третьей кнопкой, а не парой в строку: две кнопки разной длины
+              рядом дают ту самую лесенку, ради которой здесь и появился
+              столбик во всю ширину. */}
+          <button
+            className="btn"
+            onClick={() => {
+              // Размер подставляем привычный: чаще всего это поле открывают,
+              // чтобы поменять 30 на 60, а не набрать число с нуля.
+              if (!addingPack) setPackValue(String(medicine.packSize ?? ''))
+              setEditingLeft(false)
+              setAddingPack((open) => !open)
+            }}
+          >
+            {medicine.packSize ? 'Другая упаковка' : 'Купил упаковку'}
+          </button>
           <button
             className="btn"
             onClick={() => {
               // Поле заполняется при открытии редактора, а не при показе
               // карточки: остаток к этому моменту мог списаться расписанием.
               if (!editingLeft) setLeftValue(String(effectiveLeft(medicine, Date.now()) ?? ''))
+              setAddingPack(false)
               setEditingLeft((open) => !open)
             }}
           >
             Поправить остаток
           </button>
         </div>
+
+        {addingPack && (
+          <form
+            className="pill__left-edit"
+            onSubmit={async (event) => {
+              event.preventDefault()
+              const parsed = Number(packValue.replace(',', '.'))
+              if (!Number.isFinite(parsed) || parsed <= 0) return
+              await onSave(addPack(medicine, Date.now(), parsed))
+              setAddingPack(false)
+            }}
+          >
+            <div style={{ maxWidth: 170 }}>
+              <NumberField
+                label="Штук в новой пачке"
+                value={packValue}
+                onChange={setPackValue}
+                min={1}
+                max={500}
+                start={30}
+                size="compact"
+                autoFocus
+              />
+            </div>
+            <div className="row">
+              <button type="submit" className="btn btn--primary btn--sm">
+                Добавить
+              </button>
+              <button type="button" className="btn btn--sm" onClick={() => setAddingPack(false)}>
+                Отмена
+              </button>
+            </div>
+          </form>
+        )}
 
         {editingLeft && (
           <form

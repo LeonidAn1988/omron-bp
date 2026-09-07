@@ -401,6 +401,15 @@ export function run() {
   check('пустой остаток становится упаковкой', addPack(med({ left: null, packSize: 30 }), now).left === 30)
   check('без размера упаковки ничего не меняется', addPack(med({ left: 4 }), now).left === 4)
   check('дата подтверждения обновилась', addPack(med({ left: 4, packSize: 30 }), now).leftAt === now)
+  // Пачка складывается с расчётным остатком, а не с подтверждённым. Иначе
+  // покупка через неделю после последней правки возвращала бы выпитое за эту
+  // неделю: 30 подтверждённых минус 7 выпитых плюс пачка = 53, а не 60.
+  const черезНеделю = med({ left: 30, leftAt: now - 7 * DAY, perDay: 1, packSize: 30 })
+  check('пачка не воскрешает выпитое за дни без правок', addPack(черезНеделю, now).left === 53)
+  check('другая пачка прибавляется своим числом', addPack(med({ left: 4, packSize: 30 }), now, 60).left === 64)
+  check('купленная пачка становится обычной', addPack(med({ left: 4, packSize: 30 }), now, 60).packSize === 60)
+  check('без размера, но с указанной пачкой — считаем', addPack(med({ left: 4 }), now, 20).left === 24)
+  check('ноль пачкой не считается', addPack(med({ left: 4, packSize: 30 }), now, 0).left === 4)
   check('пачек берём с округлением вверх', packsNeeded(med({ packSize: 30 }), 31) === 2)
   check('ровно упаковка — одна пачка', packsNeeded(med({ packSize: 30 }), 30) === 1)
   check('без размера упаковки пачки не считаем', packsNeeded(med({}), 30) === null)
