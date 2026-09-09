@@ -436,18 +436,36 @@ export function MedicineForm({
                 size="compact"
               />
             </div>
-            <div className="segmented" role="group" aria-label="Отношение к еде">
-              {MEALS.map(({ key, title }) => (
-                <button
-                  key={title}
-                  type="button"
-                  aria-pressed={meal === key || (key === undefined && !meal)}
-                  onClick={() => setMeal(key)}
-                >
-                  {title}
-                </button>
-              ))}
+            <div style={{ flex: '1 1 12rem', minWidth: 0 }}>
+              {/* Подпись обязательна. Три кнопки без неё стояли рядом с «штук
+                  за приём», и было непонятно ни что они значат, ни что даст
+                  выбор. «Условия приёма» — потому что еда здесь не
+                  единственное возможное условие, а первое из них. */}
+              <div className="tile__label" style={{ marginBottom: 'var(--space-2)' }}>
+                Условия приёма
+              </div>
+              <div className="segmented" role="group" aria-label="Условия приёма">
+                {MEALS.map(({ key, title }) => (
+                  <button
+                    key={title}
+                    type="button"
+                    aria-pressed={meal === key || (key === undefined && !meal)}
+                    onClick={() => setMeal(key)}
+                  >
+                    {title}
+                  </button>
+                ))}
+              </div>
             </div>
+          </div>
+        )}
+        {times.length > 0 && meal && (
+          // Что человек получит за этот выбор — прямым текстом. Иначе кнопка
+          // нажата, а результат всплывает через сутки в уведомлении, и связать
+          // одно с другим уже нечем.
+          <div className="muted">
+            «{meal === 'before' ? 'до еды' : 'после еды'}» будет приписано в напоминании, на экране приёма и в отчёте
+            врачу.
           </div>
         )}
       </div>

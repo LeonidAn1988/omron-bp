@@ -1944,7 +1944,7 @@ tbody tr:hover {
   border-top: 0;
 }
 .buy__body {
-  min-width: 0;
+  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
@@ -1954,19 +1954,33 @@ tbody tr:hover {
 .buy__name {
   font-weight: 600;
 }
-/* Название в списке покупок ведёт в коробку. Подчёркиванием, а не кнопкой:
-   рядом в той же строке лежат ссылки аптек, и второй прямоугольник рядом с
-   ними читался бы как ещё одна аптека. */
-.buy__name--link {
+/* Строка покупки открывается так же, как коробка в аптечке: тем же шевроном и
+   той же целью во всю ширину. Отдельный вид для одного и того же действия
+   заставлял бы человека узнавать его дважды. */
+.buy__open {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--tap);
   padding: 0;
   border: 0;
-  background: none;
-  color: var(--accent);
+  background: transparent;
+  color: inherit;
   font: inherit;
-  font-weight: 600;
   text-align: left;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.buy__open svg {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  align-self: center;
+  color: var(--text-muted);
+}
+.buy__open:hover svg {
+  color: var(--accent);
 }
 .buy__dose {
   font-size: var(--fs-1);
@@ -2026,8 +2040,7 @@ tbody tr:hover {
 }
 
 .buy__need {
-  grid-column: 2;
-  grid-row: 1;
+  flex: 0 0 auto;
   text-align: right;
   font-weight: 700;
   font-variant-numeric: tabular-nums;

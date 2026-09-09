@@ -17,12 +17,14 @@
  * проверяются тестами без браузера, и разойтись двум их копиям негде.
  */
 
+import { useState } from 'react'
 import type { Measurement, Medicine, Settings as SettingsData } from '../types'
 import { Reminders } from './Reminders'
 import type { ImportResult } from '../logic/io'
 import { platform } from '../platform/ports'
 import { activePersonOf, glucoseTargetsOf, targetsOf } from '../logic/people'
-import { BackBar, NavRow, Reveal, Field } from './bits'
+import { BackBar, NavRow, Reveal } from './bits'
+import { NumberField } from './NumberField'
 import { About } from './About'
 import { parseChangelog } from '../logic/changelog'
 import changelogSource from '../../CHANGELOG.md?raw'
@@ -213,6 +215,63 @@ function PharmaciesScreen({ settings, onPatch, onBack }: Общее & { onBack: 
   )
 }
 
+/**
+ * Поле нормы: своя строка внутри, в настройки уходит только готовое число.
+ *
+ * Управлять таким полем прямо из настроек нельзя, и это не мелочь. Прежде здесь
+ * стояли голые `input` с `Number(e.target.value) || 135`: поле не очищалось,
+ * набранное дописывалось к прежнему, и попытка поставить назначенные врачом 120
+ * давала цель 135120 — она сохранялась без проверки, а «в цели» после этого
+ * показывало сто процентов всегда. Первая попытка починки — обрезать по
+ * границам прямо в обработчике — сломала набор иначе: «13» на пути к «135»
+ * обрезалось до минимума, и до трёх знаков было не дойти.
+ *
+ * Поэтому строку поле держит своё, а наружу отдаёт только то, что разобралось
+ * и попало в границы. Незаконченное «12» просто не уходит никуда.
+ */
+function NormField({
+  label,
+  value,
+  min,
+  max,
+  start,
+  step,
+  decimals = 0,
+  onCommit,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  start: number
+  step?: number
+  decimals?: number
+  onCommit: (next: number) => void
+}) {
+  const показать = (n: number) => (decimals > 0 ? n.toFixed(decimals).replace('.', ',') : String(n))
+  const [текст, setТекст] = useState(() => показать(value))
+
+  return (
+    <NumberField
+      label={label}
+      value={текст}
+      onChange={(действие) => {
+        // Кнопки «−» и «+» присылают не строку, а как её изменить.
+        const набрано = typeof действие === 'function' ? действие(текст) : действие
+        setТекст(набрано)
+        const n = Number(набрано.replace(',', '.'))
+        if (набрано.trim() !== '' && Number.isFinite(n) && n >= min && n <= max) onCommit(n)
+      }}
+      min={min}
+      max={max}
+      start={start}
+      step={step}
+      decimals={decimals}
+      size="compact"
+    />
+  )
+}
+
 /** Нормы: целевое давление и дневник сахара с порогами — у каждого свои. */
 function TargetsScreen({ settings, onPatch, onBack }: Общее & { onBack: () => void }) {
   const кто = activePersonOf(settings)
@@ -231,20 +290,24 @@ function TargetsScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
         </div>
 
         <div className="grid grid--two">
-          <Field label="Верхнее">
-            <input
-              inputMode="numeric"
-              value={цель.sys}
-              onChange={(e) => onPatch(setTargets(settings, кто?.id ?? null, { ...цель, sys: Number(e.target.value) || 135 }))}
-            />
-          </Field>
-          <Field label="Нижнее">
-            <input
-              inputMode="numeric"
-              value={цель.dia}
-              onChange={(e) => onPatch(setTargets(settings, кто?.id ?? null, { ...цель, dia: Number(e.target.value) || 85 }))}
-            />
-          </Field>
+          <NormField
+            key={`sys-${кто?.id ?? 'один'}`}
+            label="Верхнее"
+            value={цель.sys}
+            min={80}
+            max={200}
+            start={135}
+            onCommit={(sys) => onPatch(setTargets(settings, кто?.id ?? null, { ...цель, sys }))}
+          />
+          <NormField
+            key={`dia-${кто?.id ?? 'один'}`}
+            label="Нижнее"
+            value={цель.dia}
+            min={40}
+            max={130}
+            start={85}
+            onCommit={(dia) => onPatch(setTargets(settings, кто?.id ?? null, { ...цель, dia }))}
+          />
         </div>
         <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
           135/85 — порог для измерений дома, он ниже кабинетного 140/90. Врач мог назначить другой.
@@ -271,48 +334,39 @@ function TargetsScreen({ settings, onPatch, onBack }: Общее & { onBack: () 
 
         <Reveal open={settings.trackGlucose}>
           <div className="grid grid--two" style={{ marginTop: 'var(--space-4)' }}>
-            <Field label="Норма натощак, ммоль/л">
-              <input
-                inputMode="decimal"
-                value={сахар.fastingMax}
-                onChange={(e) =>
-                  onPatch(
-                    setGlucoseTargets(settings, кто?.id ?? null, {
-                      ...сахар,
-                      fastingMax: Number(e.target.value.replace(',', '.')) || 7,
-                    }),
-                  )
-                }
-              />
-            </Field>
-            <Field label="Через 2 часа после еды">
-              <input
-                inputMode="decimal"
-                value={сахар.postMealMax}
-                onChange={(e) =>
-                  onPatch(
-                    setGlucoseTargets(settings, кто?.id ?? null, {
-                      ...сахар,
-                      postMealMax: Number(e.target.value.replace(',', '.')) || 10,
-                    }),
-                  )
-                }
-              />
-            </Field>
-            <Field label="Порог низкого сахара">
-              <input
-                inputMode="decimal"
-                value={сахар.low}
-                onChange={(e) =>
-                  onPatch(
-                    setGlucoseTargets(settings, кто?.id ?? null, {
-                      ...сахар,
-                      low: Number(e.target.value.replace(',', '.')) || 3.9,
-                    }),
-                  )
-                }
-              />
-            </Field>
+            <NormField
+              key={`fastingMax-${кто?.id ?? 'один'}`}
+              label="Норма натощак, ммоль/л"
+              value={сахар.fastingMax}
+              min={3}
+              max={20}
+              start={7}
+              step={0.1}
+              decimals={1}
+              onCommit={(fastingMax) => onPatch(setGlucoseTargets(settings, кто?.id ?? null, { ...сахар, fastingMax }))}
+            />
+            <NormField
+              key={`postMealMax-${кто?.id ?? 'один'}`}
+              label="Через 2 часа после еды"
+              value={сахар.postMealMax}
+              min={3}
+              max={25}
+              start={10}
+              step={0.1}
+              decimals={1}
+              onCommit={(postMealMax) => onPatch(setGlucoseTargets(settings, кто?.id ?? null, { ...сахар, postMealMax }))}
+            />
+            <NormField
+              key={`low-${кто?.id ?? 'один'}`}
+              label="Порог низкого сахара"
+              value={сахар.low}
+              min={2}
+              max={6}
+              start={3.9}
+              step={0.1}
+              decimals={1}
+              onCommit={(low) => onPatch(setGlucoseTargets(settings, кто?.id ?? null, { ...сахар, low }))}
+            />
           </div>
           <div className="muted" style={{ marginTop: 'var(--space-3)' }}>
             Значения по умолчанию — общие ориентиры. При диабете цели назначает врач.

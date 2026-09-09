@@ -310,24 +310,43 @@ export function Restock({
       <ul className="buy">
         {list.map(({ medicine, reason, need }) => (
           <li key={medicine.id} className="buy__row">
-            <span className="buy__body">
-              {/* Нажимается имя, а не вся строка: внутри уже лежат ссылки на
-                  аптеки, а кнопка внутри кнопки — сломанная разметка. */}
-              <button type="button" className="buy__name buy__name--link" onClick={() => onPick(medicine.id)}>
-                {medicine.name}
-              </button>
-              {/* Имя владельца в строке покупок: без него список «что купить»
-                  на всю семью не говорит, кому именно, а в аптеке это и есть
-                  главный вопрос — брать одну пачку или две. */}
-              {ownerName?.(medicine) && <span className="buy__owner">{ownerName(medicine)}</span>}
-              {medicine.dose && <span className="buy__dose">{medicine.dose}</span>}
-              <span className="buy__why" data-reason={reason}>
-                {REASON_LABEL[reason]}
+            {/* Открывается как в аптечке: строка целиком со шевроном, а не
+                подчёркнутое имя. Подчёркивание стояло в одном ряду со ссылками
+                аптек и читалось как ещё одна аптека. Кнопка тут не на всю
+                строку, а на её верхнюю часть: ссылки аптек ниже — сами кнопки,
+                а кнопка внутри кнопки это сломанная разметка. */}
+            <button type="button" className="buy__open" onClick={() => onPick(medicine.id)}>
+              <span className="buy__body">
+                <span className="buy__name">{medicine.name}</span>
+                {/* Имя владельца в строке покупок: без него список «что купить»
+                    на всю семью не говорит, кому именно, а в аптеке это и есть
+                    главный вопрос — брать одну пачку или две. */}
+                {ownerName?.(medicine) && <span className="buy__owner">{ownerName(medicine)}</span>}
+                {medicine.dose && <span className="buy__dose">{medicine.dose}</span>}
+                <span className="buy__why" data-reason={reason}>
+                  {REASON_LABEL[reason]}
+                </span>
+                {medicine.inn && medicine.inn !== medicine.name && (
+                  <span className="buy__inn">по веществу: {medicine.inn}</span>
+                )}
               </span>
-              {medicine.inn && medicine.inn !== medicine.name && (
-                <span className="buy__inn">по веществу: {medicine.inn}</span>
+              {/* Сколько брать — внутри кнопки: это сведения, а не действие, и
+                  без них верхняя строка не была бы целой целью нажатия, а
+                  шеврон стоял бы посреди строки, а не у края, как в аптечке. */}
+              {need !== null && (
+                <span className="buy__need">
+                  {packsNeeded(medicine, need) !== null ? (
+                    <>
+                      {packsNeeded(medicine, need)} {plural(packsNeeded(medicine, need)!, 'пачка', 'пачки', 'пачек')}
+                      <span className="fact__note">по {medicine.packSize} шт.</span>
+                    </>
+                  ) : (
+                    `${need} шт.`
+                  )}
+                </span>
               )}
-            </span>
+              <ChevronIcon />
+            </button>
             {/* Ссылки прямо в строке списка: человек стоит перед выбором «где
                 взять» ровно здесь, а не на карточке препарата. */}
             {pharmacyLinks(medicine, pharmacies).length > 0 && (
@@ -361,18 +380,6 @@ export function Restock({
                       if (сеть?.innHref) void platform().files.openExternal(сеть.innHref)
                     }}
                   />
-                )}
-              </span>
-            )}
-            {need !== null && (
-              <span className="buy__need">
-                {packsNeeded(medicine, need) !== null ? (
-                  <>
-                    {packsNeeded(medicine, need)} {plural(packsNeeded(medicine, need)!, 'пачка', 'пачки', 'пачек')}
-                    <span className="fact__note">по {medicine.packSize} шт.</span>
-                  </>
-                ) : (
-                  `${need} шт.`
                 )}
               </span>
             )}
