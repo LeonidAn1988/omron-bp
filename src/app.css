@@ -2950,3 +2950,74 @@ kbd {
     height: 10mm;
   }
 }
+
+
+/* ── Дневник самоконтроля по дням ─────────────────────────────────────────
+   Форма, в которой врач читает самоконтроль: строка — день, колонки — части
+   суток. Держим её плотной: на приёме двенадцать минут, и таблица должна
+   читаться взглядом, а не изучаться. */
+.diary__wrap {
+  overflow-x: auto;
+}
+.diary {
+  width: 100%;
+  min-width: 21rem;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+.diary th,
+.diary td {
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) var(--space-1);
+  text-align: left;
+  vertical-align: top;
+}
+.diary thead th {
+  border-bottom: 1px solid var(--border-strong);
+  font-size: var(--fs-1);
+  color: var(--text-secondary);
+}
+.diary__day {
+  white-space: nowrap;
+  font-weight: 600;
+}
+.diary__value {
+  display: block;
+  font-weight: 600;
+}
+.diary__note {
+  display: block;
+  font-size: var(--fs-1);
+  color: var(--text-secondary);
+}
+.diary__empty {
+  color: var(--text-muted);
+}
+.diary__intake {
+  text-align: center;
+}
+
+@media print {
+  .diary__wrap {
+    overflow: visible;
+  }
+  .diary {
+    font-size: 9.5pt;
+    min-width: 0;
+  }
+  .diary th,
+  .diary td {
+    border-bottom-color: #999;
+    padding: 1.5mm 1mm;
+  }
+  /* Строка дня не должна разрываться между страницами. */
+  .diary tr {
+    page-break-inside: avoid;
+  }
+  /* В печать уходит вся таблица, а «Подробнее» раскрывать не будем —
+     плоский список на девяносто дней это лишние страницы у врача. */
+  .diary + p {
+    font-size: 9pt;
+  }
+}

@@ -233,3 +233,4 @@ export { memoryUse, memoryHint, memoryTight, DEVICE_SLOTS } from '../src/logic/m
 export { substances, sameSubstance, sameSubstanceText } from '../src/logic/duplicates'
 export { silence, silenceText, SILENCE_DAYS } from '../src/logic/silence'
 export { buildMemo, MEMO_DAYS } from '../src/logic/memo'
+export { diaryByDays, daysMissed, SERIES_GAP_MIN, SERIES_RULE } from '../src/logic/diary'

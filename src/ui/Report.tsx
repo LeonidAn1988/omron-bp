@@ -3,6 +3,7 @@ import { platform } from '../platform/ports'
 import { GLUCOSE_CONTEXT_LABELS, type BpReading, type GlucoseContext, type GlucoseReading, type Medicine } from '../types'
 import { PERIODS, type GlucoseSummary, type PeriodKey, type Summary } from '../logic/stats'
 import { DAY_PART_LABELS, classify, classifyGlucose, glucoseCeiling, type DayPart, type GlucoseTargets } from '../logic/classify'
+import { diaryByDays, daysMissed, SERIES_RULE } from '../logic/diary'
 import { Readings } from './Readings'
 import { GlucoseList } from './Glucose'
 import { Banner, CategoryBadge } from './bits'
@@ -15,6 +16,16 @@ const DAY_MONTH = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'lon
 const DAY_MS = 24 * 60 * 60 * 1000
 const DAY_PART_ORDER: DayPart[] = ['morning', 'day', 'evening', 'night']
 const GLUCOSE_ORDER: GlucoseContext[] = ['fasting', 'before-meal', 'after-meal', 'bedtime', 'night']
+
+/** Колонки дневника: тот же порядок, что у суток. */
+const ЧАСТИ = ['morning', 'day', 'evening', 'night'] as const
+const ЧАСТЬ_КРАТКО: Record<(typeof ЧАСТИ)[number], string> = {
+  morning: 'Утро',
+  day: 'День',
+  evening: 'Вечер',
+  night: 'Ночь',
+}
+const ДЕНЬ_МЕСЯЦ = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'short', weekday: 'short' })
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -192,6 +203,11 @@ export function Report({
 }) {
   /** Системная печать не открылась — на нестандартной прошивке так бывает. */
   const [printFailed, setPrintFailed] = useState(false)
+
+  // Дневник по дням — то, в какой форме врач читает самоконтроль. Плоский
+  // список остаётся ниже, под «Подробнее»: исходные цифры не прячем.
+  const дневник = diaryByDays(readings, medicines)
+  const пропущено = daysMissed(дневник)
 
   // Период — орган управления отчётом, поэтому стоит рядом с кнопкой печати,
   // а не в общей шапке приложения. Ограничений по периоду нет: «Всё время»
@@ -498,9 +514,78 @@ export function Report({
       {summary && (
         <div className="card">
           <div className="card__head">
-            <h2>Все измерения давления за период</h2>
+            <h2>Измерения по дням</h2>
+            <span className="muted">
+              дней с записями: {дневник.length}
+              {пропущено > 0 && ` · без записей: ${пропущено}`}
+            </span>
           </div>
-          <Readings readings={readings} />
+
+          {/* На телефоне таблица шире экрана — прокручивается сама, а не
+              растягивает страницу. На бумаге ширины хватает, и там обёртка
+              ничего не меняет. */}
+          <div className="diary__wrap">
+          <table className="diary">
+            <thead>
+              <tr>
+                <th scope="col">День</th>
+                {ЧАСТИ.map((part) => (
+                  <th key={part} scope="col">
+                    {ЧАСТЬ_КРАТКО[part]}
+                  </th>
+                ))}
+                {дневник.some((день) => день.intake !== null) && <th scope="col">Приём</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {дневник.map((день) => (
+                <tr key={день.day}>
+                  <th scope="row" className="diary__day">
+                    {ДЕНЬ_МЕСЯЦ.format(день.day)}
+                  </th>
+                  {ЧАСТИ.map((part) => {
+                    const cell = день.cells[part]
+                    return (
+                      <td key={part} className="diary__cell">
+                        {cell ? (
+                          <>
+                            <span className="diary__value">
+                              {cell.sys}/{cell.dia}
+                            </span>
+                            <span className="diary__note">
+                              {cell.time}
+                              {cell.bpm !== null && ` · ${cell.bpm}`}
+                              {cell.count > 1 && ` · ${cell.count} замера`}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="diary__empty">—</span>
+                        )}
+                      </td>
+                    )
+                  })}
+                  {день.intake !== null && <td className="diary__intake">{день.intake ? 'да' : '—'}</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </div>
+
+          {/* Правило свёртки печатается рядом с таблицей, а не прячется в
+              коде: это обработка данных, и врач вправе знать, что за одной
+              строкой стоят три замера. */}
+          {дневник.some((день) => Object.values(день.cells).some((c) => c && c.count > 1)) && (
+            <p className="muted" style={{ marginTop: 'var(--space-3)' }}>
+              {SERIES_RULE}
+            </p>
+          )}
+
+          <details style={{ marginTop: 'var(--space-4)' }}>
+            <summary>Все измерения по одному</summary>
+            <div style={{ marginTop: 'var(--space-3)' }}>
+              <Readings readings={readings} />
+            </div>
+          </details>
         </div>
       )}
 
