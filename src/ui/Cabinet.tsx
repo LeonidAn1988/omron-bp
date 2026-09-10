@@ -15,6 +15,7 @@ import { download } from '../logic/io'
 
 import { ChevronIcon } from './icons'
 import { FilterButton } from './Picker'
+import { sameSubstance, sameSubstanceText, type SameSubstance } from '../logic/duplicates'
 import { alertText, ALERT_TONE, KindTag, MedicineNudge, Restock, Supply } from './Medicines'
 import { MedicineCard } from './MedicineCard'
 import { ownerOf } from '../logic/people'
@@ -196,6 +197,10 @@ export function Cabinet({
   })
 
   const events = countCalendarEvents(видимые)
+  // Сводим по действующему веществу тот список, который человек видит: в
+  // сводной аптечке семьи совпадение у разных людей — не ошибка, у каждого
+  // своё назначение.
+  const совпадения = sameSubstance(видимые)
 
   const имя = (id: string) => people.find((p) => p.id === id)?.name?.trim() || 'Без имени'
 
@@ -251,6 +256,7 @@ export function Cabinet({
                 medicine={item}
                 now={now}
                 owner={имяВладельца(item)}
+                same={совпадения.get(item.id)}
                 // Чужую коробку открываем как есть, не переключая человека.
                 // Раньше переключали «чтобы правки шли владельцу», но владелец
                 // берётся из самой коробки, отметить приём с карточки нельзя, а
@@ -294,12 +300,15 @@ function CabinetRow({
   medicine,
   now,
   owner,
+  same,
   onOpen,
 }: {
   medicine: Medicine
   now: number
   /** Чья коробка. Пусто — своя или человек в дневнике один. */
   owner?: string | null
+  /** У другой коробки то же действующее вещество. */
+  same?: SameSubstance
   onOpen: () => void
 }) {
   const { alert, showSupply } = displayAlert(medicine, now)
@@ -333,6 +342,11 @@ function CabinetRow({
         {alert && (
           <span className={`pill__alert pill__alert--${ALERT_TONE[alert.kind]}`}>{alertText(alert, medicine)}</span>
         )}
+
+        {/* Только факт про собственный список человека — ни оценки, ни совета.
+            Врач мог назначить так намеренно, и решать это не приложению.
+            Поэтому и тон нейтральный: не предупреждение, а сведение. */}
+        {same && <span className="pill__same">{sameSubstanceText(same)}</span>}
 
         {showSupply && <Supply days={supply!} until={runsOutAt(medicine, now)} />}
       </button>

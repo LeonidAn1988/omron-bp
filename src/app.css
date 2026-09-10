@@ -2326,6 +2326,13 @@ tbody tr:hover {
 .pill__open:hover svg {
   color: var(--accent);
 }
+.pill__same {
+  display: block;
+  margin-top: 4px;
+  font-size: var(--fs-1);
+  color: var(--text-secondary);
+}
+
 .pill__sub {
   display: block;
   margin-top: 2px;

@@ -230,3 +230,4 @@ export {
 } from '../src/logic/yandex'
 
 export { memoryUse, memoryHint, memoryTight, DEVICE_SLOTS } from '../src/logic/memory'
+export { substances, sameSubstance, sameSubstanceText } from '../src/logic/duplicates'
