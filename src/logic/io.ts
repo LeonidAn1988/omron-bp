@@ -365,6 +365,7 @@ function parseMedicines(raw: unknown): Medicine[] {
       perTime: optionalNumber(m.perTime) ?? undefined,
       meal: m.meal === 'before' || m.meal === 'after' || m.meal === 'any' ? m.meal : undefined,
       autoDeduct: m.autoDeduct === true ? true : undefined,
+      rx: m.rx === true ? true : undefined,
       taken: marks(m.taken),
       // Всё, что появилось у препарата после первой версии формата. Без этих
       // полей восстановление молча отдавало все коробки первому человеку,

@@ -1,0 +1,91 @@
+# Ежемесячная пересборка справочников лекарств и БАД.
+#
+# Собирает здесь, а не на машине владельца, по двум причинам. Первая: у сборщика
+# БАДов есть вечный кэш страниц (`tools/out/sgr`), и прогон из него занимает
+# секунды — на машине владельца это значит «свежая дата на старых данных». В
+# чекауте кэша нет по построению (`tools/out/` в .gitignore), поэтому обход
+# реестра здесь всегда настоящий. Вторая: мак спит, и падение фонового скрипта
+# выглядит как «ничего не произошло», а упавший прогон здесь присылает письмо.
+#
+# Результат приезжает pull request'ом, а не автокоммитом. Диффа у этих файлов
+# не бывает — обе выгрузки лежат одной строкой на полтора и три мегабайта, —
+# поэтому ревью здесь это отчёт сторожа в теле PR. Минута в месяц ловит ровно
+# тот случай, ради которого всё затевается: источник сменил формат, а мы залили
+# мусор в аптечку.
+#
+# Нужна включённая настройка репозитория «Allow GitHub Actions to create and
+# approve pull requests», иначе шаг создания PR откажет.
+
+name: Справочники
+
+on:
+  schedule:
+    # Раз в месяц: за 26 дней справочник лекарств изменился на 0,9 %, чаще
+    # незачем. Расписания в публичном репозитории отключаются после 60 дней
+    # без активности — репозиторий активен, но знать об этом надо.
+    - cron: '17 3 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install openpyxl
+
+      - name: Собрать справочник лекарств
+        run: python3 tools/build_drugs.py --out public/drugs.json
+
+      # Обход реестра БАД — около 300 страниц с паузой, это примерно двадцать
+      # минут. Свой предел, чтобы зависший источник не жёг час раннера.
+      - name: Собрать справочник БАД
+        timeout-minutes: 45
+        run: python3 tools/build_supplements.py --out public/supplements.json
+
+      - name: Проверить выгрузки
+        id: guard
+        run: |
+          python3 tools/check_books.py --against HEAD | tee /tmp/books-report.txt
+
+      - name: Есть ли изменения
+        id: changed
+        run: |
+          if git diff --quiet -- public/drugs.json public/supplements.json; then
+            echo "yes=false" >> "$GITHUB_OUTPUT"
+            echo "Справочники не изменились — PR не нужен."
+          else
+            echo "yes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Открыть pull request
+        if: steps.changed.outputs.yes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH="books/$(date +%Y-%m-%d)"
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -b "$BRANCH"
+          git add public/drugs.json public/supplements.json
+          git commit -m "Справочники: выгрузка $(date +%Y-%m-%d)"
+          git push -u origin "$BRANCH"
+          {
+            echo 'Пересборка справочников по расписанию. Сторож доволен, отчёт ниже.'
+            echo
+            echo '```'
+            cat /tmp/books-report.txt
+            echo '```'
+            echo
+            echo 'Что проверить глазами: не пропало ли из списка «добавились/исчезли»'
+            echo 'что-то ходовое. Всё остальное проверил сторож.'
+          } > /tmp/books-body.md
+          gh pr create --title "Справочники: выгрузка $(date +%Y-%m-%d)" --body-file /tmp/books-body.md

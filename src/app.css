@@ -1986,6 +1986,16 @@ tbody tr:hover {
   font-size: var(--fs-1);
   color: var(--text-secondary);
 }
+/* «нужен рецепт» — обстоятельство, а не тревога: рамкой, а не цветом
+   опасности. Красное здесь спорило бы с пометкой «закончился» рядом. */
+.buy__rx {
+  font-size: var(--fs-1);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
 .buy__why {
   font-size: var(--fs-1);
   font-weight: 600;

@@ -326,6 +326,10 @@ export function Restock({
                 <span className="buy__why" data-reason={reason}>
                   {REASON_LABEL[reason]}
                 </span>
+                {/* Не «внимание» и не красным: это не тревога, а обстоятельство
+                    похода. За рецептурным сначала к врачу, и знать об этом надо
+                    до выхода из дома, а не у прилавка. */}
+                {medicine.rx && <span className="buy__rx">нужен рецепт</span>}
                 {medicine.inn && medicine.inn !== medicine.name && (
                   <span className="buy__inn">по веществу: {medicine.inn}</span>
                 )}

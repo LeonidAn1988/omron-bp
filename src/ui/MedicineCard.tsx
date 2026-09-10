@@ -258,6 +258,7 @@ export function MedicineCard({
             note={medicine.autoDeduct ? 'отмечать не нужно' : estimated ? 'по расчёту' : undefined}
           />
           <Row label="Приём" value={schedule} note={medicine.meal === 'before' ? 'до еды' : medicine.meal === 'after' ? 'после еды' : undefined} />
+          {medicine.rx && <Row label="Отпуск" value="по рецепту" note="напомним за две недели" />}
           {схема && <Row label="Схема" value={схема} />}
           {/* `== null` ловит и `undefined`: у коробки, пришедшей из копии или
               слияния, поля может не быть вовсе, и `monthYear` печатал «undefined NaN». */}

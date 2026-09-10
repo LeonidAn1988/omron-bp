@@ -19,6 +19,21 @@ export const EXPIRY_SOON_DAYS = 30
 /** На сколько дней запаса предупреждаем. Неделя — чтобы успеть дойти до аптеки. */
 export const SUPPLY_SOON_DAYS = 7
 
+/**
+ * За сколько дней предупреждать о рецептурном препарате.
+ *
+ * Семь дней — это срок для валерьянки: сходить в аптеку. За рецептом сначала
+ * надо попасть к врачу, а это запись на неделю вперёд, у льготников ещё и
+ * отдельный визит за выпиской. Перерыв в гипотензивном препарате стоит дороже
+ * лишней строки в списке покупок, поэтому счёт идёт на две недели.
+ */
+export const SUPPLY_SOON_RX_DAYS = 14
+
+/** За сколько дней предупреждать об этой коробке. */
+export function soonDaysOf(medicine: Medicine): number {
+  return medicine.rx ? SUPPLY_SOON_RX_DAYS : SUPPLY_SOON_DAYS
+}
+
 export type MedicineAlertKind =
   /** Срок годности истёк. */
   | 'expired'
@@ -251,7 +266,7 @@ export function medicineAlert(medicine: Medicine, now: number): MedicineAlert | 
   if (medicine.left !== null && medicine.left <= 0) return { kind: 'out', days: 0 }
 
   const supply = supplyDays(medicine, now)
-  if (supply !== null && supply <= SUPPLY_SOON_DAYS) return { kind: 'low', days: supply }
+  if (supply !== null && supply <= soonDaysOf(medicine)) return { kind: 'low', days: supply }
 
   if (expiry !== null && expiry <= EXPIRY_SOON_DAYS) return { kind: 'expiring', days: expiry }
 
@@ -806,9 +821,13 @@ export function restockText(
           : packs === null
             ? ` — ${need} шт.`
             : ` — ${need} шт. (${packs} ${plural(packs, 'пачка', 'пачки', 'пачек')} по ${medicine.packSize})`
+      // Пометка о рецепте уезжает вместе со списком: список читают у прилавка
+      // и пересылают тому, кто пойдёт в аптеку вместо вас. Узнать там, что без
+      // рецепта не отпустят, — это зря потраченный поход.
+      const рецепт = medicine.rx ? ' — по рецепту' : ''
       // Имя отделяем пробелом, остальное запятыми: «Отец: Метформин, 850 мг».
       const голова = чей ? `${parts[0]} ${parts.slice(1).join(', ')}` : parts.join(', ')
-      return `${метка}${голова}${inn}${count}`
+      return `${метка}${голова}${inn}${count}${рецепт}`
     })
     .join('\n')
   if (!options.checklist) return строки

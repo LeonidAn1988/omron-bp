@@ -147,6 +147,7 @@ export function MedicineForm({
   const [inn, setInn] = useState(medicine?.inn ?? '')
   const [form, setForm] = useState(medicine?.form ?? '')
   const [maker, setMaker] = useState(medicine?.maker ?? '')
+  const [rx, setRx] = useState(medicine?.rx ?? false)
   /** БАД или гомеопатия — из справочника. Обычное лекарство пометки не несёт. */
   const [kind, setKind] = useState<Medicine['kind']>(medicine?.kind)
   const [packSize, setPackSize] = useState(medicine?.packSize ? String(medicine.packSize) : '')
@@ -190,6 +191,7 @@ export function MedicineForm({
         inn: inn.trim() || undefined,
         form: form.trim() || undefined,
         maker: maker.trim() || undefined,
+        rx: rx || undefined,
         kind,
         packSize: Number(packSize) > 0 ? Number(packSize) : undefined,
         left: numberOrNull(left),
@@ -312,6 +314,9 @@ export function MedicineForm({
         onPick={(drug: Drug, picked: DrugVariant[], drugMakers: string[]) => {
           setName(drug.n)
           setInn(drug.i ?? '')
+          // Из реестра, но правится руками: пометка относится к форме выпуска,
+          // а не к конкретной пачке в тумбочке.
+          setRx(drug.r === 1)
           setVariants(picked)
           setMaker(drugMakers[0] ?? '')
           setKind(drug.k)
@@ -552,6 +557,18 @@ export function MedicineForm({
           </p>
         </div>
       )}
+
+      <div>
+        <label className="badge">
+          <input type="checkbox" checked={rx} onChange={(e) => setRx(e.target.checked)} />
+          Отпускают по рецепту
+        </label>
+        <p className="muted" style={{ margin: 'var(--space-1) 0 0' }}>
+          {rx
+            ? 'Напомним за две недели, а не за одну: сначала попасть к врачу, и только потом в аптеку.'
+            : 'Напомним за неделю до конца запаса.'}
+        </p>
+      </div>
 
       <Field label="Годен до — месяц с упаковки">
         <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />

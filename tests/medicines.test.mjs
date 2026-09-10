@@ -30,6 +30,7 @@ import {
   projectedLeft,
   restockList,
   restockText,
+  soonDaysOf,
   partWindowOpen,
   runsOutAt,
   setLeft,
@@ -410,6 +411,17 @@ export function run() {
   check('купленная пачка становится обычной', addPack(med({ left: 4, packSize: 30 }), now, 60).packSize === 60)
   check('без размера, но с указанной пачкой — считаем', addPack(med({ left: 4 }), now, 20).left === 24)
   check('ноль пачкой не считается', addPack(med({ left: 4, packSize: 30 }), now, 0).left === 4)
+
+  // ── рецептурные предупреждают раньше ────────────────────────────────────
+  // Семь дней — срок «сходить в аптеку». За рецептом сначала к врачу, и это
+  // запись на неделю вперёд; у льготников ещё и отдельный визит за выпиской.
+  const наДесять = { left: 10, perDay: 1, expires: null }
+  check('без рецепта за десять дней ещё молчим', medicineAlert(med(наДесять), now) === null)
+  check('по рецепту за десять дней уже говорим', medicineAlert(med({ ...наДесять, rx: true }), now)?.kind === 'low')
+  check('за неделю говорим в любом случае', medicineAlert(med({ left: 6, perDay: 1, expires: null }), now)?.kind === 'low')
+  check('порог берётся по коробке', soonDaysOf(med({ rx: true })) === 14 && soonDaysOf(med({})) === 7)
+  check('пометка о рецепте уезжает со списком', restockText([{ medicine: med({ name: 'Конкор', rx: true }), reason: 'out', need: null }]).includes('по рецепту'))
+  check('без пометки её в списке нет', !restockText([{ medicine: med({ name: 'Валериана' }), reason: 'out', need: null }]).includes('по рецепту'))
   check('пачек берём с округлением вверх', packsNeeded(med({ packSize: 30 }), 31) === 2)
   check('ровно упаковка — одна пачка', packsNeeded(med({ packSize: 30 }), 30) === 1)
   check('без размера упаковки пачки не считаем', packsNeeded(med({}), 30) === null)
