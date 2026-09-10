@@ -66,6 +66,16 @@ export interface Aggregate {
 
 export interface Summary {
   count: number
+  /**
+   * В скольких календарных днях есть хоть одно измерение.
+   *
+   * Само по себе среднее ничего не говорит о том, на чём оно посчитано.
+   * Три записи за месяц дают такое же «145/92», как тридцать, и человек,
+   * вернувшийся после перерыва, читает это как приговор себе за весь месяц.
+   * Число дней ставится рядом со средним, чтобы цифра была подписана тем,
+   * из чего она сделана.
+   */
+  days: number
   avgSys: number
   avgDia: number
   avgBpm: number | null
@@ -115,6 +125,12 @@ export function summarize(readings: BpReading[], targetSys: number, targetDia: n
 
   return {
     count: readings.length,
+    days: new Set(
+      readings.map((r) => {
+        const d = new Date(r.ts)
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      }),
+    ).size,
     avgSys: base.sys,
     avgDia: base.dia,
     avgBpm: base.bpm,

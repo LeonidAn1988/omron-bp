@@ -2,6 +2,7 @@ import type { BpReading } from '../types'
 import type { Summary as SummaryData } from '../logic/stats'
 import { alertFor, classify } from '../logic/classify'
 import { Banner, CategoryBadge } from './bits'
+import { plural } from '../logic/plural'
 
 const FULL_DATE = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
 
@@ -54,6 +55,16 @@ export function SummaryTiles({ summary, targetSys, targetDia }: { summary: Summa
             {avgSys}/{avgDia}
             <span className="tile__unit">мм рт. ст.</span>
           </div>
+          {/* На чём посчитано — прямо под цифрой.
+              Три записи за месяц дают такое же «145/92», как тридцать, и без
+              этой строки человек, вернувшийся после перерыва, читает среднее
+              как приговор себе за весь месяц. Число дней важнее числа
+              измерений: три подряд снятых замера в один вечер — это один день
+              наблюдения, а не три. */}
+          <div className="tile__note">
+            {summary.count} {plural(summary.count, 'измерение', 'измерения', 'измерений')} в{' '}
+            {summary.days} {plural(summary.days, 'дне', 'днях', 'днях')}
+          </div>
           <div style={{ marginTop: 'var(--space-3)' }}>
             <CategoryBadge sys={avgSys} dia={avgDia} solid />
           </div>
@@ -64,9 +75,7 @@ export function SummaryTiles({ summary, targetSys, targetDia }: { summary: Summa
           <div className="lead__value" style={{ fontSize: 'var(--fs-5)' }}>
             {inTarget}%
           </div>
-          <div className="tile__note">
-            измерений ниже {targetSys}/{targetDia} — всего измерений {summary.count}
-          </div>
+          <div className="tile__note">измерений ниже {targetSys}/{targetDia}</div>
         </div>
       </div>
 
