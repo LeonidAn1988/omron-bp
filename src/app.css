@@ -1731,6 +1731,10 @@ tbody tr:hover {
   width: 100%;
   max-width: 560px;
   border-collapse: collapse;
+  /* Как и в списке препаратов: без фиксированной раскладки длинное значение
+     («имя не указано — впишите его в настройках») распирало таблицу шире
+     карточки, и при очень крупном тексте отчёт ездил вбок на пару точек. */
+  table-layout: fixed;
 }
 .report-facts td {
   padding: var(--space-1) var(--space-3) var(--space-1) 0;
