@@ -37,6 +37,7 @@ const suites = [
   ['Профиль глюкометра (пакеты по спецификации)', await import('./glucose-profile.test.mjs')],
   ['Сохранность дневника', await import('./backup.test.mjs')],
   ['Аптечка: остатки и сроки', await import('./medicines.test.mjs')],
+  ['Память прибора', await import('./memory.test.mjs')],
   ['Справочник лекарств', await import('./drugs.test.mjs')],
   ['Расписание в календарь', await import('./calendar.test.mjs')],
   ['Напоминания о приёме', await import('./reminders.test.mjs')],

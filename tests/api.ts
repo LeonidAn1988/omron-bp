@@ -228,3 +228,5 @@ export {
   DISK_FOLDER,
   YANDEX_CLIENT_ID,
 } from '../src/logic/yandex'
+
+export { memoryUse, memoryHint, memoryTight, DEVICE_SLOTS } from '../src/logic/memory'

@@ -16,6 +16,7 @@ import {
   type GattDevice,
 } from '../ble/session'
 import { BleLog, logToText, useBleLog } from './BleLog'
+import { memoryHint, memoryTight, memoryUse, type MemoryUse } from '../logic/memory'
 import { Banner, Field, Reveal } from './bits'
 import { GlucoseSync } from './GlucoseSync'
 import { download } from '../logic/io'
@@ -52,6 +53,8 @@ interface SyncOutcome {
   added: number
   newestTs: number | null
   clockSkewMs: number | null
+  /** Занятость памяти по каждой кнопке прибора. */
+  memory: MemoryUse[]
 }
 
 type Busy = null | 'download' | 'pair' | 'inspect'
@@ -227,6 +230,9 @@ export function Sync({
         added,
         newestTs,
         clockSkewMs: newestTs === null ? null : Date.now() - newestTs,
+        // Считаем по записям прибора, а не по дневнику: в дневник попадает и
+        // введённое руками, а память прибора занимают только его замеры.
+        memory: memoryUse(records.map((r) => ({ user: r.user, ts: r.date.getTime() }))),
       })
     })
 
@@ -412,6 +418,16 @@ export function Sync({
                     Прочитано из памяти прибора: {outcome.total}.
                     {outcome.newestTs && <> Последнее — {FULL_DATE.format(outcome.newestTs)}.</>}
                   </div>
+                  {/* Память прибора — кольцевая: набралась сотня, и он молча
+                      затирает самое старое. Голое «прочитано 100» об этом не
+                      говорило, а человек, выгружающий раз в квартал, приносил
+                      врачу месяц вместо трёх и не знал об этом. */}
+                  {outcome.memory.map((use) => (
+                    <div key={use.user} style={{ marginTop: 4 }} data-tight={memoryTight(use) ? '' : undefined}>
+                      {outcome.memory.length > 1 && <b>Кнопка {use.user}. </b>}
+                      {memoryHint(use)}
+                    </div>
+                  ))}
                 </Banner>
               )}
             </div>
