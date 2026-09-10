@@ -55,6 +55,7 @@ import { BackupNudge } from './ui/Backup'
 import { Settings } from './ui/Settings'
 import { Report } from './ui/Report'
 import { Memo } from './ui/Memo'
+import { Compare } from './ui/Compare'
 import { Banner, Reveal, Working } from './ui/bits'
 
 /**
@@ -1198,6 +1199,10 @@ export default function App() {
             <Readings readings={bpScoped} onDelete={handleDelete} onUpdate={handleUpdate} />
           </div>
 
+          {/* «Стало ли лучше» — вопрос, ради которого дневник и ведут.
+              Стоит под историей, а не над ней: сначала то, что человек пришёл
+              записать или посмотреть, и только потом размышления. */}
+          <Compare readings={bpAll} medicines={myMedicines} />
         </div>
       )}
 

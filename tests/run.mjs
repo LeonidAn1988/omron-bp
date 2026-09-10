@@ -42,6 +42,7 @@ const suites = [
   ['Молчание в чужом дневнике', await import('./silence.test.mjs')],
   ['Памятка на холодильник', await import('./memo.test.mjs')],
   ['Дневник по дням для врача', await import('./diary.test.mjs')],
+  ['События и сравнение до/после', await import('./events.test.mjs')],
   ['Справочник лекарств', await import('./drugs.test.mjs')],
   ['Расписание в календарь', await import('./calendar.test.mjs')],
   ['Напоминания о приёме', await import('./reminders.test.mjs')],

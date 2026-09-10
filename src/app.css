@@ -3021,3 +3021,30 @@ kbd {
     font-size: 9pt;
   }
 }
+
+
+/* ── Сравнение «до и после» ────────────────────────────────────────────────
+   Две равные колонки, одинаковые по весу: ни одна не выделена, потому что
+   выделить значит оценить. Оценивает врач. */
+.compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.compare__side {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.compare__value {
+  display: block;
+  margin: var(--space-1) 0;
+  font-size: var(--fs-4);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.compare__event {
+  margin: var(--space-3) 0 0;
+  font-weight: 600;
+}
