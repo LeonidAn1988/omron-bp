@@ -23,6 +23,7 @@ import { LatestAlert, SummaryTiles } from './ui/Summary'
 import { GlucoseEntry, GlucoseList, GlucoseTiles } from './ui/Glucose'
 import { Readings } from './ui/Readings'
 import { Restock, ShortageCard, TodayCard } from './ui/Medicines'
+import { SilenceCard } from './ui/SilenceCard'
 import { DeviceIcon, ReportIcon, SettingsIcon } from './ui/icons'
 import { fillMissingFromCopy, mergeRestoredSettings, takesPersonalFrom } from './logic/io'
 import { depthOf, pathOf, pop, prune, push, rootStack, tabOf, tapTab, toTab, type Node, type Stack } from './logic/nav'
@@ -1036,6 +1037,18 @@ export default function App() {
           <ShortageCard medicines={myMedicines} onOpen={() => setTab('cabinet')} onPick={открытьКоробку} />
 
           <Restock medicines={myMedicines} pharmacies={settings.pharmacies ?? []} onPick={открытьКоробку} />
+
+          {/* Молчание своих. Только когда обмен настроен и людей больше одного:
+              без обмена чужих записей взяться неоткуда, и блок говорил бы о
+              пустоте, которая пустотой и должна быть. */}
+          <SilenceCard
+            people={settings.people}
+            measurements={measurements}
+            medicines={medicines}
+            activePerson={settings.activePerson}
+            enabled={family.sources.length > 0 || family.cloud.connected}
+            onPick={(id) => updateSettings({ ...settingsRef.current, activePerson: id })}
+          />
 
           {!nudgeHidden.backup && (
             <BackupNudge

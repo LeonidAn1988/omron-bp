@@ -231,3 +231,4 @@ export {
 
 export { memoryUse, memoryHint, memoryTight, DEVICE_SLOTS } from '../src/logic/memory'
 export { substances, sameSubstance, sameSubstanceText } from '../src/logic/duplicates'
+export { silence, silenceText, SILENCE_DAYS } from '../src/logic/silence'
