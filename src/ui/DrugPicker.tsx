@@ -113,6 +113,7 @@ export function DrugPicker({
   group,
   onChange,
   onPick,
+  onBook,
 }: {
   value: string
   /** Группа формы: сужает поиск до таблеток, капель, мазей и так далее. */
@@ -123,6 +124,15 @@ export function DrugPicker({
    * живёт здесь, и форме препарата про его устройство знать незачем.
    */
   onPick: (drug: Drug, variants: DrugVariant[], makers: string[]) => void
+  /**
+   * Справочник доехал.
+   *
+   * Форме он нужен не ради подсказок — те рисует само поле, — а чтобы
+   * дозаполнить то, чего у старой коробки нет. Признак рецептурности появился
+   * позже самих коробок, и без этого он остался бы невидимым для всех, кто уже
+   * пользуется приложением: пятнадцать коробок пришлось бы открыть руками.
+   */
+  onBook?: (book: DrugBook) => void
 }) {
   const [book, setBook] = useState<DrugBook | null>(cached)
   /** Справочник не доехал — это не то же самое, что «препарата нет в реестре». */
@@ -145,6 +155,7 @@ export function DrugPicker({
       loadBook((next, отказ) => {
         setBook(next)
         setBookFailed(отказ)
+        if (next) onBook?.(next)
       }),
     [попытка],
   )

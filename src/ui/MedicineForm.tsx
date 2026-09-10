@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { DoseStage, IntakeSlot, Medicine, Person } from '../types'
 import { expiryToMonth, formatTime, monthToExpiry, normalizeTimes, parseTime } from '../logic/medicines'
-import { formGroup as formGroupOf, FORM_GROUPS, type Drug, type DrugVariant } from '../logic/drugs'
+import { formGroup as formGroupOf, FORM_GROUPS, normalize, type Drug, type DrugVariant } from '../logic/drugs'
 import { NumberField } from './NumberField'
 import { Field } from './bits'
 import { DrugPicker, VariantPicker } from './DrugPicker'
@@ -148,6 +148,8 @@ export function MedicineForm({
   const [form, setForm] = useState(medicine?.form ?? '')
   const [maker, setMaker] = useState(medicine?.maker ?? '')
   const [rx, setRx] = useState(medicine?.rx ?? false)
+  /** Человек тронул галку сам — справочник больше не вмешивается. */
+  const rxTouched = useRef(false)
   /** БАД или гомеопатия — из справочника. Обычное лекарство пометки не несёт. */
   const [kind, setKind] = useState<Medicine['kind']>(medicine?.kind)
   const [packSize, setPackSize] = useState(medicine?.packSize ? String(medicine.packSize) : '')
@@ -300,6 +302,15 @@ export function MedicineForm({
       <DrugPicker
         group={group}
         value={name}
+        onBook={(book) => {
+          // Признак рецептурности появился позже коробок: у заведённых раньше
+          // его нет, и без этого фича осталась бы невидимой для всех, кто уже
+          // пользуется приложением. Подставляем один раз, когда справочник
+          // доехал, и только если человек ничего не выбирал сам.
+          if (medicine?.rx !== undefined || rxTouched.current) return
+          const найдено = book.items.find((item) => normalize(item.n) === normalize(name))
+          if (найдено) setRx(найдено.r === 1)
+        }}
         onChange={(next) => {
           setName(next)
           // Правка названия руками отвязывает карточку от реестра: варианты
@@ -316,6 +327,7 @@ export function MedicineForm({
           setInn(drug.i ?? '')
           // Из реестра, но правится руками: пометка относится к форме выпуска,
           // а не к конкретной пачке в тумбочке.
+          rxTouched.current = true
           setRx(drug.r === 1)
           setVariants(picked)
           setMaker(drugMakers[0] ?? '')
@@ -560,7 +572,14 @@ export function MedicineForm({
 
       <div>
         <label className="badge">
-          <input type="checkbox" checked={rx} onChange={(e) => setRx(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={rx}
+            onChange={(e) => {
+              rxTouched.current = true
+              setRx(e.target.checked)
+            }}
+          />
           Отпускают по рецепту
         </label>
         <p className="muted" style={{ margin: 'var(--space-1) 0 0' }}>
