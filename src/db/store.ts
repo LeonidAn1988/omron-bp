@@ -32,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // Не системный звук: напоминание о лекарстве должно отличаться от почты и
   // мессенджера, иначе человек перестаёт на него реагировать.
   reminderSound: 'kolokolchik',
+  measureRemindOn: false,
   remindersRepeat: true,
   intakeTimes: { morning: '08:00', day: '13:00', evening: '19:00', night: '22:00' },
   onboarded: false,

@@ -70,6 +70,11 @@ export {
   REPEATS,
   REPEAT_INTERVAL_MIN,
   buildReminders,
+  buildMeasureReminders,
+  planReminders,
+  measureId,
+  MEASURE_ID_BASE,
+  MEASURE_ID_MAX,
   doseLine,
   reminderId,
   reminderTimes,
@@ -235,3 +240,10 @@ export { silence, silenceText, SILENCE_DAYS } from '../src/logic/silence'
 export { buildMemo, MEMO_DAYS } from '../src/logic/memo'
 export { diaryByDays, daysMissed, SERIES_GAP_MIN, SERIES_RULE } from '../src/logic/diary'
 export { medicineEvents, compareAround, comparable, COMPARE_DAYS, COMPARE_MIN } from '../src/logic/events'
+export {
+  slotWindows, measuredSlots, planDayIndex, planActiveOn, planIntersects,
+  courseToday, courseText, courseReport, courseReportText, describeMeasurePlan, measureSubjects,
+  measurePlanOf, readingOwner, planTimes, MAX_MEASURE_TIMES,
+} from '../src/logic/course'
+
+export { tours, tourByKey } from '../src/logic/tour'

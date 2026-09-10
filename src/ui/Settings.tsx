@@ -23,7 +23,11 @@ import { Reminders } from './Reminders'
 import type { ImportResult } from '../logic/io'
 import { platform } from '../platform/ports'
 import { activePersonOf, glucoseTargetsOf, targetsOf } from '../logic/people'
+import { measurePlanOf } from '../logic/course'
 import { BackBar, NavRow, Reveal } from './bits'
+import { ChevronIcon } from './icons'
+import { tours } from '../logic/tour'
+import { plural } from '../logic/plural'
 import { NumberField } from './NumberField'
 import { About } from './About'
 import { parseChangelog } from '../logic/changelog'
@@ -383,6 +387,7 @@ export function Settings({
   measurements,
   medicines,
   onRestore,
+  onStartTour,
   onClearAll,
   backup,
   family,
@@ -410,12 +415,15 @@ export function Settings({
   /** Человек, чей экран открыт внутри «Людей». */
   person: string | null
   onOpen: (screen: Subscreen) => void
+  /** Запустить гайд-курс: подсветка идёт поверх всего приложения, не здесь. */
+  onStartTour: (key: string) => void
   onOpenPerson: (id: string) => void
   onBack: () => void
 }) {
   const patch = (fields: Partial<SettingsData>) => onChange({ ...settings, ...fields })
   const напоминанияЕсть = platform().reminders.isSupported()
 
+  if (screen === 'guide') return <GuideScreen settings={settings} onStartTour={onStartTour} onBack={onBack} />
   if (screen === 'display') return <DisplayScreen settings={settings} onPatch={patch} onBack={onBack} />
   if (screen === 'targets') return <TargetsScreen settings={settings} onPatch={patch} onBack={onBack} />
   if (screen === 'pharmacies') return <PharmaciesScreen settings={settings} onPatch={patch} onBack={onBack} />
@@ -445,6 +453,8 @@ export function Settings({
           enabled={settings.remindersOn}
           sound={settings.reminderSound}
           repeat={settings.remindersRepeat}
+          measureOn={settings.measureRemindOn}
+          measurePlan={measurePlanOf(activePersonOf(settings), settings)}
           onPatch={patch}
         />
       </div>
@@ -492,37 +502,111 @@ export function Settings({
     <div className="stack">
       <div className="card">
         <ul className="pills">
-          <NavRow title={SUBSCREEN_TITLE.display} value={describeDisplay(settings)} onOpen={() => onOpen('display')} />
+          <NavRow
+            title={SUBSCREEN_TITLE.display}
+            value={describeDisplay(settings)}
+            tour="set-display"
+            onOpen={() => onOpen('display')}
+          />
           <NavRow
             title={SUBSCREEN_TITLE.people}
             value={describePeople(settings.people, settings.intakeTimes)}
+            tour="set-people"
             onOpen={() => onOpen('people')}
           />
-          <NavRow title={SUBSCREEN_TITLE.targets} value={describeTargets(settings, activePersonOf(settings))} onOpen={() => onOpen('targets')} />
+          <NavRow
+            title={SUBSCREEN_TITLE.targets}
+            value={describeTargets(settings, activePersonOf(settings))}
+            tour="set-targets"
+            onOpen={() => onOpen('targets')}
+          />
           {/* В браузере настоящих напоминаний нет вовсе, и строки тоже. */}
           {напоминанияЕсть && (
             <NavRow
               title={SUBSCREEN_TITLE.reminders}
               value={describeReminders(settings)}
+              tour="set-reminders"
               onOpen={() => onOpen('reminders')}
             />
           )}
           <NavRow
             title={SUBSCREEN_TITLE.backup}
             value={describeBackupRow(backup.lastAt, Date.now())}
+            tour="set-backup"
             onOpen={() => onOpen('backup')}
           />
           <NavRow
             title={SUBSCREEN_TITLE.pharmacies}
             value={describePharmacies(settings.pharmacies ?? [])}
+            tour="set-pharmacies"
             onOpen={() => onOpen('pharmacies')}
           />
           <NavRow
             title={SUBSCREEN_TITLE.family}
             value={describeFamily(family.sources.length, family.supported, backup.target !== null, family.cloud.connected)}
+            tour="set-family"
             onOpen={() => onOpen('family')}
           />
+          {/* «Как пользоваться» стоит над «О приложении»: и то и другое —
+              справка, но одно объясняет приложение, а другое рассказывает про
+              версии. Искать помощь будут выше. */}
+          <NavRow
+            title={SUBSCREEN_TITLE.guide}
+            value="подсказки прямо на экране"
+            tour="set-guide"
+            onOpen={() => onOpen('guide')}
+          />
           <NavRow title={SUBSCREEN_TITLE.about} value={releases[0]?.version} onOpen={() => onOpen('about')} />
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Список курсов.
+ *
+ * Не один длинный курс, а несколько коротких: человек выбирает вопрос, который
+ * у него есть сейчас, и видит, сколько шагов ему предстоит. Курсы про разделы,
+ * которые выключены, сюда не попадают — их отсеивает `tours`.
+ */
+function GuideScreen({
+  settings,
+  onStartTour,
+  onBack,
+}: {
+  settings: SettingsData
+  onStartTour: (key: string) => void
+  onBack: () => void
+}) {
+  const список = tours(settings, { reminders: platform().reminders.isSupported() })
+
+  return (
+    <div className="stack">
+      <BackBar onBack={onBack} />
+      <div className="card">
+        <div className="card__head">
+          <h2>Как пользоваться</h2>
+        </div>
+        <p className="muted">
+          Приложение само откроет нужный раздел и обведёт кнопку, о которой рассказывает. Прервать можно на любом шаге.
+        </p>
+        <ul className="pills">
+          {список.map((курс) => (
+            <li key={курс.key} className="pill">
+              <button className="pill__open" onClick={() => onStartTour(курс.key)}>
+                <span className="pill__head">
+                  <span className="pill__title">
+                    <span className="pill__name">{курс.title}</span>
+                  </span>
+                  <ChevronIcon />
+                </span>
+                <span className="pill__sub">
+                  {курс.hint} · {курс.steps.length} {plural(курс.steps.length, 'шаг', 'шага', 'шагов')}
+                </span>
+              </button>
+            </li>
+          ))}
         </ul>
       </div>
     </div>

@@ -328,7 +328,7 @@ export function PersonSwitch({
     ...(extra ? [{ id: ВСЕ, title: extra.title, apart: true }] : []),
   ]
   return (
-    <div className="personbar no-print">
+    <div className="personbar no-print" data-tour="person">
       <FilterButton
         label="Чей дневник"
         selected={extra?.active ? ВСЕ : settings.activePerson}

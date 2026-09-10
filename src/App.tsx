@@ -30,6 +30,7 @@ import { depthOf, pathOf, pop, prune, push, rootStack, tabOf, tapTab, toTab, typ
 import { platform } from './platform/ports'
 import { SUBSCREENS, type Subscreen } from './logic/settings'
 import { medicinesForReminder } from './logic/reminders'
+import { measurePlanOf, measureSubjects, setMeasurePlan } from './logic/course'
 import { Onboarding } from './ui/Onboarding'
 import { PersonSwitch } from './ui/People'
 import { activePersonOf, deviceUserOf, glucoseTargetsOf, medicinesOf, ownerOf, targetsOf, intakeSlotsOf } from './logic/people'
@@ -56,6 +57,9 @@ import { Settings } from './ui/Settings'
 import { Report } from './ui/Report'
 import { Memo } from './ui/Memo'
 import { Compare } from './ui/Compare'
+import { Course } from './ui/Course'
+import { Tour } from './ui/Tour'
+import { tourByKey } from './logic/tour'
 import { Banner, Reveal, Working } from './ui/bits'
 
 /**
@@ -222,6 +226,25 @@ export default function App() {
     )
   }, [])
 
+  /**
+   * Идущий гайд-курс.
+   *
+   * Живёт здесь, а не в настройках, откуда его запускают: курс сам открывает
+   * разделы и лежит поверх всего приложения, включая нижнюю навигацию.
+   */
+  const [курс, setКурс] = useState<string | null>(null)
+  // Ссылка, а не значение: `назад` подписана на системную кнопку один раз, и
+  // пересобирать её на каждую смену шага нельзя — подписка бы копилась.
+  const курсRef = useRef<string | null>(курс)
+  курсRef.current = курс
+  // Обязательно `useMemo`: `tourByKey` собирает курс заново на каждый вызов, а
+  // курс сам просит открыть раздел — новый объект на каждую перерисовку дал бы
+  // бесконечный круг «сменили раздел → перерисовка → снова сменили раздел».
+  const идущийКурс = useMemo(
+    () => (курс ? tourByKey(курс, settings, { reminders: platform().reminders.isSupported() }) : null),
+    [курс, settings],
+  )
+
   /** Открыть что-то поверх текущего экрана: карточку, форму, подэкран. */
   const открыть = useCallback((node: Node) => setStack((текущий) => push(текущий, node)), [])
 
@@ -239,6 +262,13 @@ export default function App() {
 
   /** Снять уровень. `false` — снимать нечего, платформа свернёт приложение. */
   const назад = useCallback(() => {
+    // Курс снимается раньше листов и экранов: он лежит поверх всего, и
+    // системная «Назад» при нём означает «хватит подсказок», а не «на уровень
+    // выше в приложении, которое сейчас не видно».
+    if (курсRef.current !== null) {
+      setКурс(null)
+      return true
+    }
     // Открытый лист выбора снимается первым. Пока подписан слушатель
     // `backButton`, WebView своё поведение не применяет, и системная «Назад»
     // до `<dialog>` не доходит: без этой строки лист висел бы поверх экрана,
@@ -684,6 +714,9 @@ export default function App() {
     // прийти и тогда, когда на экране открыт дневник мужа. Приложение одно на
     // телефоне, и молчать про чужую таблетку оно не вправе.
     medicines,
+    // Кому напоминать измерить давление. Свой переключатель, а не общий:
+    // курс измерений бывает у того, кто таблеток не пьёт вовсе.
+    subjects: settings.measureRemindOn ? measureSubjects(settings, measurements, Date.now()) : [],
     enabled: settings.remindersOn,
     people: settings.people,
     sound: settings.reminderSound,
@@ -971,7 +1004,7 @@ export default function App() {
             быстрее и делает кнопку кнопкой — без него три слова в ряд читались
             как строка текста. Подпись обязательна: шестерёнку узнают не все, а
             бургер спрятал бы три пункта ради места, которого хватает. */}
-        <nav className="tools no-print" aria-label="Служебные разделы">
+        <nav className="tools no-print" aria-label="Служебные разделы" data-tour="tools">
           {TOOLS.map((item) => (
             <button
               key={item.key}
@@ -1008,6 +1041,7 @@ export default function App() {
       <nav
         className="tabs"
         aria-label="Разделы дневника"
+        data-tour="tabs"
         style={{ ['--tab-count' as string]: visibleTabs.length }}
       >
         {visibleTabs.map((item) => (
@@ -1042,6 +1076,37 @@ export default function App() {
       {tab === 'overview' && (
         <div className="stack">
           <LatestAlert latest={latestBp} />
+
+          {/* Приглашение пройти курс. Один раз и только здесь: на «Обзоре»
+              человек оказывается первым делом, а закрыв приглашение, найдёт
+              курс в настройках. */}
+          {!settings.guideOffered && (
+            <div className="card">
+              <div className="card__head">
+                <h2>Показать, как всё устроено?</h2>
+              </div>
+              <p className="muted">
+                Приложение само откроет нужный раздел и обведёт кнопку, о которой рассказывает. Меньше минуты.
+              </p>
+              <div className="row row--stack">
+                <button
+                  className="btn btn--primary"
+                  onClick={() => {
+                    updateSettings({ ...settingsRef.current, guideOffered: true })
+                    setКурс('basics')
+                  }}
+                >
+                  Показать
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => updateSettings({ ...settingsRef.current, guideOffered: true })}
+                >
+                  Не сейчас
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Сначала то, что не зависит от давления: приём на сегодня, что
               кончается, что купить, копия. Раньше всё это стояло внутри
@@ -1186,18 +1251,31 @@ export default function App() {
             <Entry user={deviceUser} onAdd={handleAdd} />
           )}
           {undoBanner}
-          <div className="card">
+          <div className="card" data-tour="bp-history">
             <div className="card__head">
               <h2>История давления</h2>
               <span className="muted">
                 {bpScoped.length} из {bpAll.length}
               </span>
             </div>
-            <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }}>
+            <div className="row no-print" style={{ marginBottom: 'var(--space-3)' }} data-tour="bp-period">
               <PeriodPicker value={period} onChange={setPeriod} />
             </div>
             <Readings readings={bpScoped} onDelete={handleDelete} onUpdate={handleUpdate} />
           </div>
+
+          {/* Курс от врача — сразу под историей: человек приходит сюда от
+              врача с назначением «две недели утром и вечером». */}
+          <Course
+            plan={measurePlanOf(person, settings)}
+            readings={bpAll.map((r) => r.ts)}
+            onChange={(next) =>
+              updateSettings({
+                ...settingsRef.current,
+                ...setMeasurePlan(settingsRef.current, settings.people.length > 1 ? settings.activePerson : null, next),
+              })
+            }
+          />
 
           {/* «Стало ли лучше» — вопрос, ради которого дневник и ведут.
               Стоит под историей, а не над ней: сначала то, что человек пришёл
@@ -1313,6 +1391,7 @@ export default function App() {
           targetDia={targets.dia}
           period={period}
           medicines={myMedicines}
+          measurePlan={measurePlanOf(person, settings)}
           onPeriodChange={setPeriod}
         />
       )}
@@ -1328,11 +1407,18 @@ export default function App() {
           family={family}
           screen={подэкранНастроек}
           person={открытыйЧеловек}
+          onStartTour={setКурс}
           onOpen={(next) => открыть({ kind: 'sub', sub: next })}
           onOpenPerson={(id) => открыть({ kind: 'person', id })}
           onBack={назад}
           backup={backup}
         />
+      )}
+
+      {/* Курс лежит поверх всего приложения и сам переключает разделы: он
+          объясняет настоящие кнопки, а не картинки с ними. */}
+      {идущийКурс && (
+        <Tour tour={идущийКурс} onTab={(next) => setTab(next as TabKey)} onClose={() => setКурс(null)} />
       )}
     </div>
   )

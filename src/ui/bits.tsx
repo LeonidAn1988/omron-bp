@@ -47,9 +47,20 @@ export function Banner({ tone, children }: { tone: BannerTone; children: ReactNo
  * Разметка та же, что у строки препарата в аптечке: приём уже опознан, и
  * заводить ради настроек второй вид списка незачем.
  */
-export function NavRow({ title, value, onOpen }: { title: string; value?: string; onOpen: () => void }) {
+export function NavRow({
+  title,
+  value,
+  onOpen,
+  tour,
+}: {
+  title: string
+  value?: string
+  onOpen: () => void
+  /** Якорь для гайд-курса: по нему курс находит строку и обводит её. */
+  tour?: string
+}) {
   return (
-    <li className="pill">
+    <li className="pill" data-tour={tour}>
       <button className="pill__open" onClick={onOpen}>
         <span className="pill__head">
           <span className="pill__title">

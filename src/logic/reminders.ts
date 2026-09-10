@@ -24,13 +24,21 @@
  * чем промолчать.
  */
 
+import { addDays, dayNumber, momentOf, startOfDay } from './days'
+import {
+  measuredSlots,
+  planActiveOn,
+  planDayIndex,
+  planIntersects,
+  planTimes,
+  type MeasureSubject,
+} from './course'
 import { dosesOn, normalizeTimes, parseTime, perTimeOf, formatCount } from './medicines'
 import type { Reminder } from '../platform/ports'
 import { ownerOf } from './people'
 import type { Person, Medicine } from '../types'
 
 const МИНУТА = 60_000
-const СУТКИ = 86_400_000
 
 /** Сколько раз напомнить повторно, если отметки нет. */
 export const REPEATS = 3
@@ -54,6 +62,23 @@ export const HORIZON_DAYS = 14
  * укорачивается сам, см. ниже.
  */
 export const MAX_REMINDERS = 400
+
+/**
+ * Потолок номера напоминания о приёме: (2047·8+7)·1024 + 127·8 + 7 — ровно 2²⁴−1.
+ *
+ * Упаковка «сутки · человек · время · повтор» заполняет двадцать четыре бита без
+ * дыр, поэтому всё, что выше, свободно под другой род напоминаний.
+ */
+export const REMINDER_ID_MAX = 16_777_215
+
+/** Начало диапазона измерений: та же упаковка, но с двадцать пятым битом. */
+export const MEASURE_ID_BASE = REMINDER_ID_MAX + 1
+
+/**
+ * Потолок измерений. Ниже `SNOOZE_BASE` (20 000 000) с запасом в два миллиона:
+ * значит уборка в плагине снимает измерения теми же правилами, что и приёмы.
+ */
+export const MEASURE_ID_MAX = MEASURE_ID_BASE + 1_048_575
 
 const MEAL: Record<string, string> = {
   before: 'до еды',
@@ -121,39 +146,20 @@ export function reminderId(day: number, slotIndex: number, step: number, personI
 }
 
 /**
- * Номер суток по **местному календарю**, а не делением метки времени на сутки.
+ * Номер напоминания об измерении.
  *
- * Деление ошибается там, где сутки не равны двадцати четырём часам: в ночь
- * перевода часов соседние местные дни могут попасть в одну ячейку, и
- * идентификаторы напоминаний за разные дни совпадут. Чей-то приём тогда снимет
- * чужой.
+ * Та же упаковка, что у приёма, но плотнее: 2048 суток × 8 человек × 8 времён ×
+ * 8 повторов — двадцать бит поверх двадцати четырёх. Диапазоны не пересекаются
+ * по построению: любой приёмный номер меньше `MEASURE_ID_BASE`, любой
+ * измерительный — не меньше.
  */
-function dayNumber(ts: number): number {
-  const d = new Date(ts)
-  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / СУТКИ)
+export function measureId(day: number, slotIndex: number, step: number, personIndex = 0): number {
+  return (
+    MEASURE_ID_BASE +
+    ((((dayNumber(day) % 2048) * 8 + (personIndex % 8)) * 8 + (slotIndex % 8)) * 8 + (step % 8))
+  )
 }
 
-/** Местная полночь дня, отстоящего от `from` на `сдвиг` календарных суток. */
-function addDays(from: Date, сдвиг: number): Date {
-  const d = new Date(from)
-  d.setDate(d.getDate() + сдвиг)
-  // Ещё раз к полуночи: в ночь перевода часов сложение дат оставляет час-другой.
-  d.setHours(0, 0, 0, 0)
-  return d
-}
-
-/** Момент приёма как местное время дня, а не «полночь плюс минуты». */
-function momentOf(день: Date, минуты: number): number {
-  return new Date(
-    день.getFullYear(),
-    день.getMonth(),
-    день.getDate(),
-    Math.floor(минуты / 60),
-    минуты % 60,
-    0,
-    0,
-  ).getTime()
-}
 
 export interface ReminderOptions {
   /** Повторять, пока приём не отмечен. */
@@ -183,6 +189,26 @@ export interface ReminderOptions {
  * потребности, и напоминать о них не о чем. Уже отмеченные приёмы пропускаются,
  * прошедшие моменты — тоже: система показала бы их немедленно, все скопом.
  */
+/**
+ * Сколько уведомлений о приёме даёт один день.
+ *
+ * Сумма по людям, а не произведение: у отца три приёма, у сына один — это
+ * четыре уведомления в день, а не шесть. Вынесено наружу, потому что общий
+ * бюджет считается вместе с измерениями.
+ */
+export function dosesPerDay(medicines: Medicine[], options: ReminderOptions): number {
+  const шагов = options.repeat ? REPEATS + 1 : 1
+  const персоны: (string | null)[] = options.personOf
+    ? [...new Set(medicines.map((medicine) => options.personOf!(medicine)))]
+    : [null]
+  const поЛюдям = персоны.length > 1
+  return персоны.reduce((sum, персона) => {
+    const свои = поЛюдям ? medicines.filter((m) => options.personOf!(m) === персона) : medicines
+    const времён = new Set(свои.flatMap((m) => normalizeTimes(m.times ?? []).filter((t) => parseTime(t) !== null))).size
+    return sum + времён * шагов
+  }, 0)
+}
+
 export function buildReminders(
   medicines: Medicine[],
   now: number,
@@ -215,14 +241,7 @@ export function buildReminders(
   // приложения, так что до конца горизонта он не дотягивает никогда.
   // Считаем по каждому человеку его времена, а не всех людей на все времена:
   // у отца три приёма, у сына один — это четыре уведомления в день, а не шесть.
-  const наДень = Math.max(
-    1,
-    персоны.reduce((sum, персона) => {
-      const свои = поЛюдям ? medicines.filter((m) => options.personOf!(m) === персона) : medicines
-      const времён = new Set(свои.flatMap((m) => normalizeTimes(m.times ?? []).filter((t) => parseTime(t) !== null))).size
-      return sum + времён * шагов
-    }, 0),
-  )
+  const наДень = Math.max(1, dosesPerDay(medicines, options))
   // Нижняя граница в три дня относится к расчётному потолку, а не к заданному
   // горизонту: явно попросили один день — ставим один. Пробить потолок она не
   // может: набор всё равно обрезается по `MAX_REMINDERS` перед возвратом, и
@@ -274,6 +293,7 @@ export function buildReminders(
         if (at <= now) continue
         набор.push({
           id: reminderId(день, slotIndex, step, personIndex),
+          kind: 'dose',
           person: персона ?? undefined,
           markable: естьЧтоОтмечать,
           // Повтор говорит по-человечески, а не служебным «не отмечен»: слово
@@ -336,4 +356,129 @@ export function medicinesForReminder(
     const dose = dosesOn(medicine, day, now).find((item) => item.time === slot)
     return !(dose && dose.takenAt !== null)
   })
+}
+
+/**
+ * Как назвать измерение по времени суток. Близнец `partOfDay` для приёма.
+ */
+function partOfMeasure(minutes: number): string {
+  if (minutes < 5 * 60) return 'Ночное измерение'
+  if (minutes < 12 * 60) return 'Утреннее измерение'
+  if (minutes < 18 * 60) return 'Дневное измерение'
+  return 'Вечернее измерение'
+}
+
+/**
+ * Сколько уведомлений об измерении даёт один день.
+ *
+ * Курс, начинающийся завтра, обязан войти в бюджет уже сегодня: иначе горизонт
+ * посчитается по сегодняшней разрежённости, а завтра набор перевалит за потолок.
+ * Поэтому смотрим, задевает ли расписание предельный горизонт, а не сегодняшний
+ * день.
+ */
+export function measuresPerDay(subjects: MeasureSubject[], now: number, шагов: number): number {
+  const первый = startOfDay(now)
+  const последний = addDays(new Date(первый), HORIZON_DAYS - 1).getTime()
+  return subjects.reduce((sum, subject) => {
+    const времена = planTimes(subject.plan)
+    return времена.length && planIntersects(subject.plan, первый, последний) ? sum + времена.length * шагов : sum
+  }, 0)
+}
+
+/**
+ * Из расписаний измерений — в напоминания.
+ *
+ * От приёма отличий ровно три. Слот закрывает не отметка, а само измерение —
+ * и закрывает по окну суток, чтобы утренний замер не гасил вечернее
+ * напоминание. Курс кончается сам. И отмечать в уведомлении нечего: цифры
+ * давления в кнопку не помещаются, поэтому кнопки «Принял» у измерения нет.
+ */
+export function buildMeasureReminders(
+  subjects: MeasureSubject[],
+  now: number,
+  options: ReminderOptions = { repeat: true },
+): Reminder[] {
+  const шагов = options.repeat ? REPEATS + 1 : 1
+  const horizon = options.horizonDays ?? HORIZON_DAYS
+  const набор: Reminder[] = []
+  const первый = new Date(now)
+  первый.setHours(0, 0, 0, 0)
+
+  for (let сдвиг = 0; сдвиг < horizon; сдвиг++) {
+    const дата = addDays(первый, сдвиг)
+    const день = дата.getTime()
+
+    for (const subject of subjects) {
+      const времена = planTimes(subject.plan)
+      if (времена.length === 0 || !planActiveOn(subject.plan, день)) continue
+
+      const закрыты = measuredSlots(subject.plan, subject.readings, день)
+      const сделано = закрыты.filter(Boolean).length
+      const номерДня = planDayIndex(subject.plan, день)
+      const кому = subject.name ? `${subject.name} · ` : ''
+      const курс = subject.plan.days !== null
+
+      времена.forEach((time, slotIndex) => {
+        // Измерение в этом окне уже есть — напоминать не о чем. Это же снимает
+        // и оставшиеся повторы: набор пересобирается при каждой новой записи.
+        if (закрыты[slotIndex]) return
+        const минуты = parseTime(time)
+        if (минуты === null) return
+        const момент = momentOf(дата, минуты)
+
+        for (let step = 0; step < шагов; step++) {
+          const at = момент + step * REPEAT_INTERVAL_MIN * МИНУТА
+          if (at <= now) continue
+          набор.push({
+            id: measureId(день, slotIndex, step, subject.index),
+            kind: 'measure',
+            person: subject.person ?? undefined,
+            // Ждём действия — измерения. Признак нужен плагину, чтобы
+            // «напомни через 15 минут» снялось, когда мерить уже не надо.
+            markable: true,
+            title:
+              step === 0
+                ? `${кому}${partOfMeasure(минуты)} — ${time}`
+                : `${кому}Не забудьте: измерить давление в ${time}`,
+            body: курс ? `День ${номерДня} из ${subject.plan.days}` : 'Измерить давление',
+            details: курс
+              ? `День ${номерДня} из ${subject.plan.days} · сегодня ${сделано} из ${времена.length}`
+              : 'Измерить давление и записать в дневник',
+            at,
+            slot: time,
+            day: день,
+            step,
+          })
+        }
+      })
+    }
+  }
+  return набор
+}
+
+export interface PlanInput {
+  medicines: Medicine[]
+  subjects: MeasureSubject[]
+  now: number
+  options?: ReminderOptions
+}
+
+/**
+ * Единственный вход планировщика: оба рода напоминаний одним набором.
+ *
+ * Раздельно их ставить нельзя — плагин снимает всё, чего нет в поданном
+ * массиве, и второй вызов стёр бы первый. Здесь же считается общий бюджет:
+ * горизонт от суммарной плотности, а не от лекарственной, иначе курс молча
+ * съел бы хвост напоминаний о таблетках, а платформа обрезала бы набор не там.
+ */
+export function planReminders({ medicines, subjects, now, options = { repeat: true } }: PlanInput): Reminder[] {
+  const шагов = options.repeat ? REPEATS + 1 : 1
+  const наДень = Math.max(1, dosesPerDay(medicines, options) + measuresPerDay(subjects, now, шагов))
+  const horizon = Math.min(options.horizonDays ?? HORIZON_DAYS, Math.max(3, Math.floor(MAX_REMINDERS / наДень)))
+  const общий: ReminderOptions = { ...options, horizonDays: horizon }
+
+  const набор = [...buildReminders(medicines, now, общий), ...buildMeasureReminders(subjects, now, общий)]
+  // Ближайшие важнее дальних: сортируем по времени и режем хвост.
+  набор.sort((a, b) => a.at - b.at)
+  return набор.length > MAX_REMINDERS ? набор.slice(0, MAX_REMINDERS) : набор
 }

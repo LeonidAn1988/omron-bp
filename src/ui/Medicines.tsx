@@ -299,7 +299,7 @@ export function Restock({
   }
 
   return (
-    <div className="card">
+    <div className="card" data-tour="restock">
       <div className="card__head">
         <h2>Купить</h2>
         <span className="muted">

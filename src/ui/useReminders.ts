@@ -13,12 +13,20 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ownerOf } from '../logic/people'
-import { buildReminders } from '../logic/reminders'
+import type { MeasureSubject } from '../logic/course'
+import { planReminders } from '../logic/reminders'
 import { platform } from '../platform/ports'
 import type { Medicine, Person } from '../types'
 
 export interface RemindersInput {
   medicines: Medicine[]
+  /**
+   * Кому напоминать измерить давление. Пусто — расписаний нет.
+   *
+   * Считается снаружи: этот хук о настройках и людях знает ровно столько,
+   * сколько ему передали, и расписание измерений — не исключение.
+   */
+  subjects: MeasureSubject[]
   enabled: boolean
   /** Люди в дневнике: по ним уведомление решает, называть ли владельца. */
   people: Person[]
@@ -33,7 +41,17 @@ export interface RemindersInput {
   onTaken: (day: number, slot: string, person?: string) => void
 }
 
-export function useReminders({ medicines, enabled, people, sound, repeat, ready, onOpen, onTaken }: RemindersInput) {
+export function useReminders({
+  medicines,
+  subjects,
+  enabled,
+  people,
+  sound,
+  repeat,
+  ready,
+  onOpen,
+  onTaken,
+}: RemindersInput) {
   /**
    * Чьи это таблетки. Пока человек один — `null`, и уведомления выглядят как
    * прежде; при нескольких людях каждому ставится своё, с именем в заголовке.
@@ -83,13 +101,26 @@ export function useReminders({ medicines, enabled, people, sound, repeat, ready,
     const reminders = platform().reminders
     if (!reminders.isSupported()) return
 
-    const wanted = enabled ? buildReminders(medicines, Date.now(), { repeat, personOf, personName }) : []
+    // Оба рода — одним набором и одним бюджетом. Раздельно ставить нельзя:
+    // плагин снимает всё, чего нет в поданном массиве, и второй вызов стёр бы
+    // первый. Напоминания об измерении включаются своим переключателем, а не
+    // общим: курс измерений бывает у того, кто таблеток не пьёт вовсе.
+    const wanted = planReminders({
+      medicines: enabled ? medicines : [],
+      subjects,
+      now: Date.now(),
+      options: { repeat, personOf, personName },
+    })
     // Из слепка исключены сами моменты показа: они сдвигаются с каждым
     // пересчётом, и сравнение по ним всегда давало бы «изменилось».
     const снимок = JSON.stringify([
       enabled,
       sound,
       repeat,
+      // Расписания измерений — часть слепка: без них включение курса не
+      // считалось бы изменением, и напоминания не появились бы до следующей
+      // правки аптечки.
+      subjects.map((s) => [s.person, s.index, s.plan.times.join(','), s.plan.days, s.plan.from, s.readings.length]),
       // Смещение часового пояса — часть слепка. Иначе после перелёта или
       // перевода часов набор считался бы неизменным: состав препаратов тот же,
       // а моменты показа съехали на час и больше.

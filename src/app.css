@@ -3048,3 +3048,129 @@ kbd {
   margin: var(--space-3) 0 0;
   font-weight: 600;
 }
+
+
+/* Ход курса измерений: одна строка, крупнее обычного текста — её читают
+   мельком, проходя мимо телефона. */
+.course__state {
+  margin: var(--space-3) 0 0;
+  font-size: var(--fs-3);
+  font-weight: 600;
+}
+
+/* ── Гайд-курс ───────────────────────────────────────────────────────────────
+   Затемнение сделано тенью вокруг «дырки», а не четырьмя прямоугольниками:
+   тень сама обходит скруглённые углы, а четыре блока на них оставляли светлые
+   треугольники. Курс лежит выше нижней навигации (z-index 30) и выше подсказок
+   реестра (40), иначе список лекарств вылезал бы поверх объяснения. */
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+}
+
+.tour__veil {
+  position: absolute;
+  inset: 0;
+}
+
+.tour__hole {
+  position: absolute;
+  border-radius: var(--radius);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 9999px rgba(11, 11, 11, 0.62);
+  pointer-events: none;
+  transition:
+    top var(--dur) var(--ease-expo),
+    left var(--dur) var(--ease-expo),
+    width var(--dur) var(--ease-expo),
+    height var(--dur) var(--ease-expo);
+}
+
+.tour__card {
+  position: absolute;
+  inset: auto var(--space-3) calc(var(--space-3) + env(safe-area-inset-bottom)) var(--space-3);
+  max-width: 520px;
+  margin: 0 auto;
+  /* Очень крупный текст плюс длинный шаг — карточка упирается в высоту экрана.
+     Пусть лучше прокрутится внутри себя, чем уедет за край. */
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(11, 11, 11, 0.28);
+}
+
+.tour__card--top {
+  inset: calc(var(--space-3) + env(safe-area-inset-top)) var(--space-3) auto var(--space-3);
+}
+
+.tour__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.tour__of {
+  font-size: var(--fs-0);
+  color: var(--text-muted);
+}
+
+.tour__close {
+  flex: 0 0 auto;
+  padding: var(--space-1) var(--space-2);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--fs-0);
+  cursor: pointer;
+}
+.tour__close:hover {
+  background: var(--hover);
+}
+
+.tour__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-3);
+  line-height: var(--lh-tight);
+}
+
+.tour__text {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: var(--lh-base);
+  text-wrap: pretty;
+}
+
+.tour__actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+/* «Дальше» — главная кнопка шага, и она занимает всё оставшееся место:
+   попасть по ней надо не глядя. */
+.tour__next {
+  flex: 1;
+  min-height: var(--tap);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tour__hole {
+    transition: none;
+  }
+}
+
+/* Список курсов в настройках. */
+.guide__hint {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--fs-0);
+}

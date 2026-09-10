@@ -252,7 +252,7 @@ export function Cabinet({
         )}
 
         {rows.length > 0 && (
-          <ul className="pills">
+          <ul className="pills" data-tour="cab-list">
             {rows.map((item) => (
               <CabinetRow
                 key={item.id}
@@ -274,7 +274,7 @@ export function Cabinet({
         {/* Столбиком во всю ширину: в строку эти две не помещаются, а по
             отдельности получаются разной длины — лесенкой. */}
         <div className="row row--stack" style={{ marginTop: 'var(--space-5)' }}>
-          <button className="btn btn--primary" onClick={onAdd}>
+          <button className="btn btn--primary" onClick={onAdd} data-tour="cab-add">
             Добавить препарат
           </button>
           {/* Лист на кухню. Показываем, только когда есть расписание: без

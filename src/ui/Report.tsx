@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { platform } from '../platform/ports'
-import { GLUCOSE_CONTEXT_LABELS, type BpReading, type GlucoseContext, type GlucoseReading, type Medicine } from '../types'
+import { GLUCOSE_CONTEXT_LABELS, type BpReading, type GlucoseContext, type GlucoseReading, type Medicine, type MeasurePlan } from '../types'
 import { PERIODS, type GlucoseSummary, type PeriodKey, type Summary } from '../logic/stats'
 import { DAY_PART_LABELS, classify, classifyGlucose, glucoseCeiling, type DayPart, type GlucoseTargets } from '../logic/classify'
 import { diaryByDays, daysMissed, SERIES_RULE } from '../logic/diary'
+import { courseReport, courseReportText, planTimes } from '../logic/course'
 import { Readings } from './Readings'
 import { GlucoseList } from './Glucose'
 import { Banner, CategoryBadge } from './bits'
@@ -186,6 +187,7 @@ export function Report({
   period,
   onPeriodChange,
   medicines,
+  measurePlan,
 }: {
   readings: BpReading[]
   summary: Summary | null
@@ -200,6 +202,8 @@ export function Report({
   onPeriodChange: (next: PeriodKey) => void
   /** Аптечка попадает в отчёт: на приёме врачу нужен список того, что человек принимает. */
   medicines: Medicine[]
+  /** Курс измерений, если он был: врачу важно, по какой схеме вёлся дневник. */
+  measurePlan?: MeasurePlan
 }) {
   /** Системная печать не открылась — на нестандартной прошивке так бывает. */
   const [printFailed, setPrintFailed] = useState(false)
@@ -207,6 +211,9 @@ export function Report({
   // Дневник по дням — то, в какой форме врач читает самоконтроль. Плоский
   // список остаётся ниже, под «Подробнее»: исходные цифры не прячем.
   const дневник = diaryByDays(readings, medicines)
+  const курс = measurePlan
+    ? courseReportText(courseReport(measurePlan, readings.map((r) => r.ts), Date.now()), planTimes(measurePlan))
+    : null
   const пропущено = daysMissed(дневник)
 
   // Период — орган управления отчётом, поэтому стоит рядом с кнопкой печати,
@@ -245,6 +252,7 @@ export function Report({
             ничего не делает, хуже отсутствующей. */}
         <button
           className="btn btn--primary"
+          data-tour="report-print"
           onClick={() => void platform().files.print('Отчёт врачу').then((ok) => setPrintFailed(!ok))}
         >
           Печать или сохранение в PDF
@@ -292,6 +300,10 @@ export function Report({
               за {periodLabel.toLowerCase()}, записи с&nbsp;{DATE.format(span.firstTs)} по&nbsp;
               {DATE.format(span.lastTs)}
             </Row>
+            {/* Курс: врачу важно, велись измерения по назначенной схеме или как
+                придётся. Без этой строки он видит россыпь и не знает, о чём
+                договаривались в кабинете. */}
+            {курс && <Row label="Схема измерений">{курс}</Row>}
           </tbody>
         </table>
       </div>

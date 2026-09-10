@@ -14,6 +14,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { HORIZON_DAYS, REPEAT_INTERVAL_MIN, REPEATS, reminderTimes } from '../logic/reminders'
 import { plural } from '../logic/plural'
+import { describeMeasurePlan, planTimes } from '../logic/course'
+import type { MeasurePlan } from '../types'
 import { platform } from '../platform/ports'
 import type { ReminderHealth, ReminderPermission } from '../platform/ports'
 import type { Medicine } from '../types'
@@ -24,14 +26,27 @@ export function Reminders({
   enabled,
   sound,
   repeat,
+  measureOn,
+  measurePlan,
   onPatch,
 }: {
   medicines: Medicine[]
   enabled: boolean
   sound: string
   repeat: boolean
-  onPatch: (patch: { remindersOn?: boolean; reminderSound?: string; remindersRepeat?: boolean }) => void
+  /** Напоминать ли измерить давление. Свой переключатель, а не общий. */
+  measureOn: boolean
+  /** Расписание измерений выбранного человека — для подписи. */
+  measurePlan?: MeasurePlan
+  onPatch: (patch: {
+    remindersOn?: boolean
+    reminderSound?: string
+    remindersRepeat?: boolean
+    measureRemindOn?: boolean
+  }) => void
 }) {
+  const измерения = planTimes(measurePlan)
+  const описание = describeMeasurePlan(measurePlan)
   const port = platform().reminders
   const supported = port.isSupported()
   const sounds = port.sounds()
@@ -85,6 +100,35 @@ export function Reminders({
   function проверить(id: string) {
     setChecking(id)
     void port.preview(id).finally(() => window.setTimeout(() => setChecking(null), 2500))
+  }
+
+  /**
+   * Включить напоминания об измерении.
+   *
+   * Разрешение спрашивается тем же способом и по тому же правилу — только по
+   * нажатию. Своё, а не общее с лекарствами: человек может пить таблетки без
+   * напоминаний и при этом вести назначенный врачом курс измерений.
+   */
+  async function включитьИзмерения(next: boolean) {
+    setError(null)
+    if (!next) {
+      onPatch({ measureRemindOn: false })
+      return
+    }
+    setBusy(true)
+    try {
+      const ответ = permission === 'granted' ? permission : await port.requestPermission()
+      setPermission(ответ)
+      if (ответ !== 'granted') {
+        setError('Телефон не дал разрешения показывать уведомления. Без него напоминания приходить не будут.')
+        return
+      }
+      onPatch({ measureRemindOn: true })
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setBusy(false)
+    }
   }
 
   async function включить(next: boolean) {
@@ -153,9 +197,34 @@ export function Reminders({
         </span>
       </label>
 
+      {/* Второй род напоминаний. Отдельным переключателем, а не общим: курс
+          измерений бывает у того, кто таблеток не пьёт вовсе, а лишние
+          уведомления быстрее всего приучают не смотреть на телефон. */}
+      <label className="optrow__label" style={{ marginTop: 'var(--space-4)' }}>
+        <input
+          type="checkbox"
+          checked={measureOn}
+          disabled={busy}
+          onChange={(event) => void включитьИзмерения(event.target.checked)}
+        />
+        <span className="optrow__title">
+          Напоминать измерить давление
+          <span className="fact__note">
+            {измерения.length
+              ? `${описание} — задаётся на «Давлении»`
+              : 'расписание задаётся на «Давлении», кнопкой «Врач попросил вести дневник»'}
+          </span>
+        </span>
+      </label>
+
       {/* Расписания нет — напоминать не о чем, и это надо сказать прямо,
-          а не оставлять человека с включённым переключателем и тишиной. */}
-      <Reveal open={enabled && времена.length === 0}>
+          а не оставлять человека с включённым переключателем и тишиной.
+
+          Схема измерений тоже считается расписанием: с ней напоминать есть о
+          чём, даже когда в аптечке пусто. Без этой оговорки человек, задавший
+          курс от врача, читал бы «напоминать не о чем» при работающих
+          напоминаниях — и решил бы, что ничего не включилось. */}
+      <Reveal open={enabled && времена.length === 0 && !(measureOn && planTimes(measurePlan).length > 0)}>
         <div style={{ paddingTop: 'var(--space-4)' }}>
           <Banner tone="info">
             <b>Напоминать пока не о чем</b>

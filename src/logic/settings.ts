@@ -60,7 +60,7 @@ export const DENSITIES: { key: Settings['density']; title: string }[] = [
 
 
 /** Подэкраны настроек. Порядок тот же, что в корне: частое выше редкого. */
-export const SUBSCREENS = ['display', 'people', 'targets', 'pharmacies', 'reminders', 'backup', 'family', 'about'] as const
+export const SUBSCREENS = ['display', 'people', 'targets', 'pharmacies', 'reminders', 'backup', 'family', 'guide', 'about'] as const
 export type Subscreen = (typeof SUBSCREENS)[number]
 
 export const SUBSCREEN_TITLE: Record<Subscreen, string> = {
@@ -71,6 +71,7 @@ export const SUBSCREEN_TITLE: Record<Subscreen, string> = {
   reminders: 'Напоминания',
   backup: 'Копия дневника',
   family: 'Семья',
+  guide: 'Как пользоваться',
   about: 'О приложении',
 }
 

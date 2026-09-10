@@ -246,7 +246,7 @@ export function Intake({
         onSelect={setSelected}
       />
 
-      <div className="intake__head">
+      <div className="intake__head" data-tour="intake-day">
         <h2>
           {dayName(selected, now)}
           {имя && <span className="muted"> · {имя}</span>}

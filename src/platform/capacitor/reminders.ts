@@ -111,7 +111,15 @@ const ALARM_HEADROOM = 120
  *
  * Найдено на живом телефоне при разборе застрявших уведомлений.
  */
-const REMINDER_ID_MAX = (2047 * 8 + 7) * 1024 + 127 * 8 + 7
+/**
+ * Отложенные считаются от `SNOOZE_BASE`, а не от потолка приёмных номеров.
+ *
+ * Прежде было `SNOOZE_BASE + id % (REMINDER_ID_MAX + 1)`. На приёмных номерах
+ * это то же самое число, но у измерений номера выше 2²⁴, и остаток давал бы
+ * чужой отложенный: измерение 17 000 000 и приём 222 784 получили бы один и тот
+ * же, и второе стёрло бы первое. Заодно чинится и старое: повторное «Отложить»
+ * на уже отложенном раньше уезжало на третий номер, теперь остаётся на своём.
+ */
 const SNOOZE_BASE = 20_000_000
 /** Пробное — выше обоих диапазонов: уборка «лишних» смотрит только ниже SNOOZE_BASE. */
 const PREVIEW_ID = SNOOZE_BASE * 2 + 1
@@ -293,36 +301,34 @@ export const capacitorReminders: RemindersPort = {
      * прилетает в нативном потоке плагина, и приложение просто закрывается.
      * Владелец увидел это как «вылетает при синхронизации».
      */
+    /**
+     * Порядок здесь выстрадан, и менять его нельзя.
+     *
+     * Сначала считаем занятое **чужим** — тем, что переживёт уборку и не будет
+     * переписано новым набором: отложенные, которые мы не снимаем, и пробное.
+     * Это число не зависит от того, что мы решим ставить.
+     *
+     * Потом режем набор по потолку. И только потом убираем лишнее — сверяясь с
+     * **тем, что реально ставим**, а не со всем набором.
+     *
+     * Прежде уборка сверялась со всем набором, а ставилась урезанная часть, и
+     * между ними появлялась третья категория: номера, которые есть в наборе
+     * (значит уборка их не снимает), но не попали в постановку (значит не
+     * переписываются) и в «занято» не считаются. На следующем проходе они
+     * складывались с новыми — и это тот самый путь к пятьсот первому
+     * будильнику, от которого лечили в 0.18.3.
+     */
     let занято = 0
+    let ожидают: { id: number; extra?: unknown }[] = []
+    let уборкаУдалась = true
     try {
-      const { notifications: ожидают } = await LocalNotifications.getPending()
-      const нужные = new Set(reminders.map((item) => item.id))
-      // Отложенное живёт в своём диапазоне, но просьба «напомни позже» теряет
-      // смысл, когда приём уже отмечен: снимаем те, чьей пары «день + время +
-      // человек» в новом наборе нет.
-      // Только те приёмы, где человеку есть что отметить: слот, в котором
-      // остался лишь автосписываемый препарат, ждать нечего — и отложенное по
-      // нему держать незачем.
-      const живыеПриёмы = new Set(
-        reminders.filter((item) => item.markable).map((item) => `${item.day}|${item.slot}|${item.person ?? ''}`),
-      )
-      const лишние = ожидают.filter(({ id, extra }) => {
-        if (id >= PREVIEW_ID) return false
-        if (id >= SNOOZE_BASE) {
-          const e = (extra ?? {}) as { day?: number; slot?: string; person?: string }
-          return e.day !== undefined && e.slot !== undefined && !живыеПриёмы.has(`${e.day}|${e.slot}|${e.person ?? ''}`)
-        }
-        return !нужные.has(id)
-      })
-      if (лишние.length) await LocalNotifications.cancel({ notifications: лишние.map(({ id }) => ({ id })) })
-      // Что переживёт уборку и не будет переписано новым набором: отложенные,
-      // пробное. Их место в потолке тоже занято.
-      const снятые = new Set(лишние.map(({ id }) => id))
-      занято = ожидают.filter(({ id }) => !снятые.has(id) && !нужные.has(id)).length
+      ожидают = (await LocalNotifications.getPending()).notifications
+      занято = ожидают.filter(({ id }) => id >= SNOOZE_BASE).length
     } catch {
-      // Уборка не вышла — считаем, что место занято под завязку: лучше
+      // Не узнали, что стоит — считаем место занятым под завязку: лучше
       // поставить меньше напоминаний, чем закрыться на постановке.
       занято = ALARM_HEADROOM
+      уборкаУдалась = false
     }
 
     // Последняя защита от потолка. Набор и так обрезан в `planReminders`, но
@@ -331,6 +337,32 @@ export const capacitorReminders: RemindersPort = {
       reminders.length + занято > ALARM_CAP
         ? [...reminders].sort((a, b) => a.at - b.at).slice(0, Math.max(0, ALARM_CAP - занято))
         : reminders
+
+    if (уборкаУдалась) {
+      try {
+        const нужные = new Set(ставим.map((item) => item.id))
+        // Отложенное живёт в своём диапазоне, но просьба «напомни позже» теряет
+        // смысл, когда приём уже отмечен: снимаем те, чьей пары «день + время +
+        // человек» в новом наборе нет.
+        // Только те приёмы, где человеку есть что отметить: слот, в котором
+        // остался лишь автосписываемый препарат, ждать нечего — и отложенное по
+        // нему держать незачем.
+        const живыеПриёмы = new Set(
+          ставим.filter((item) => item.markable).map((item) => `${item.day}|${item.slot}|${item.person ?? ''}`),
+        )
+        const лишние = ожидают.filter(({ id, extra }) => {
+          if (id >= PREVIEW_ID) return false
+          if (id >= SNOOZE_BASE) {
+            const e = (extra ?? {}) as { day?: number; slot?: string; person?: string }
+            return e.day !== undefined && e.slot !== undefined && !живыеПриёмы.has(`${e.day}|${e.slot}|${e.person ?? ''}`)
+          }
+          return !нужные.has(id)
+        })
+        if (лишние.length) await LocalNotifications.cancel({ notifications: лишние.map(({ id }) => ({ id })) })
+      } catch {
+        // Лишнее напоминание переживаемо; уронить постановку из-за уборки — нет.
+      }
+    }
 
     await LocalNotifications.schedule({
       notifications: ставим.map((item) => ({
@@ -343,10 +375,16 @@ export const capacitorReminders: RemindersPort = {
         largeBody: item.details,
         summaryText: item.title,
         channelId: channelId(soundId),
-        actionTypeId: ACTION_TYPE,
+        // У измерения отмечать нечего: цифры давления в кнопку не помещаются,
+        // а «Принял» на нём означало бы совсем другое действие.
+        actionTypeId: item.kind === 'measure' ? undefined : ACTION_TYPE,
         // Приём и сутки едут вместе с уведомлением: по ним приложение поймёт,
         // какую именно отметку ставить, когда человек нажмёт «Принял».
-        extra: { slot: item.slot, day: item.day, step: item.step, person: item.person },
+        // Род обязателен. Кнопка «Принял» решает по одному лишь `actionId`, и
+        // без рода нажатие на карточке измерения отметило бы приём таблеток:
+        // 08:00 у приёма стоит по умолчанию, так что совпадение времён здесь
+        // не край, а норма.
+        extra: { kind: item.kind, slot: item.slot, day: item.day, step: item.step, person: item.person },
         // Два флага, и оба выяснены на живом телефоне, а не по документации.
         //
         // `isExactNotification` включаем только когда разрешение уже есть.
@@ -408,7 +446,12 @@ export const capacitorReminders: RemindersPort = {
     let живо = true
     const подписка = LocalNotifications.addListener('localNotificationActionPerformed', (event) => {
       if (!живо) return
-      const extra = (event.notification.extra ?? {}) as { slot?: string; day?: number; person?: string }
+      const extra = (event.notification.extra ?? {}) as {
+        kind?: string
+        slot?: string
+        day?: number
+        person?: string
+      }
       if (typeof extra.slot !== 'string' || typeof extra.day !== 'number') return
 
       if (event.actionId === 'snooze') {
@@ -427,7 +470,7 @@ export const capacitorReminders: RemindersPort = {
                 // Остаток берём по потолку идентификаторов, а не по круглому
                 // числу: иначе два разных напоминания дали бы один и тот же
                 // отложенный номер, и второе стёрло бы первое.
-                id: SNOOZE_BASE + (event.notification.id % (REMINDER_ID_MAX + 1)),
+                id: SNOOZE_BASE + (event.notification.id % SNOOZE_BASE),
                 title: event.notification.title,
                 body: event.notification.body ?? '',
                 channelId: канал,
@@ -445,7 +488,7 @@ export const capacitorReminders: RemindersPort = {
           LocalNotifications.schedule({
             notifications: [
               {
-                id: SNOOZE_BASE + (event.notification.id % (REMINDER_ID_MAX + 1)),
+                id: SNOOZE_BASE + (event.notification.id % SNOOZE_BASE),
                 title: event.notification.title,
                 body: event.notification.body ?? '',
                 actionTypeId: ACTION_TYPE,
@@ -459,7 +502,10 @@ export const capacitorReminders: RemindersPort = {
       }
 
       handler({
-        kind: event.actionId === 'taken' ? 'taken' : 'open',
+        // «Принял» — только у приёма. У измерения этой кнопки нет вовсе, но
+        // проверяем и здесь: карточка могла прийти из старой сборки, где рода
+        // ещё не было, и тогда «Принял» отметило бы чужие таблетки.
+        kind: event.actionId === 'taken' && extra.kind !== 'measure' ? 'taken' : 'open',
         slot: extra.slot,
         day: extra.day,
         person: typeof extra.person === 'string' ? extra.person : undefined,

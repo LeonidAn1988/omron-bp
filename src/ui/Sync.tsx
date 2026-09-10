@@ -302,7 +302,13 @@ export function Sync({
         </div>
 
         <div className="row">
-          <button className="btn btn--primary" onClick={handleDownload} disabled={busy !== null} data-loading={downloading}>
+          <button
+            className="btn btn--primary"
+            onClick={handleDownload}
+            disabled={busy !== null}
+            data-loading={downloading}
+            data-tour="sync-start"
+          >
             {downloading ? 'Идёт выгрузка…' : 'Подключить и выгрузить'}
           </button>
           <button className="btn" onClick={handlePair} disabled={busy !== null}>

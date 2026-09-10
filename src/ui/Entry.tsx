@@ -104,7 +104,7 @@ export function Entry({ user, onAdd }: { user: number; onAdd: (reading: BpReadin
   }
 
   return (
-    <form className="card" onSubmit={submit}>
+    <form className="card" onSubmit={submit} data-tour="bp-entry">
       <div className="card__head">
         <h2>Записать измерение</h2>
         {preview && (
