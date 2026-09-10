@@ -68,6 +68,7 @@ export function Cabinet({
   onOpenCard,
   onEditCard,
   onAdd,
+  onMemo,
   onBack,
 }: {
   medicines: Medicine[]
@@ -98,6 +99,8 @@ export function Cabinet({
   onOpenCard: (id: string, edit?: 'left') => void
   onEditCard: (id: string) => void
   onAdd: () => void
+  /** Лист на холодильник: что и когда принимать, с клетками под карандаш. */
+  onMemo: () => void
   onBack: () => void
 }) {
   const [filter, setFilter] = useState<Filter>('all')
@@ -274,6 +277,13 @@ export function Cabinet({
           <button className="btn btn--primary" onClick={onAdd}>
             Добавить препарат
           </button>
+          {/* Лист на кухню. Показываем, только когда есть расписание: без
+              времён приёма печатать нечего, и кнопка обманывала бы. */}
+          {видимые.some((item) => (item.times?.length ?? 0) > 0) && (
+            <button className="btn" onClick={onMemo}>
+              Памятка на холодильник
+            </button>
+          )}
           {events > 0 && (
             <button
               className="btn"

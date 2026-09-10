@@ -54,6 +54,7 @@ import { useReminders } from './ui/useReminders'
 import { BackupNudge } from './ui/Backup'
 import { Settings } from './ui/Settings'
 import { Report } from './ui/Report'
+import { Memo } from './ui/Memo'
 import { Banner, Reveal, Working } from './ui/bits'
 
 /**
@@ -82,10 +83,18 @@ const TOOLS = [
   { key: 'settings', label: 'Настройки', Icon: SettingsIcon },
 ] as const
 
-type TabKey = (typeof TABS)[number]['key'] | (typeof TOOLS)[number]['key']
+/**
+ * Памятка — экран-инструмент без кнопки в шапке.
+ *
+ * В шапке три места и они заняты. Памятку открывают из аптечки, где человек и
+ * задумывается «а что мне на неделю раскладывать», — и возвращают туда же.
+ */
+const СКРЫТЫЕ_ИНСТРУМЕНТЫ = ['memo'] as const
+
+type TabKey = (typeof TABS)[number]['key'] | (typeof TOOLS)[number]['key'] | (typeof СКРЫТЫЕ_ИНСТРУМЕНТЫ)[number]
 
 /** Разделы из шапки: они ложатся поверх вкладки, а не заменяют её. */
-const ИНСТРУМЕНТЫ = new Set<string>(TOOLS.map((item) => item.key))
+const ИНСТРУМЕНТЫ = new Set<string>([...TOOLS.map((item) => item.key), ...СКРЫТЫЕ_ИНСТРУМЕНТЫ])
 
 function PeriodPicker({ value, onChange }: { value: PeriodKey; onChange: (next: PeriodKey) => void }) {
   // `--fill` — равные доли и перенос подписи. В проекте он заведён ровно на
@@ -797,7 +806,12 @@ export default function App() {
    * содержимое видно, а вернуться некуда — ни одна вкладка не подсвечена.
    * То же при стартовом экране, указывающем на скрытый раздел.
    */
-  const tabExists = visibleTabs.some((item) => item.key === tab) || TOOLS.some((item) => item.key === tab)
+  // Скрытые инструменты (памятка) тоже существуют, хоть кнопки в шапке у них
+  // и нет: без этой проверки открытие памятки сбрасывало человека на «Обзор».
+  const tabExists =
+    visibleTabs.some((item) => item.key === tab) ||
+    TOOLS.some((item) => item.key === tab) ||
+    (СКРЫТЫЕ_ИНСТРУМЕНТЫ as readonly string[]).includes(tab)
   const fallbackTab = visibleTabs[0].key
   useEffect(() => {
     if (!tabExists) setStack(rootStack(fallbackTab))
@@ -1253,6 +1267,7 @@ export default function App() {
             onOpenCard={(id, edit) => открыть({ kind: 'card', id, edit })}
             onEditCard={(id) => открыть({ kind: 'form', id })}
             onAdd={() => открыть({ kind: 'form', id: null })}
+            onMemo={() => setTab('memo')}
             onBack={назад}
           />
         </>
@@ -1268,6 +1283,15 @@ export default function App() {
           onImportGlucose={handleImport}
           onGoManual={() => setTab('bp')}
           showGlucose={showGlucose}
+        />
+      )}
+
+      {tab === 'memo' && (
+        <Memo
+          medicines={myMedicines}
+          slots={intakeSlotsOf(person, settings)}
+          person={settings.people.length > 1 ? (person?.name?.trim() ?? null) : null}
+          onBack={назад}
         />
       )}
 

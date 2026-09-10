@@ -2871,3 +2871,82 @@ kbd {
   font-weight: 600;
   color: var(--accent);
 }
+
+
+/* ── Памятка на холодильник ────────────────────────────────────────────────
+   Лист печатают и вешают на кухне: читают его от плиты, а не с руки, поэтому
+   на бумаге всё крупнее обычного, а клетки под карандаш — настоящего размера,
+   чтобы в них попадала галочка шариковой ручкой. */
+.memo__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-3);
+}
+.memo__table th,
+.memo__table td {
+  border: 1px solid var(--border-strong);
+  padding: var(--space-2);
+  text-align: left;
+  vertical-align: top;
+}
+.memo__day {
+  width: 2.6rem;
+  text-align: center;
+  font-weight: 600;
+}
+.memo__date {
+  display: block;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+.memo__slot {
+  font-weight: 400;
+}
+.memo__time {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+.memo__item {
+  display: block;
+}
+.memo__dose {
+  color: var(--text-secondary);
+}
+.memo__box {
+  height: 2.2rem;
+}
+.memo__count {
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.memo__enough {
+  color: var(--critical-text);
+  white-space: nowrap;
+}
+.memo__warn {
+  margin: var(--space-3) 0 0;
+  font-weight: 600;
+}
+.memo__table--totals .memo__day {
+  width: auto;
+}
+
+@media print {
+  /* На бумаге лист живёт один: заголовок экрана и рамка карточки не нужны. */
+  .memo {
+    page-break-inside: avoid;
+  }
+  .memo__table th,
+  .memo__table td {
+    border-color: #000;
+  }
+  .memo__table {
+    font-size: 12pt;
+  }
+  .memo__box {
+    height: 10mm;
+  }
+}
